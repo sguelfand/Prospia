@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Plataforma — Vista mobile</title>
+<style>
+  :root { --w: 390px; --h: 844px; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: #0f172a;
+    font-family: -apple-system, system-ui, sans-serif;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 16px;
+  }
+  .bar {
+    display: flex; gap: 8px; align-items: center; color: #cbd5e1; font-size: 13px;
+  }
+  .bar select {
+    background: #1e293b; color: #e2e8f0; border: 1px solid #334155;
+    border-radius: 6px; padding: 4px 8px; font-size: 13px;
+  }
+  .phone {
+    width: var(--w); height: var(--h);
+    background: #000; border-radius: 46px;
+    padding: 12px;
+    box-shadow: 0 0 0 2px #1f2937, 0 30px 60px rgba(0,0,0,.6);
+    position: relative;
+  }
+  .notch {
+    position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    width: 120px; height: 26px; background: #000; border-radius: 0 0 16px 16px;
+    z-index: 2;
+  }
+  iframe {
+    width: 100%; height: 100%; border: 0; border-radius: 36px;
+    background: #fff;
+  }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <span>Vista mobile —</span>
+    <select id="device" onchange="setDevice()">
+      <option value="390x844">iPhone 14 (390×844)</option>
+      <option value="375x812">iPhone X/11 Pro (375×812)</option>
+      <option value="360x800">Android (360×800)</option>
+      <option value="430x932">iPhone 15 Pro Max (430×932)</option>
+      <option value="412x915">Pixel 7 (412×915)</option>
+    </select>
+  </div>
+  <div class="phone" id="phone">
+    <div class="notch"></div>
+    <iframe src="http://localhost:5173" id="frame"></iframe>
+  </div>
+<script>
+  function setDevice(){
+    const [w,h] = document.getElementById('device').value.split('x');
+    document.documentElement.style.setProperty('--w', w+'px');
+    document.documentElement.style.setProperty('--h', h+'px');
+  }
+</script>
+</body>
+</html>

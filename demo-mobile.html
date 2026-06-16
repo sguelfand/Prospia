@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Demo — Vista mobile Prospects</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #f1f5f9; }
+
+    /* ── Header ── */
+    .top-bar {
+      position: sticky; top: 0; z-index: 10;
+      background: #1e293b; color: white;
+      padding: 14px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .top-bar h1 { font-size: 16px; font-weight: 700; }
+    .top-bar .count { font-size: 12px; color: #94a3b8; }
+
+    /* ── Filtro/busqueda ── */
+    .search-bar {
+      background: white; padding: 10px 16px;
+      border-bottom: 1px solid #e2e8f0;
+      display: flex; gap: 8px;
+    }
+    .search-bar input {
+      flex: 1; border: 1px solid #e2e8f0; border-radius: 8px;
+      padding: 8px 12px; font-size: 13px; outline: none;
+    }
+    .search-bar select {
+      border: 1px solid #e2e8f0; border-radius: 8px;
+      padding: 8px 10px; font-size: 13px; color: #374151;
+      background: white; outline: none;
+    }
+
+    /* ── Lista de cards ── */
+    .list { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+
+    /* ── Card ── */
+    .card {
+      background: white; border-radius: 12px;
+      box-shadow: 0 1px 3px #0000000d;
+      overflow: hidden;
+    }
+    .card-main {
+      padding: 14px 16px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+
+    /* Fila superior: nombre + badge */
+    .card-top {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+    }
+    .card-nombre {
+      font-size: 14px; font-weight: 600; color: #1e293b;
+      line-height: 1.3;
+    }
+    .card-url { font-size: 11px; color: #6366f1; margin-top: 1px; }
+
+    /* Badge clasificacion */
+    .badge {
+      font-size: 10px; font-weight: 700; padding: 2px 8px;
+      border-radius: 4px; border: 1px solid; white-space: nowrap; flex-shrink: 0;
+    }
+    .badge-alto      { background:#dcfce7; color:#15803d; border-color:#bbf7d0; }
+    .badge-medio     { background:#fef9c3; color:#a16207; border-color:#fde68a; }
+    .badge-bajo      { background:#fee2e2; color:#b91c1c; border-color:#fecaca; }
+    .badge-cancelado { background:#f1f5f9; color:#64748b; border-color:#e2e8f0; }
+
+    /* Fila info: estado + contactos + fecha */
+    .card-meta {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    }
+    .meta-chip {
+      display: flex; align-items: center; gap: 4px;
+      font-size: 11px; color: #64748b;
+    }
+    .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+    /* Expandible */
+    .card-extra {
+      display: none;
+      border-top: 1px solid #f1f5f9;
+      padding: 12px 16px;
+      display: none;
+      flex-direction: column; gap: 6px;
+    }
+    .card-extra.open { display: flex; }
+    .extra-row { display: flex; gap: 6px; font-size: 12px; }
+    .extra-label { color: #94a3b8; min-width: 70px; }
+    .extra-value { color: #374151; }
+
+    /* Botones de acción */
+    .card-actions {
+      display: flex; gap: 8px;
+      padding: 10px 16px;
+      border-top: 1px solid #f8fafc;
+      background: #fafafa;
+    }
+    .btn {
+      flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px;
+      font-size: 12px; font-weight: 500; padding: 8px 0;
+      border-radius: 8px; border: none; cursor: pointer; transition: background .15s;
+    }
+    .btn-contact  { background: #eff6ff; color: #3b82f6; }
+    .btn-contact:hover  { background: #dbeafe; }
+    .btn-history  { background: #f1f5f9; color: #475569; }
+    .btn-history:hover  { background: #e2e8f0; }
+
+    /* Toggle expand */
+    .expand-btn {
+      width: 100%; background: none; border: none; cursor: pointer;
+      padding: 6px 0; font-size: 11px; color: #94a3b8;
+      display: flex; align-items: center; justify-content: center; gap: 4px;
+    }
+    .expand-btn:hover { color: #64748b; }
+    .arrow { display: inline-block; transition: transform .2s; }
+    .arrow.open { transform: rotate(180deg); }
+
+    /* ── Simulador de pantalla mobile ── */
+    .simulator-wrap {
+      display: flex; gap: 40px; align-items: flex-start;
+      padding: 32px; background: #e2e8f0; min-height: 100vh;
+    }
+    .phone-frame {
+      width: 390px; flex-shrink: 0;
+      background: #1e293b; border-radius: 50px;
+      padding: 14px;
+      box-shadow: 0 30px 80px #00000040;
+    }
+    .phone-screen {
+      background: #f1f5f9; border-radius: 38px;
+      overflow: hidden; height: 700px;
+      overflow-y: auto;
+    }
+    /* Hide scrollbar inside phone */
+    .phone-screen::-webkit-scrollbar { display: none; }
+
+    .note-panel {
+      flex: 1; max-width: 380px;
+    }
+    .note-panel h2 { font-size: 16px; font-weight: 700; color: #1e293b; margin-bottom: 12px; }
+    .note { background: white; border-radius: 12px; padding: 16px; margin-bottom: 12px;
+            box-shadow: 0 1px 3px #0000000d; }
+    .note h3 { font-size: 13px; font-weight: 600; color: #1e293b; margin-bottom: 6px; }
+    .note p { font-size: 12px; color: #64748b; line-height: 1.5; }
+    .note ul { font-size: 12px; color: #64748b; line-height: 1.8; padding-left: 16px; }
+  </style>
+</head>
+<body>
+
+<div class="simulator-wrap">
+
+  <!-- ── Phone frame ── -->
+  <div>
+    <p style="text-align:center; font-size:12px; color:#64748b; margin-bottom:10px">iPhone 15 Pro (390px)</p>
+    <div class="phone-frame">
+      <div class="phone-screen" id="phoneScreen">
+
+        <!-- Top bar -->
+        <div class="top-bar">
+          <h1>Prospects</h1>
+          <span class="count">18 prospects</span>
+        </div>
+
+        <!-- Search + filtro -->
+        <div class="search-bar">
+          <input type="text" placeholder="🔍 Buscar empresa..." />
+          <select>
+            <option>Todos</option>
+            <option>En cola</option>
+            <option>Contactado</option>
+            <option>Interesado</option>
+          </select>
+        </div>
+
+        <!-- Lista de cards -->
+        <div class="list">
+
+          <!-- Card 1 -->
+          <div class="card">
+            <div class="card-main">
+              <div class="card-top">
+                <div>
+                  <div class="card-nombre">Telas del Sur SRL</div>
+                  <div class="card-url">telasdelsur.com.ar</div>
+                </div>
+                <span class="badge badge-alto">ALTO</span>
+              </div>
+              <div class="card-meta">
+                <span class="meta-chip">
+                  <span class="dot" style="background:#3b82f6"></span>
+                  En cola
+                </span>
+                <span class="meta-chip">💬 2 contactos</span>
+                <span class="meta-chip">🕐 hace 3 días</span>
+              </div>
+            </div>
+            <div class="card-extra" id="extra1">
+              <div class="extra-row"><span class="extra-label">Email</span><span class="extra-value">ventas@telasdelsur.com.ar</span></div>
+              <div class="extra-row"><span class="extra-label">WhatsApp</span><span class="extra-value">+54 9 11 4567 8901</span></div>
+              <div class="extra-row"><span class="extra-label">Término</span><span class="extra-value">telas sublimables</span></div>
+              <div class="extra-row"><span class="extra-label">Rubro</span><span class="extra-value">Textil mayorista</span></div>
+              <div class="extra-row"><span class="extra-label">Detalle IA</span><span class="extra-value">Vende tela sublimable en rollo para fabricantes</span></div>
+            </div>
+            <button class="expand-btn" onclick="toggle('extra1', this)">
+              Ver más <span class="arrow">▾</span>
+            </button>
+            <div class="card-actions">
+              <button class="btn btn-contact">✉ Contactar</button>
+              <button class="btn btn-history">📋 Historial</button>
+            </div>
+          </div>
+
+          <!-- Card 2 -->
+          <div class="card">
+            <div class="card-main">
+              <div class="card-top">
+                <div>
+                  <div class="card-nombre">Sportech Textil</div>
+                  <div class="card-url">sportechtextil.com.ar</div>
+                </div>
+                <span class="badge badge-medio">MEDIO</span>
+              </div>
+              <div class="card-meta">
+                <span class="meta-chip">
+                  <span class="dot" style="background:#f59e0b"></span>
+                  Contactado
+                </span>
+                <span class="meta-chip">💬 1 contacto</span>
+                <span class="meta-chip">🕐 ayer</span>
+              </div>
+            </div>
+            <div class="card-extra" id="extra2">
+              <div class="extra-row"><span class="extra-label">Email</span><span class="extra-value">info@sportech.com.ar</span></div>
+              <div class="extra-row"><span class="extra-label">WhatsApp</span><span class="extra-value">+54 9 11 2345 6789</span></div>
+              <div class="extra-row"><span class="extra-label">Término</span><span class="extra-value">ropa deportiva</span></div>
+              <div class="extra-row"><span class="extra-label">Rubro</span><span class="extra-value">Indumentaria deportiva</span></div>
+            </div>
+            <button class="expand-btn" onclick="toggle('extra2', this)">
+              Ver más <span class="arrow">▾</span>
+            </button>
+            <div class="card-actions">
+              <button class="btn btn-contact" style="opacity:.4" disabled>✉ Contactar</button>
+              <button class="btn btn-history">📋 Historial</button>
+            </div>
+          </div>
+
+          <!-- Card 3 -->
+          <div class="card">
+            <div class="card-main">
+              <div class="card-top">
+                <div>
+                  <div class="card-nombre">Lonas Patagónicas SA</div>
+                  <div class="card-url">lonaspatagonicas.com.ar</div>
+                </div>
+                <span class="badge badge-bajo">BAJO</span>
+              </div>
+              <div class="card-meta">
+                <span class="meta-chip">
+                  <span class="dot" style="background:#94a3b8"></span>
+                  Sin contactar
+                </span>
+                <span class="meta-chip">💬 0 contactos</span>
+              </div>
+            </div>
+            <div class="card-extra" id="extra3">
+              <div class="extra-row"><span class="extra-label">Email</span><span class="extra-value">—</span></div>
+              <div class="extra-row"><span class="extra-label">WhatsApp</span><span class="extra-value">+54 9 280 411 2233</span></div>
+              <div class="extra-row"><span class="extra-label">Término</span><span class="extra-value">lonas técnicas</span></div>
+              <div class="extra-row"><span class="extra-label">Rubro</span><span class="extra-value">Materiales industriales</span></div>
+            </div>
+            <button class="expand-btn" onclick="toggle('extra3', this)">
+              Ver más <span class="arrow">▾</span>
+            </button>
+            <div class="card-actions">
+              <button class="btn btn-contact">✉ Contactar</button>
+              <button class="btn btn-history">📋 Historial</button>
+            </div>
+          </div>
+
+          <!-- Card 4 -->
+          <div class="card">
+            <div class="card-main">
+              <div class="card-top">
+                <div>
+                  <div class="card-nombre">Fabrika Textil</div>
+                  <div class="card-url">fabrika-textil.com.ar</div>
+                </div>
+                <span class="badge badge-cancelado">CANCELADO</span>
+              </div>
+              <div class="card-meta">
+                <span class="meta-chip">
+                  <span class="dot" style="background:#6b7280"></span>
+                  No le interesa
+                </span>
+                <span class="meta-chip">💬 1 contacto</span>
+              </div>
+            </div>
+            <div class="card-extra" id="extra4">
+              <div class="extra-row"><span class="extra-label">Detalle IA</span><span class="extra-value">Tienen sus propias máquinas de sublimación. Competencia directa.</span></div>
+              <div class="extra-row"><span class="extra-label">Rubro</span><span class="extra-value">Sublimación</span></div>
+            </div>
+            <button class="expand-btn" onclick="toggle('extra4', this)">
+              Ver más <span class="arrow">▾</span>
+            </button>
+            <div class="card-actions">
+              <button class="btn btn-contact" style="opacity:.4" disabled>✉ Contactar</button>
+              <button class="btn btn-history">📋 Historial</button>
+            </div>
+          </div>
+
+          <!-- Card 5 -->
+          <div class="card">
+            <div class="card-main">
+              <div class="card-top">
+                <div>
+                  <div class="card-nombre">Calzas Flex Argentina</div>
+                  <div class="card-url">calzasflex.com.ar</div>
+                </div>
+                <span class="badge badge-alto">ALTO</span>
+              </div>
+              <div class="card-meta">
+                <span class="meta-chip">
+                  <span class="dot" style="background:#22c55e"></span>
+                  Interesado
+                </span>
+                <span class="meta-chip">💬 3 contactos</span>
+                <span class="meta-chip">🕐 hoy</span>
+              </div>
+            </div>
+            <div class="card-extra" id="extra5">
+              <div class="extra-row"><span class="extra-label">Email</span><span class="extra-value">pedidos@calzasflex.com.ar</span></div>
+              <div class="extra-row"><span class="extra-label">WhatsApp</span><span class="extra-value">+54 9 11 9876 5432</span></div>
+              <div class="extra-row"><span class="extra-label">Término</span><span class="extra-value">calzas sublimadas</span></div>
+            </div>
+            <button class="expand-btn" onclick="toggle('extra5', this)">
+              Ver más <span class="arrow">▾</span>
+            </button>
+            <div class="card-actions">
+              <button class="btn btn-contact">✉ Contactar</button>
+              <button class="btn btn-history">📋 Historial</button>
+            </div>
+          </div>
+
+        </div><!-- /list -->
+      </div><!-- /phone-screen -->
+    </div><!-- /phone-frame -->
+  </div>
+
+  <!-- ── Notas laterales ── -->
+  <div class="note-panel">
+    <h2>Vista mobile — Opción A</h2>
+
+    <div class="note">
+      <h3>Qué muestra cada card por defecto</h3>
+      <ul>
+        <li>Nombre + URL de la empresa</li>
+        <li>Badge de clasificación (ALTO / MEDIO / BAJO / CANCELADO)</li>
+        <li>Estado con punto de color</li>
+        <li>Cantidad de contactos + fecha del último</li>
+      </ul>
+    </div>
+
+    <div class="note">
+      <h3>"Ver más" expandible</h3>
+      <p>Al tocar, aparecen los campos secundarios: email, WhatsApp, término de búsqueda, rubro, detalle de la IA.</p>
+    </div>
+
+    <div class="note">
+      <h3>Acciones rápidas</h3>
+      <p>Botones Contactar e Historial siempre visibles en el pie de la card. Contactar queda deshabilitado si el estado no lo permite.</p>
+    </div>
+
+    <div class="note">
+      <h3>Cómo se implementa</h3>
+      <p>La tabla actual se mantiene en desktop. En mobile (<code>md:hidden</code> / <code>hidden md:block</code>) se renderiza esta vista de cards en su lugar. Mismo estado, misma API — solo cambia el markup.</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  function toggle(id, btn) {
+    const el = document.getElementById(id)
+    const arrow = btn.querySelector('.arrow')
+    el.classList.toggle('open')
+    arrow.classList.toggle('open')
+    btn.querySelector('span:first-child').textContent = el.classList.contains('open') ? 'Ver menos ' : 'Ver más '
+  }
+</script>
+</body>
+</html>

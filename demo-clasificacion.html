@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Demo — Cambiar clasificación</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f1f5f9; padding: 40px; }
+
+    h2 { font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase;
+         letter-spacing: .05em; margin-bottom: 16px; }
+
+    /* ── Tabla falsa ── */
+    .table-wrap { background: white; border-radius: 12px; box-shadow: 0 1px 4px #0001;
+                  overflow: hidden; margin-bottom: 48px; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #f8fafc; font-size: 11px; color: #94a3b8; font-weight: 600;
+         text-transform: uppercase; letter-spacing: .05em; padding: 10px 16px; text-align: left; }
+    td { padding: 12px 16px; font-size: 13px; color: #374151; border-top: 1px solid #f1f5f9; }
+
+    /* ── Badges de clasificación ── */
+    .badge { display: inline-flex; align-items: center; gap: 5px;
+             font-size: 11px; font-weight: 700; padding: 2px 8px;
+             border-radius: 4px; border: 1px solid; cursor: pointer;
+             transition: opacity .15s; user-select: none; }
+    .badge:hover { opacity: .75; }
+    .badge-alto      { background:#dcfce7; color:#15803d; border-color:#bbf7d0; }
+    .badge-medio     { background:#fef9c3; color:#a16207; border-color:#fde68a; }
+    .badge-bajo      { background:#fee2e2; color:#b91c1c; border-color:#fecaca; }
+    .badge-cancelado { background:#f1f5f9; color:#64748b; border-color:#e2e8f0; }
+
+    /* ──────────────────────────────────────────────────────────
+       OPCIÓN A — Popover flotante
+    ────────────────────────────────────────────────────────── */
+    .popover-anchor { position: relative; display: inline-block; }
+
+    .popover {
+      display: none;
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      z-index: 100;
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      box-shadow: 0 8px 24px #0000001a, 0 2px 6px #0000000d;
+      padding: 14px;
+      width: 220px;
+    }
+    .popover.open { display: block; }
+    .popover::before {
+      content: '';
+      position: absolute;
+      top: -6px; left: 14px;
+      width: 10px; height: 10px;
+      background: white;
+      border-left: 1px solid #e2e8f0;
+      border-top: 1px solid #e2e8f0;
+      transform: rotate(45deg);
+    }
+
+    /* ──────────────────────────────────────────────────────────
+       OPCIÓN B — Mini modal
+    ────────────────────────────────────────────────────────── */
+    .overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: #00000033;
+      backdrop-filter: blur(1px);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }
+    .overlay.open { display: flex; }
+
+    .modal {
+      background: white;
+      border-radius: 14px;
+      box-shadow: 0 20px 60px #00000033;
+      padding: 24px;
+      width: 300px;
+    }
+    .modal-title {
+      font-size: 13px; font-weight: 700; color: #1e293b;
+      margin-bottom: 16px;
+    }
+    .modal-subtitle {
+      font-size: 11px; color: #94a3b8;
+      margin-bottom: 4px; font-weight: 500;
+    }
+
+    /* ── Controles compartidos ── */
+    .ctrl-label { font-size: 11px; color: #64748b; font-weight: 500; margin-bottom: 4px; }
+    select, textarea {
+      width: 100%;
+      font-size: 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 7px;
+      padding: 7px 10px;
+      outline: none;
+      font-family: inherit;
+      color: #1e293b;
+      background: #f8fafc;
+      transition: border-color .15s;
+    }
+    select:focus, textarea:focus { border-color: #6366f1; background: white; }
+    textarea { resize: none; margin-top: 10px; }
+
+    .btn-row { display: flex; gap: 8px; margin-top: 14px; }
+    .btn-ok {
+      flex: 1; background: #6366f1; color: white;
+      border: none; border-radius: 7px; padding: 7px 0;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-ok:hover { background: #4f46e5; }
+    .btn-cancel {
+      background: none; border: 1px solid #e2e8f0;
+      border-radius: 7px; padding: 7px 14px;
+      font-size: 12px; color: #64748b; cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-cancel:hover { background: #f8fafc; }
+
+    .section-header {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 20px;
+    }
+    .option-tag {
+      font-size: 11px; font-weight: 700; letter-spacing: .04em;
+      background: #6366f1; color: white;
+      padding: 3px 10px; border-radius: 20px;
+    }
+    .section-title { font-size: 15px; font-weight: 700; color: #1e293b; }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════
+     OPCIÓN A — Popover flotante
+════════════════════════════════════════════ -->
+<div class="section-header">
+  <span class="option-tag">A</span>
+  <span class="section-title">Popover flotante — aparece anclado al badge</span>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Empresa</th>
+        <th>Clasificación</th>
+        <th>Estado</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Telas del Sur SRL</td>
+        <td>
+          <div class="popover-anchor" id="anchorA">
+            <span class="badge badge-alto" onclick="togglePopoverA()">
+              ▾ ALTO
+            </span>
+            <div class="popover" id="popoverA">
+              <div class="ctrl-label">Clasificación</div>
+              <select>
+                <option>ALTO</option>
+                <option>MEDIO</option>
+                <option>BAJO</option>
+                <option>CANCELADO</option>
+              </select>
+              <textarea placeholder="¿Por qué? (opcional)" rows="2"></textarea>
+              <div class="btn-row">
+                <button class="btn-ok" onclick="closeA()">✓ OK</button>
+                <button class="btn-cancel" onclick="closeA()">Cancelar</button>
+              </div>
+            </div>
+          </div>
+        </td>
+        <td style="color:#3b82f6">En cola</td>
+      </tr>
+      <tr>
+        <td>Sportech Textil</td>
+        <td><span class="badge badge-medio">MEDIO</span></td>
+        <td style="color:#f59e0b">Contactado</td>
+      </tr>
+      <tr>
+        <td>Lonas Patagónicas</td>
+        <td><span class="badge badge-bajo">BAJO</span></td>
+        <td style="color:#94a3b8">Sin contactar</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ══════════════════════════════════════════
+     OPCIÓN B — Mini modal
+════════════════════════════════════════════ -->
+<div class="section-header">
+  <span class="option-tag">B</span>
+  <span class="section-title">Mini modal — overlay + cuadro centrado</span>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Empresa</th>
+        <th>Clasificación</th>
+        <th>Estado</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Telas del Sur SRL</td>
+        <td>
+          <span class="badge badge-alto" onclick="openModal()">▾ ALTO</span>
+        </td>
+        <td style="color:#3b82f6">En cola</td>
+      </tr>
+      <tr>
+        <td>Sportech Textil</td>
+        <td><span class="badge badge-medio">MEDIO</span></td>
+        <td style="color:#f59e0b">Contactado</td>
+      </tr>
+      <tr>
+        <td>Lonas Patagónicas</td>
+        <td><span class="badge badge-bajo">BAJO</span></td>
+        <td style="color:#94a3b8">Sin contactar</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Modal B -->
+<div class="overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">Cambiar clasificación</div>
+    <div class="modal-subtitle">Telas del Sur SRL</div>
+    <div class="ctrl-label" style="margin-top:14px">Nueva clasificación</div>
+    <select>
+      <option>ALTO</option>
+      <option>MEDIO</option>
+      <option>BAJO</option>
+      <option>CANCELADO</option>
+    </select>
+    <textarea placeholder="¿Por qué? (opcional)" rows="3"></textarea>
+    <div class="btn-row">
+      <button class="btn-ok" onclick="closeModal()">✓ Confirmar</button>
+      <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── Popover A ──
+  function togglePopoverA() {
+    document.getElementById('popoverA').classList.toggle('open')
+  }
+  function closeA() {
+    document.getElementById('popoverA').classList.remove('open')
+  }
+  document.addEventListener('click', e => {
+    const anchor = document.getElementById('anchorA')
+    if (anchor && !anchor.contains(e.target)) closeA()
+  })
+
+  // ── Modal B ──
+  function openModal() {
+    document.getElementById('modalOverlay').classList.add('open')
+  }
+  function closeModal(e) {
+    if (!e || e.target === document.getElementById('modalOverlay')) {
+      document.getElementById('modalOverlay').classList.remove('open')
+    }
+  }
+</script>
+</body>
+</html>
