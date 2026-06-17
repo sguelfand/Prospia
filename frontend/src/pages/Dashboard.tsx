@@ -51,9 +51,59 @@ function HistTooltip({ active, payload, navigate }: any) {
   )
 }
 
+// Cada serie de "Prospects por término" → estado por el que filtra en Prospects
+const TERMINO_ESTADO: Record<string, string> = {
+  'Encontrados': '',
+  'En conversación': 'en_conversacion',
+  'Interesados': 'interesado',
+}
+
+// Tooltip clickeable del gráfico de términos: misma mecánica que HistTooltip.
+// Clic en una fila → Prospects filtrado por ese término + estado.
+function TerminoTooltip({ active, payload, navigate }: any) {
+  if (!active || !payload?.length) return null
+  const point = payload[0]?.payload ?? {}
+  const go = (estado: string) => {
+    const p = new URLSearchParams({ termino_id: String(point.termino_id) })
+    if (estado) p.set('estado', estado)
+    navigate(`/prospects?${p.toString()}`)
+  }
+  return (
+    <div style={{
+      background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8,
+      padding: '5px 6px', boxShadow: '0 2px 10px rgba(0,0,0,.14)',
+      fontSize: 11, pointerEvents: 'auto',
+    }}>
+      <p style={{ fontWeight: 600, margin: '0 0 3px', padding: '0 2px', maxWidth: 220 }}>{point.termino}</p>
+      {payload.map((item: any) => (
+        <button
+          key={item.name}
+          onClick={() => go(TERMINO_ESTADO[item.name] ?? '')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+            textAlign: 'left', padding: '3px 6px', borderRadius: 4,
+            cursor: 'pointer', background: 'transparent', border: 'none', fontSize: 11,
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = '#f3f4f6')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+        >
+          <span style={{ width: 8, height: 8, borderRadius: 9999, background: item.color ?? item.fill, flexShrink: 0 }} />
+          <span>{item.name}: <b>{item.value}</b></span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmt(n: number) { return n.toLocaleString('es-AR') }
+
+// Mes actual en formato YYYY-MM (igual al filtro `mes` de Prospects)
+function mesActualYYYYMM() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
 
 function mesLabel(yyyymm: string) {
   const [y, m] = yyyymm.split('-')
@@ -63,11 +113,14 @@ function mesLabel(yyyymm: string) {
 
 // ── Subcomponentes ───────────────────────────────────────────────────────────
 
-function KpiCard({ label, value, sub, color = '#6366f1' }: {
-  label: string; value: string | number; sub?: string; color?: string
+function KpiCard({ label, value, sub, color = '#6366f1', onClick }: {
+  label: string; value: string | number; sub?: string; color?: string; onClick?: () => void
 }) {
   return (
-    <div className="bg-white rounded-xl p-4 flex flex-col gap-1">
+    <div
+      onClick={onClick}
+      className={`bg-white rounded-xl p-4 flex flex-col gap-1${onClick ? ' cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+    >
       <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">{label}</p>
       <p className="text-2xl md:text-3xl font-bold" style={{ color }}>{value}</p>
       {sub && <p className="text-xs text-gray-400">{sub}</p>}
@@ -91,9 +144,9 @@ function DiagonalTick({ x, y, payload }: { x?: number; y?: number; payload?: { v
 
 // ── TerminoChart ─────────────────────────────────────────────────────────────
 
-type TerminoRow = { termino: string; Encontrados: number; 'En conversación': number; Interesados: number }
+type TerminoRow = { termino: string; termino_id: number; Encontrados: number; 'En conversación': number; Interesados: number }
 
-function TerminoChart({ data }: { data: TerminoRow[] }) {
+function TerminoChart({ data, navigate }: { data: TerminoRow[]; navigate: ReturnType<typeof useNavigate> }) {
   return (
     <div className="bg-white rounded-xl shadow p-4 md:p-5">
       <h2 className="font-semibold mb-4 text-sm md:text-base">Prospects por término</h2>
@@ -104,8 +157,9 @@ function TerminoChart({ data }: { data: TerminoRow[] }) {
           <YAxis tick={{ fontSize: 10 }} />
           <Legend wrapperStyle={{ fontSize: 11 }} />
           <Tooltip
+            content={(props: any) => <TerminoTooltip {...props} navigate={navigate} />}
             position={{ y: 145 }}
-            contentStyle={{ fontSize: 11, padding: '6px 10px', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,.12)' }}
+            wrapperStyle={{ pointerEvents: 'auto' }}
             cursor={{ fill: 'rgba(0,0,0,.04)' }}
           />
           <Bar dataKey="Encontrados"     fill="#3b82f6" radius={[3,3,0,0]} />
@@ -131,17 +185,28 @@ export default function Dashboard() {
 
   const { mes_actual, por_estado, por_estado_mes, por_termino, por_mes } = stats
 
-  // Datos para pie charts
+  // Datos para pie charts (estado = clave por la que filtra Prospects)
   const pieTotal = por_estado.map(e => ({
     name: ESTADOS[e.estado]?.label ?? e.estado,
     value: e.count,
     color: ESTADOS[e.estado]?.color ?? '#94a3b8',
+    estado: e.estado,
   }))
   const pieMes = por_estado_mes.map(e => ({
     name: ESTADOS[e.estado]?.label ?? e.estado,
     value: e.count,
     color: ESTADOS[e.estado]?.color ?? '#94a3b8',
+    estado: e.estado,
   }))
+
+  const mesAct = mesActualYYYYMM()
+
+  // Navega a Prospects con filtros. Omite los vacíos.
+  const goProspects = (filtros: Record<string, string>) => {
+    const p = new URLSearchParams()
+    for (const [k, v] of Object.entries(filtros)) if (v) p.set(k, v)
+    navigate(`/prospects?${p.toString()}`)
+  }
 
   // Datos para la evolución mensual
   const mesData = por_mes.map(m => ({
@@ -155,6 +220,7 @@ export default function Dashboard() {
   // Datos para términos
   const terminoData = por_termino.map(t => ({
     termino:           t.termino,
+    termino_id:        t.termino_id,
     Encontrados:       t.encontrados,
     'En conversación': t.en_conversacion,
     Interesados:       t.interesados,
@@ -177,28 +243,33 @@ export default function Dashboard() {
             label="Prospects generados"
             value={fmt(mes_actual.prospects)}
             color="#1e293b"
+            onClick={() => goProspects({ mes: mesAct })}
           />
           <KpiCard
             label="En conversación"
             value={fmt(mes_actual.en_conversacion)}
             color={ESTADOS.en_conversacion.color}
+            onClick={() => goProspects({ mes: mesAct, estado: 'en_conversacion' })}
           />
           <KpiCard
             label="Interesados"
             value={fmt(mes_actual.interesados)}
             color={ESTADOS.interesado.color}
+            onClick={() => goProspects({ mes: mesAct, estado: 'interesado' })}
           />
           <KpiCard
             label="Tasa de respuesta"
             value={`${mes_actual.tasa_respuesta}%`}
             sub="en conv. / generados"
             color="#8b5cf6"
+            onClick={() => goProspects({ mes: mesAct, estado: 'en_conversacion' })}
           />
           <KpiCard
             label="Tasa de conversión"
             value={`${mes_actual.tasa_conversion}%`}
             sub="interesados / generados"
             color="#22c55e"
+            onClick={() => goProspects({ mes: mesAct, estado: 'interesado' })}
           />
         </div>
       </div>
@@ -207,7 +278,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         {/* Prospects por término */}
-        <TerminoChart data={terminoData} />
+        <TerminoChart data={terminoData} navigate={navigate} />
 
         {/* Distribución por estado — dos pies */}
         <div className="bg-white rounded-xl shadow p-4 md:p-5">
@@ -218,7 +289,9 @@ export default function Dashboard() {
               <ResponsiveContainer width="100%" height={170}>
                 <PieChart>
                   <Pie data={pieMes} dataKey="value" nameKey="name"
-                    cx="50%" cy="50%" outerRadius={60} label={false}>
+                    cx="50%" cy="50%" outerRadius={60} label={false}
+                    onClick={(d: any) => goProspects({ mes: mesAct, estado: d?.payload?.estado })}
+                    style={{ cursor: 'pointer' }}>
                     {pieMes.map((e, i) => <Cell key={i} fill={e.color} />)}
                   </Pie>
                   <Tooltip formatter={(v, n) => [v, n]} />
@@ -230,7 +303,9 @@ export default function Dashboard() {
               <ResponsiveContainer width="100%" height={170}>
                 <PieChart>
                   <Pie data={pieTotal} dataKey="value" nameKey="name"
-                    cx="50%" cy="50%" outerRadius={60} label={false}>
+                    cx="50%" cy="50%" outerRadius={60} label={false}
+                    onClick={(d: any) => goProspects({ estado: d?.payload?.estado })}
+                    style={{ cursor: 'pointer' }}>
                     {pieTotal.map((e, i) => <Cell key={i} fill={e.color} />)}
                   </Pie>
                   <Tooltip formatter={(v, n) => [v, n]} />
@@ -238,13 +313,17 @@ export default function Dashboard() {
               </ResponsiveContainer>
             </div>
           </div>
-          {/* Leyenda compartida */}
+          {/* Leyenda compartida — clic filtra Prospects por ese estado (total) */}
           <div className="flex flex-wrap gap-x-3 gap-y-1 justify-center mt-2">
             {pieTotal.map(e => (
-              <span key={e.name} className="flex items-center gap-1 text-xs text-gray-500">
+              <button
+                key={e.name}
+                onClick={() => goProspects({ estado: e.estado })}
+                className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-800 cursor-pointer"
+              >
                 <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: e.color }} />
                 {e.name}
-              </span>
+              </button>
             ))}
           </div>
         </div>

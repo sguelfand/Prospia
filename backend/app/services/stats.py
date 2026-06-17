@@ -72,6 +72,7 @@ def compute_stats(db: Session, tid: int) -> DashboardStats:
     termino_rows = (
         db.query(
             Termino.texto,
+            Termino.id,
             func.count(Prospect.id).label("encontrados"),
             func.sum(case((Prospect.estado == "en_conversacion", 1), else_=0)).label("en_conversacion"),
             func.sum(case((Prospect.estado == "interesado",      1), else_=0)).label("interesados"),
@@ -84,8 +85,8 @@ def compute_stats(db: Session, tid: int) -> DashboardStats:
         .all()
     )
     por_termino = [
-        TerminoStat(termino=t, encontrados=e or 0, en_conversacion=c or 0, interesados=i or 0)
-        for t, e, c, i in termino_rows
+        TerminoStat(termino=t, termino_id=tid_, encontrados=e or 0, en_conversacion=c or 0, interesados=i or 0)
+        for t, tid_, e, c, i in termino_rows
     ]
 
     # ── Evolución mensual: encontrados, interesados, no_le_interesa ───────────

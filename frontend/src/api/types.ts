@@ -45,7 +45,7 @@ export interface DashboardStats {
   total_prospects: number
   por_estado:     { estado: string; count: number }[]
   por_estado_mes: { estado: string; count: number }[]
-  por_termino:    { termino: string; encontrados: number; en_conversacion: number; interesados: number }[]
+  por_termino:    { termino: string; termino_id: number; encontrados: number; en_conversacion: number; interesados: number }[]
   por_mes:        { mes: string; encontrados: number; interesados: number; no_le_interesa: number }[]
   mes_actual: {
     prospects:       number

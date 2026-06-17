@@ -8,6 +8,7 @@ class EstadoCount(BaseModel):
 
 class TerminoStat(BaseModel):
     termino: str
+    termino_id: int
     encontrados: int
     en_conversacion: int
     interesados: int
