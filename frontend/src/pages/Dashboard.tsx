@@ -51,50 +51,6 @@ function HistTooltip({ active, payload, navigate }: any) {
   )
 }
 
-// Cada serie de "Prospects por término" → estado por el que filtra en Prospects
-const TERMINO_ESTADO: Record<string, string> = {
-  'Encontrados': '',
-  'En conversación': 'en_conversacion',
-  'Interesados': 'interesado',
-}
-
-// Tooltip clickeable del gráfico de términos: misma mecánica que HistTooltip.
-// Clic en una fila → Prospects filtrado por ese término + estado.
-function TerminoTooltip({ active, payload, navigate }: any) {
-  if (!active || !payload?.length) return null
-  const point = payload[0]?.payload ?? {}
-  const go = (estado: string) => {
-    const p = new URLSearchParams({ termino_id: String(point.termino_id) })
-    if (estado) p.set('estado', estado)
-    navigate(`/prospects?${p.toString()}`)
-  }
-  return (
-    <div style={{
-      background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8,
-      padding: '5px 6px', boxShadow: '0 2px 10px rgba(0,0,0,.14)',
-      fontSize: 11, pointerEvents: 'auto',
-    }}>
-      <p style={{ fontWeight: 600, margin: '0 0 3px', padding: '0 2px', maxWidth: 220 }}>{point.termino}</p>
-      {payload.map((item: any) => (
-        <button
-          key={item.name}
-          onClick={() => go(TERMINO_ESTADO[item.name] ?? '')}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6, width: '100%',
-            textAlign: 'left', padding: '3px 6px', borderRadius: 4,
-            cursor: 'pointer', background: 'transparent', border: 'none', fontSize: 11,
-          }}
-          onMouseEnter={e => (e.currentTarget.style.background = '#f3f4f6')}
-          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-        >
-          <span style={{ width: 8, height: 8, borderRadius: 9999, background: item.color ?? item.fill, flexShrink: 0 }} />
-          <span>{item.name}: <b>{item.value}</b></span>
-        </button>
-      ))}
-    </div>
-  )
-}
-
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmt(n: number) { return n.toLocaleString('es-AR') }
@@ -147,9 +103,18 @@ function DiagonalTick({ x, y, payload }: { x?: number; y?: number; payload?: { v
 type TerminoRow = { termino: string; termino_id: number; Encontrados: number; 'En conversación': number; Interesados: number }
 
 function TerminoChart({ data, navigate }: { data: TerminoRow[]; navigate: ReturnType<typeof useNavigate> }) {
+  // Clic en una barra → Prospects filtrado por ese término + el estado de la serie.
+  const go = (estado: string) => (d: any) => {
+    const terminoId = d?.payload?.termino_id ?? d?.termino_id
+    if (terminoId == null) return
+    const p = new URLSearchParams({ termino_id: String(terminoId) })
+    if (estado) p.set('estado', estado)
+    navigate(`/prospects?${p.toString()}`)
+  }
   return (
     <div className="bg-white rounded-xl shadow p-4 md:p-5">
       <h2 className="font-semibold mb-4 text-sm md:text-base">Prospects por término</h2>
+      <p className="text-xs text-gray-400 mb-2 -mt-2">Clic en una barra para ver esos prospects</p>
       <ResponsiveContainer width="100%" height={260}>
         <BarChart data={data} margin={{ top: 5, bottom: 5, left: -10, right: 5 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -157,14 +122,12 @@ function TerminoChart({ data, navigate }: { data: TerminoRow[]; navigate: Return
           <YAxis tick={{ fontSize: 10 }} />
           <Legend wrapperStyle={{ fontSize: 11 }} />
           <Tooltip
-            content={(props: any) => <TerminoTooltip {...props} navigate={navigate} />}
-            position={{ y: 0 }}
-            wrapperStyle={{ pointerEvents: 'auto' }}
-            cursor={false}
+            contentStyle={{ fontSize: 11, padding: '6px 10px', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,.12)' }}
+            cursor={{ fill: 'rgba(0,0,0,.04)' }}
           />
-          <Bar dataKey="Encontrados"     fill="#3b82f6" radius={[3,3,0,0]} />
-          <Bar dataKey="En conversación" fill="#8b5cf6" radius={[3,3,0,0]} />
-          <Bar dataKey="Interesados"     fill="#22c55e" radius={[3,3,0,0]} />
+          <Bar dataKey="Encontrados"     fill="#3b82f6" radius={[3,3,0,0]} cursor="pointer" onClick={go('')} />
+          <Bar dataKey="En conversación" fill="#8b5cf6" radius={[3,3,0,0]} cursor="pointer" onClick={go('en_conversacion')} />
+          <Bar dataKey="Interesados"     fill="#22c55e" radius={[3,3,0,0]} cursor="pointer" onClick={go('interesado')} />
         </BarChart>
       </ResponsiveContainer>
     </div>
