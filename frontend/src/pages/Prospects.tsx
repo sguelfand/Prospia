@@ -5,7 +5,7 @@ import { api } from '../api/client'
 import { ESTADOS, HISTORIAL_TIPOS, HistorialEntry, Prospect, ProspectsPage } from '../api/types'
 import StatusBadge from '../components/StatusBadge'
 
-const PAGE_SIZE = 50
+const PAGE_SIZE = 15
 
 const TIPOS_OPCIONES = [
   { value: 'contactado_wa',    label: 'WA enviado' },

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine
-from app.routers import auth, dashboard, prospects, terminos
+from app.routers import admin, auth, dashboard, prospects, terminos
 
 
 def run_migrations():
@@ -105,6 +105,7 @@ app.include_router(auth.router)
 app.include_router(prospects.router)
 app.include_router(terminos.router)
 app.include_router(dashboard.router)
+app.include_router(admin.router)
 
 
 from app.services import cadence
