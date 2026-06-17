@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Alta / actualización de un cliente (tenant) en la Plataforma — lo usa el agente
+"""Alta / actualización de un cliente (tenant) en Prospia — lo usa el agente
 Implementador para la puesta en marcha.
 
 Idempotente / upsert: se puede correr varias veces sin duplicar. Toma una "ficha de

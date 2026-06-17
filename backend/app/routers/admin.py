@@ -1,7 +1,7 @@
 """Capa de administración cross-tenant. Solo super-admin.
 
 Alimenta la app Android de administración: ver todos los clientes (tenants)
-de la Plataforma con sus KPIs, el detalle de stats de cualquiera, y los
+de Prospia con sus KPIs, el detalle de stats de cualquiera, y los
 totales agregados. Etiguel (que vive en Monday, no en esta base) se suma
 como una "fuente" más en la Fase 4 vía un adapter."""
 from datetime import date

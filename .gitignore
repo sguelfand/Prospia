@@ -16,3 +16,9 @@ dist/
 # OS / editor
 .DS_Store
 *.log
+
+# Infra / secrets (no pushear al repo de auto-deploy)
+infra/
+
+# Material de clientes (decks, fichas) — no va al repo
+clientes/

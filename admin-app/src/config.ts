@@ -1,7 +1,7 @@
 import Constants from "expo-constants";
 
 /**
- * URL del backend FastAPI de la Plataforma.
+ * URL del backend FastAPI de Prospia.
  *
  * En dev el backend corre en tu Mac en el puerto 8000, pero el celular NO puede
  * usar "localhost" (eso apunta al propio teléfono). Hay que poner la IP de tu Mac

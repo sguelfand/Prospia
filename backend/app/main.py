@@ -91,7 +91,7 @@ def run_migrations():
 Base.metadata.create_all(bind=engine)
 run_migrations()
 
-app = FastAPI(title="Plataforma Consultora IA", version="0.1.0")
+app = FastAPI(title="Prospia", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,

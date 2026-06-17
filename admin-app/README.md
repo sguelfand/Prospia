@@ -1,13 +1,13 @@
 # Admin Prospects — app Android (Expo)
 
-App de administración para ver todos los clientes de la Plataforma (y Etiguel,
+App de administración para ver todos los clientes de Prospia (y Etiguel,
 Fase 4) con sus estadísticas, y recibir push cuando un cliente responde por
 primera vez (Fase 3).
 
 ## Requisitos
 - Node 18+ en la Mac (`brew install node`).
 - App **Expo Go** en el celular Android (Play Store).
-- El backend de la Plataforma corriendo (`docker compose up` en `../`).
+- El backend de Prospia corriendo (`docker compose up` en `../`).
 
 ## Configurar la IP del backend
 El celular no puede usar `localhost`. Editar `app.json` → `expo.extra.apiUrl`
@@ -29,7 +29,7 @@ npx expo start
 Escaneá el QR con Expo Go (Mac y celular en la misma Wi-Fi).
 
 ## Login
-Usuario con rol `superadmin` en la Plataforma. En la base demo:
+Usuario con rol `superadmin` en Prospia. En la base demo:
 `sebi@demo.com` / `demo1234` (ya promovido a superadmin).
 
 ## Estructura
