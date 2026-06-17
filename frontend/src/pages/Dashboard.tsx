@@ -158,9 +158,9 @@ function TerminoChart({ data, navigate }: { data: TerminoRow[]; navigate: Return
           <Legend wrapperStyle={{ fontSize: 11 }} />
           <Tooltip
             content={(props: any) => <TerminoTooltip {...props} navigate={navigate} />}
-            position={{ y: 145 }}
+            position={{ y: 0 }}
             wrapperStyle={{ pointerEvents: 'auto' }}
-            cursor={{ fill: 'rgba(0,0,0,.04)' }}
+            cursor={false}
           />
           <Bar dataKey="Encontrados"     fill="#3b82f6" radius={[3,3,0,0]} />
           <Bar dataKey="En conversación" fill="#8b5cf6" radius={[3,3,0,0]} />
