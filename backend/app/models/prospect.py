@@ -51,3 +51,4 @@ class Prospect(Base):
     termino: Mapped["Termino"] = relationship(back_populates="prospects")  # noqa: F821
     rubro: Mapped["Rubro"] = relationship(back_populates="prospects")  # noqa: F821
     historial: Mapped[list["ProspectHistorial"]] = relationship(back_populates="prospect")  # noqa: F821
+    mensajes: Mapped[list["ProspectMensaje"]] = relationship(back_populates="prospect")  # noqa: F821

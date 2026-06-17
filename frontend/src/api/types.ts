@@ -32,6 +32,13 @@ export interface HistorialEntry {
   detalle: string | null
 }
 
+export interface Mensaje {
+  id: number
+  direccion: 'in' | 'out'
+  texto: string
+  fecha: string
+}
+
 export interface Termino {
   id: number
   texto: string

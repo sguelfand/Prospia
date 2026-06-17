@@ -73,3 +73,22 @@ class AgendarContactoBody(BaseModel):
 
 class InteresResumenBody(BaseModel):
     resumen: str | None = None   # resumen de la charla que deja Camila
+
+
+# ── Espejo de conversación WhatsApp (chat-log) ───────────────────────────────
+class ChatLogBody(BaseModel):
+    """Body del webhook que manda el plugin de OpenClaw por cada mensaje WA."""
+    telefono: str               # número del prospect (in: remitente / out: destinatario)
+    direccion: str              # 'in' (cliente → Camila) | 'out' (Camila → cliente)
+    texto: str
+    wa_msg_id: str | None = None  # id del mensaje en WA/OpenClaw, para idempotencia
+    fecha: datetime | None = None  # si no viene, se usa now()
+
+
+class MensajeOut(BaseModel):
+    id: int
+    direccion: str
+    texto: str
+    fecha: datetime
+
+    model_config = {"from_attributes": True}

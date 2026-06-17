@@ -8,9 +8,10 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user
 from app.database import get_db
 from app.models.historial import ProspectHistorial
+from app.models.mensaje import ProspectMensaje
 from app.models.prospect import ESTADOS, Prospect
 from app.models.user import User
-from app.schemas.prospect import AgendarContactoBody, HistorialCreate, HistorialOut, HistorialUpdate, InteresResumenBody, ProspectClasificacionUpdate, ProspectEstadoUpdate, ProspectOut, ProspectsPage
+from app.schemas.prospect import AgendarContactoBody, ChatLogBody, HistorialCreate, HistorialOut, HistorialUpdate, InteresResumenBody, MensajeOut, ProspectClasificacionUpdate, ProspectEstadoUpdate, ProspectOut, ProspectsPage
 from app.services import contact as contact_service
 from app.services import push
 
@@ -32,6 +33,46 @@ def _validar_webhook_tenant(db: Session, prospect: Prospect, x_webhook_token: st
     config = db.query(TenantConfig).filter(TenantConfig.tenant_id == prospect.tenant_id).first()
     if not config or not config.webhook_token or x_webhook_token != config.webhook_token:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token inválido")
+
+
+def _tenant_id_por_token(db: Session, x_webhook_token: str) -> int:
+    """Resuelve el tenant dueño de un webhook_token. Lo usa el chat-log, que llega
+    solo con teléfono (no con prospect_id), así que primero identificamos el tenant
+    por su token y después buscamos el prospect dentro de ese tenant."""
+    from app.models.tenant import TenantConfig
+    config = (
+        db.query(TenantConfig)
+        .filter(TenantConfig.webhook_token == x_webhook_token)
+        .first()
+    )
+    if not config or not x_webhook_token:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token inválido")
+    return config.tenant_id
+
+
+def _norm_telefono(valor: str | None) -> str:
+    """Normaliza a solo dígitos y se queda con los últimos 10 (núcleo del número,
+    sin prefijos de país/celular que varían: +54, 9, 0, 15). Sirve para machear el
+    teléfono que reporta WhatsApp contra el whatsapp guardado del prospect, que
+    puede estar cargado en formatos distintos."""
+    digitos = "".join(c for c in (valor or "") if c.isdigit())
+    return digitos[-10:] if len(digitos) >= 10 else digitos
+
+
+def _buscar_prospect_por_telefono(db: Session, tenant_id: int, telefono: str) -> Prospect | None:
+    objetivo = _norm_telefono(telefono)
+    if not objetivo:
+        return None
+    candidatos = (
+        db.query(Prospect)
+        .filter(Prospect.tenant_id == tenant_id)
+        .filter((Prospect.whatsapp.isnot(None)) | (Prospect.telefono.isnot(None)))
+        .all()
+    )
+    for p in candidatos:
+        if _norm_telefono(p.whatsapp) == objetivo or _norm_telefono(p.telefono) == objetivo:
+            return p
+    return None
 
 
 @router.get("", response_model=ProspectsPage)
@@ -268,6 +309,76 @@ def get_historial(
         .order_by(ProspectHistorial.fecha.desc())
         .all()
     )
+
+
+@router.get("/{prospect_id}/mensajes", response_model=list[MensajeOut])
+def get_mensajes(
+    prospect_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Hilo de conversación WhatsApp del prospect (orden cronológico, para el chat)."""
+    prospect = db.get(Prospect, prospect_id)
+    if not prospect or prospect.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=404, detail="Prospect no encontrado")
+
+    return (
+        db.query(ProspectMensaje)
+        .filter(ProspectMensaje.prospect_id == prospect_id)
+        .order_by(ProspectMensaje.fecha.asc(), ProspectMensaje.id.asc())
+        .all()
+    )
+
+
+@router.post("/chat-log")
+def chat_log(
+    body: ChatLogBody,
+    x_webhook_token: str = Header(...),
+    db: Session = Depends(get_db),
+):
+    """Recibe del plugin de OpenClaw cada mensaje de WhatsApp (entrante y saliente)
+    para espejar la conversación. NO pasa por el LLM: es texto ya existente.
+
+    Resuelve el tenant por el token y el prospect por teléfono. Idempotente sobre
+    wa_msg_id (si viene): reintentos del plugin no duplican mensajes."""
+    if body.direccion not in ("in", "out"):
+        raise HTTPException(status_code=400, detail="direccion debe ser 'in' u 'out'")
+
+    tenant_id = _tenant_id_por_token(db, x_webhook_token)
+
+    texto = (body.texto or "").strip()
+    if not texto:
+        return {"ok": True, "skipped": "texto vacío"}
+
+    prospect = _buscar_prospect_por_telefono(db, tenant_id, body.telefono)
+    if not prospect:
+        # No reventamos: el plugin no debe reintentar infinito por un número que no
+        # está en la base (ej. un inbound puro que todavía no es prospect).
+        return {"ok": False, "skipped": "prospect no encontrado para ese teléfono"}
+
+    if body.wa_msg_id:
+        existente = (
+            db.query(ProspectMensaje)
+            .filter(ProspectMensaje.prospect_id == prospect.id)
+            .filter(ProspectMensaje.wa_msg_id == body.wa_msg_id)
+            .first()
+        )
+        if existente:
+            return {"ok": True, "duplicado": True, "id": existente.id}
+
+    from datetime import datetime, timezone
+    msg = ProspectMensaje(
+        prospect_id=prospect.id,
+        tenant_id=tenant_id,
+        direccion=body.direccion,
+        texto=texto[:4000],
+        wa_msg_id=body.wa_msg_id,
+        fecha=body.fecha or datetime.now(timezone.utc),
+    )
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    return {"ok": True, "id": msg.id, "prospect_id": prospect.id}
 
 
 @router.post("/{prospect_id}/historial", response_model=HistorialOut, status_code=201)
