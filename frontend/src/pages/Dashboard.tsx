@@ -259,7 +259,11 @@ export default function Dashboard() {
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} />
-              <Tooltip content={(props: any) => <HistTooltip {...props} navigate={navigate} />} wrapperStyle={{ pointerEvents: 'auto' }} />
+              <Tooltip
+                content={(props: any) => <HistTooltip {...props} navigate={navigate} />}
+                position={{ y: 0 }}
+                wrapperStyle={{ pointerEvents: 'auto' }}
+              />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Line type="monotone" dataKey="Encontrados"      stroke="#3b82f6" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 5 }} />
               <Line type="monotone" dataKey="Interesados"      stroke="#22c55e" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 5 }} />

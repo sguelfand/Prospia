@@ -43,6 +43,11 @@ export default function ClientesScreen({ navigation }: ClientesProps) {
 
   useEffect(() => {
     navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity onPress={() => navigation.navigate("Avisos")}>
+          <Text style={styles.avisos}>🔔 Avisos</Text>
+        </TouchableOpacity>
+      ),
       headerRight: () => (
         <TouchableOpacity onPress={signOut}>
           <Text style={styles.logout}>Salir</Text>
@@ -134,4 +139,5 @@ const styles = StyleSheet.create({
   statLabel: { color: colors.textDim, fontSize: 11, marginTop: 2 },
   empty: { color: colors.textDim, textAlign: "center", marginTop: 20 },
   logout: { color: colors.primary, fontSize: 15, fontWeight: "700" },
+  avisos: { color: colors.primary, fontSize: 15, fontWeight: "700" },
 });

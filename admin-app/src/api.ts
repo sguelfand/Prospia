@@ -58,6 +58,18 @@ export interface DashboardStats {
   mes_actual: MesActual;
 }
 
+export interface Evento {
+  id: number;
+  fecha: string;
+  tipo: string; // "en_conversacion" | "interesado"
+  tenant_id: number;
+  cliente: string;
+  prospect_id: number;
+  prospect_nombre: string;
+  detalle: string | null;
+  fuente: string;
+}
+
 // ── Cliente HTTP ─────────────────────────────────────────────────────────────
 
 export class ApiError extends Error {
@@ -94,6 +106,7 @@ async function request<T>(path: string, opts: RequestInit = {}, token?: string):
     throw new ApiError(res.status, detail);
   }
 
+  if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
 
@@ -111,3 +124,12 @@ export const getClientes = (token: string) => request<ClienteResumen[]>("/admin/
 
 export const getClienteStats = (token: string, tenantId: number) =>
   request<DashboardStats>(`/admin/clientes/${tenantId}/stats`, {}, token);
+
+export const getEventos = (token: string) => request<Evento[]>("/admin/eventos", {}, token);
+
+export const registerDevice = (token: string, expoToken: string, platform: string) =>
+  request<void>(
+    "/admin/devices",
+    { method: "POST", body: JSON.stringify({ expo_token: expoToken, platform }) },
+    token,
+  );

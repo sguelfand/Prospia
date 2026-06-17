@@ -1,17 +1,25 @@
-import { DarkTheme, NavigationContainer } from "@react-navigation/native";
+import {
+  DarkTheme,
+  NavigationContainer,
+  createNavigationContainerRef,
+} from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
-import React from "react";
+import React, { useEffect } from "react";
 
 import { AuthProvider, useAuth } from "./src/auth";
 import { Loader } from "./src/components/ui";
 import { RootStackParamList } from "./src/navigation";
+import { registerForPush } from "./src/push";
+import AvisosScreen from "./src/screens/AvisosScreen";
 import ClienteDetailScreen from "./src/screens/ClienteDetailScreen";
 import ClientesScreen from "./src/screens/ClientesScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import { colors } from "./src/theme";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 const navTheme = {
   ...DarkTheme,
@@ -34,6 +42,24 @@ const screenOptions = {
 function Routes() {
   const { token, loading } = useAuth();
 
+  // Registrar el dispositivo para push apenas hay sesión.
+  useEffect(() => {
+    if (token) registerForPush(token);
+  }, [token]);
+
+  // Al tocar una notificación, ir al cliente del evento.
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as {
+        tenant_id?: number;
+      };
+      if (data?.tenant_id != null && navigationRef.isReady()) {
+        navigationRef.navigate("Avisos");
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   if (loading) return <Loader />;
 
   return (
@@ -41,6 +67,7 @@ function Routes() {
       {token ? (
         <>
           <Stack.Screen name="Clientes" component={ClientesScreen} options={{ title: "Clientes" }} />
+          <Stack.Screen name="Avisos" component={AvisosScreen} options={{ title: "Avisos" }} />
           <Stack.Screen name="ClienteDetail" component={ClienteDetailScreen} options={{ title: "" }} />
         </>
       ) : (
@@ -53,7 +80,7 @@ function Routes() {
 export default function App() {
   return (
     <AuthProvider>
-      <NavigationContainer theme={navTheme}>
+      <NavigationContainer theme={navTheme} ref={navigationRef}>
         <StatusBar style="light" />
         <Routes />
       </NavigationContainer>
