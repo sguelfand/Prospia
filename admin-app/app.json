@@ -1,7 +1,8 @@
 {
   "expo": {
-    "name": "Admin Prospects",
-    "slug": "admin-prospects",
+    "name": "Prospia Admin",
+    "slug": "prospia-admin",
+    "owner": "sguelfand",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -10,13 +11,22 @@
       "backgroundColor": "#0f172a"
     },
     "android": {
-      "package": "net.etiguel.adminprospects"
+      "package": "net.prospia.admin"
     },
     "extra": {
-      "apiUrl": "http://192.168.1.124:8000"
+      "apiUrl": "https://prospia.app/api",
+      "eas": {
+        "projectId": "17ef09d1-5518-4962-a5e9-243563659460"
+      }
     },
     "plugins": [
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-notifications",
+        {
+          "color": "#6366f1"
+        }
+      ]
     ]
   }
 }

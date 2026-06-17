@@ -17,9 +17,14 @@ from app.models.historial import ProspectHistorial
 from app.models.prospect import Prospect
 from app.models.tenant import Tenant
 from app.models.user import User
-from app.schemas.admin import AdminOverview, ClienteResumen, DeviceIn, EventoOut
+from app.schemas.admin import AdminOverview, ClienteResumen, DeviceIn, EtiguelLead, EventoOut
 from app.schemas.dashboard import DashboardStats
+from app.services import etiguel_monday
 from app.services.stats import compute_stats
+
+import logging
+
+log = logging.getLogger("admin")
 
 # Tipos de historial que se muestran como "avisos" (y disparan push)
 EVENTO_TIPOS = ("en_conversacion", "interesado")
@@ -55,7 +60,7 @@ def listar_clientes(db: Session = Depends(get_db)):
         .all()
     )
 
-    return [
+    clientes = [
         ClienteResumen(
             tenant_id=t.id,
             nombre=t.nombre,
@@ -69,13 +74,39 @@ def listar_clientes(db: Session = Depends(get_db)):
         for t in tenants
     ]
 
+    # Etiguel (Monday) como un cliente más. Si Monday falla, no rompe la lista.
+    if etiguel_monday.enabled():
+        try:
+            clientes.append(etiguel_monday.get_resumen())
+        except Exception as e:
+            log.warning("No se pudo traer el resumen de Etiguel desde Monday: %s", e)
+
+    return clientes
+
 
 @router.get("/clientes/{tenant_id}/stats", response_model=DashboardStats)
 def stats_cliente(tenant_id: int, db: Session = Depends(get_db)):
+    if tenant_id == etiguel_monday.ETIGUEL_TENANT_ID:
+        if not etiguel_monday.enabled():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Etiguel no disponible")
+        return etiguel_monday.get_stats()
     tenant = db.get(Tenant, tenant_id)
     if not tenant:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cliente no encontrado")
     return compute_stats(db, tenant_id)
+
+
+@router.get("/etiguel/leads", response_model=list[EtiguelLead])
+def etiguel_leads():
+    """Leads de Etiguel (Monday) filtrados: fecha > 2026-05-01 y estado ∉
+    {Cancelado, Rechazado}. Solo lectura."""
+    if not etiguel_monday.enabled():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Etiguel no disponible")
+    try:
+        return etiguel_monday.get_leads()
+    except Exception as e:
+        log.warning("No se pudieron traer los leads de Etiguel: %s", e)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Error consultando Monday")
 
 
 @router.get("/overview", response_model=AdminOverview)
@@ -102,6 +133,18 @@ def overview(db: Session = Depends(get_db)):
         )
         .scalar() or 0
     )
+    # Sumar Etiguel a los totales (si Monday responde).
+    if etiguel_monday.enabled():
+        try:
+            e = etiguel_monday.get_resumen()
+            total_clientes += 1
+            total_prospects += e.total_prospects
+            en_conv += e.en_conversacion
+            interesados += e.interesados
+            interes_mes += e.interesados_mes
+        except Exception as ex:
+            log.warning("No se pudo sumar Etiguel al overview: %s", ex)
+
     return AdminOverview(
         total_clientes=total_clientes,
         total_prospects=total_prospects,

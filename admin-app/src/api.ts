@@ -70,6 +70,19 @@ export interface Evento {
   fuente: string;
 }
 
+export interface EtiguelLead {
+  descripcion: string;
+  nombre: string | null;
+  estado: string;
+  origen: string | null;
+  fecha_creacion: string | null;
+  telefono: string | null;
+  email: string | null;
+}
+
+// tenant_id sentinela de Etiguel (coincide con el backend)
+export const ETIGUEL_TENANT_ID = -1;
+
 // ── Cliente HTTP ─────────────────────────────────────────────────────────────
 
 export class ApiError extends Error {
@@ -126,6 +139,9 @@ export const getClienteStats = (token: string, tenantId: number) =>
   request<DashboardStats>(`/admin/clientes/${tenantId}/stats`, {}, token);
 
 export const getEventos = (token: string) => request<Evento[]>("/admin/eventos", {}, token);
+
+export const getEtiguelLeads = (token: string) =>
+  request<EtiguelLead[]>("/admin/etiguel/leads", {}, token);
 
 export const registerDevice = (token: string, expoToken: string, platform: string) =>
   request<void>(

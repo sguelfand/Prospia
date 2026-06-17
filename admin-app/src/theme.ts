@@ -21,6 +21,7 @@ export const estadoColor: Record<string, string> = {
   interesado: colors.green,
   no_le_interesa: colors.red,
   cancelado: "#64748b",
+  rechazado: "#64748b",  // estado propio de Etiguel (Monday)
 };
 
 export const estadoLabel: Record<string, string> = {
@@ -31,4 +32,5 @@ export const estadoLabel: Record<string, string> = {
   interesado: "Interesado",
   no_le_interesa: "No le interesa",
   cancelado: "Cancelado",
+  rechazado: "Rechazado",
 };

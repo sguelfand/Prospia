@@ -31,6 +31,18 @@ class DeviceIn(BaseModel):
     platform: str | None = None
 
 
+class EtiguelLead(BaseModel):
+    """Un lead de Etiguel (board Leads de Monday), filtrado y con los campos que
+    pidió Sebi: estado, origen, fecha creación, teléfono, descripción, nombre, email."""
+    descripcion: str          # el "elemento" / name del item en Monday
+    nombre: str | None
+    estado: str
+    origen: str | None
+    fecha_creacion: str | None
+    telefono: str | None
+    email: str | None
+
+
 class EventoOut(BaseModel):
     """Un evento del feed de Avisos: primera respuesta o interesado."""
     id: int
