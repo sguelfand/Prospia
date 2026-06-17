@@ -1,10 +1,59 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart,
   Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import { api } from '../api/client'
 import { DashboardStats, ESTADOS } from '../api/types'
+
+// Cada serie de la evolución histórica → estado por el que filtra en Prospects
+// ('' = sin filtro de estado, muestra todos los encontrados de ese mes)
+const SERIE_ESTADO: Record<string, string> = {
+  'Encontrados': '',
+  'Interesados': 'interesado',
+  'No le interesa': 'no_le_interesa',
+}
+
+// Tooltip clickeable del gráfico histórico: cada fila lleva a Prospects
+// filtrado por ese mes + estado.
+function HistTooltip({ active, payload, navigate }: any) {
+  if (!active || !payload?.length) return null
+  const point = payload[0]?.payload ?? {}
+  const mesRaw: string = point._mesRaw
+  const go = (estado: string) => {
+    const p = new URLSearchParams({ mes: mesRaw })
+    if (estado) p.set('estado', estado)
+    navigate(`/prospects?${p.toString()}`)
+  }
+  return (
+    <div style={{
+      background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8,
+      padding: '8px 10px', boxShadow: '0 2px 10px rgba(0,0,0,.14)',
+      fontSize: 11, pointerEvents: 'auto', minWidth: 150,
+    }}>
+      <p style={{ fontWeight: 600, marginBottom: 4 }}>{point.mes}</p>
+      {payload.map((item: any) => (
+        <button
+          key={item.name}
+          onClick={() => go(SERIE_ESTADO[item.name] ?? '')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+            textAlign: 'left', padding: '3px 4px', borderRadius: 4,
+            cursor: 'pointer', background: 'transparent', border: 'none',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = '#f3f4f6')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+        >
+          <span style={{ width: 8, height: 8, borderRadius: 9999, background: item.color, flexShrink: 0 }} />
+          <span style={{ flex: 1 }}>{item.name}: <b>{item.value}</b></span>
+          <span style={{ color: '#9ca3af' }}>ver →</span>
+        </button>
+      ))}
+      <p style={{ color: '#9ca3af', marginTop: 4, fontSize: 10 }}>Clic en un dato para ver los registros</p>
+    </div>
+  )
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -76,6 +125,7 @@ function TerminoChart({ data }: { data: TerminoRow[] }) {
 
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
+  const navigate = useNavigate()
 
   useEffect(() => {
     api.get<DashboardStats>('/dashboard/stats').then(setStats).catch(console.error)
@@ -100,6 +150,7 @@ export default function Dashboard() {
   // Datos para la evolución mensual
   const mesData = por_mes.map(m => ({
     mes: mesLabel(m.mes),
+    _mesRaw: m.mes,
     Encontrados:    m.encontrados,
     Interesados:    m.interesados,
     'No le interesa': m.no_le_interesa,
@@ -212,11 +263,14 @@ export default function Dashboard() {
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} />
-              <Tooltip />
+              <Tooltip
+                content={(props: any) => <HistTooltip {...props} navigate={navigate} />}
+                wrapperStyle={{ pointerEvents: 'auto' }}
+              />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Line type="monotone" dataKey="Encontrados"      stroke="#3b82f6" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="Interesados"      stroke="#22c55e" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="No le interesa"   stroke="#6b7280" strokeWidth={2} dot={false} strokeDasharray="4 2" />
+              <Line type="monotone" dataKey="Encontrados"      stroke="#3b82f6" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 5 }} />
+              <Line type="monotone" dataKey="Interesados"      stroke="#22c55e" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 5 }} />
+              <Line type="monotone" dataKey="No le interesa"   stroke="#6b7280" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 5 }} strokeDasharray="4 2" />
             </LineChart>
           </ResponsiveContainer>
         </div>

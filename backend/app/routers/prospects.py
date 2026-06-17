@@ -2,6 +2,7 @@ from __future__ import annotations
 import threading
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
@@ -37,6 +38,7 @@ def list_prospects(
     estado: str | None = Query(None),
     termino_id: int | None = Query(None),
     rubro_id: int | None = Query(None),
+    mes: str | None = Query(None),  # YYYY-MM: filtra por mes de created_at
     q: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
@@ -51,6 +53,8 @@ def list_prospects(
         query = query.filter(Prospect.termino_id == termino_id)
     if rubro_id:
         query = query.filter(Prospect.rubro_id == rubro_id)
+    if mes:
+        query = query.filter(func.to_char(Prospect.created_at, "YYYY-MM") == mes)
     if q:
         like = f"%{q}%"
         query = query.filter(

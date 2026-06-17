@@ -7,6 +7,12 @@ import StatusBadge from '../components/StatusBadge'
 
 const PAGE_SIZE = 15
 
+const MESES_ABR = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+function mesChipLabel(yyyymm: string) {
+  const [y, m] = yyyymm.split('-')
+  return `${MESES_ABR[parseInt(m) - 1] ?? m} ${y}`
+}
+
 const TIPOS_OPCIONES = [
   { value: 'contactado_wa',    label: 'WA enviado' },
   { value: 'contactado_email', label: 'Email enviado' },
@@ -581,12 +587,13 @@ function ResizableTh({ id, children, startResize }: {
 }
 
 export default function Prospects() {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [data, setData] = useState<ProspectsPage | null>(null)
   const [page, setPage] = useState(1)
   const [q, setQ] = useState('')
   const [estado, setEstado] = useState(() => searchParams.get('estado') ?? '')
   const [terminoId, setTerminoId] = useState(() => searchParams.get('termino_id') ?? '')
+  const [mes, setMes] = useState(() => searchParams.get('mes') ?? '')
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [contacting, setContacting] = useState<Set<number>>(new Set())
   const [historialProspect, setHistorialProspect] = useState<Prospect | null>(null)
@@ -597,6 +604,7 @@ export default function Prospects() {
     const t = searchParams.get('termino_id') ?? ''
     setEstado(e)
     setTerminoId(t)
+    setMes(searchParams.get('mes') ?? '')
     setPage(1)
   }, [searchParams.toString()])
 
@@ -605,12 +613,13 @@ export default function Prospects() {
     if (q) params.set('q', q)
     if (estado) params.set('estado', estado)
     if (terminoId) params.set('termino_id', terminoId)
+    if (mes) params.set('mes', mes)
     return `/prospects?${params}`
   }
 
   useEffect(() => {
     api.get<ProspectsPage>(buildUrl()).then(setData).catch(console.error)
-  }, [page, q, estado, terminoId])
+  }, [page, q, estado, terminoId, mes])
 
   async function toggleVerificacion(p: Prospect) {
     try {
@@ -735,6 +744,21 @@ export default function Prospects() {
             <option key={k} value={k}>{v.label}</option>
           ))}
         </select>
+        {mes && (
+          <button
+            onClick={() => {
+              const n = new URLSearchParams(searchParams)
+              n.delete('mes')
+              setSearchParams(n)
+              setMes('')
+              setPage(1)
+            }}
+            className="flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg px-3 py-2 text-sm hover:bg-blue-100 whitespace-nowrap"
+            title="Quitar filtro de mes"
+          >
+            Mes: {mesChipLabel(mes)} ✕
+          </button>
+        )}
       </div>
 
       {/* Mobile: cards */}

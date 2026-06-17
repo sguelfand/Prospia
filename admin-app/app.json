@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "Admin Prospects",
+    "slug": "admin-prospects",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#0f172a"
+    },
+    "android": {
+      "package": "net.etiguel.adminprospects"
+    },
+    "extra": {
+      "apiUrl": "http://192.168.1.124:8000"
+    },
+    "plugins": [
+      "expo-asset"
+    ]
+  }
+}
