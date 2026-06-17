@@ -23,3 +23,22 @@ class AdminOverview(BaseModel):
     en_conversacion: int
     interesados: int
     interesados_mes: int
+
+
+class DeviceIn(BaseModel):
+    """Registro de un dispositivo para push (lo manda la app al loguear)."""
+    expo_token: str
+    platform: str | None = None
+
+
+class EventoOut(BaseModel):
+    """Un evento del feed de Avisos: primera respuesta o interesado."""
+    id: int
+    fecha: datetime
+    tipo: str                 # "en_conversacion" | "interesado"
+    tenant_id: int
+    cliente: str              # nombre del tenant
+    prospect_id: int
+    prospect_nombre: str
+    detalle: str | None
+    fuente: str = "plataforma"

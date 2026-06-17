@@ -12,12 +12,17 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_superadmin
 from app.database import get_db
+from app.models.device import Device
+from app.models.historial import ProspectHistorial
 from app.models.prospect import Prospect
 from app.models.tenant import Tenant
 from app.models.user import User
-from app.schemas.admin import AdminOverview, ClienteResumen
+from app.schemas.admin import AdminOverview, ClienteResumen, DeviceIn, EventoOut
 from app.schemas.dashboard import DashboardStats
 from app.services.stats import compute_stats
+
+# Tipos de historial que se muestran como "avisos" (y disparan push)
+EVENTO_TIPOS = ("en_conversacion", "interesado")
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(get_superadmin)])
 
@@ -104,3 +109,50 @@ def overview(db: Session = Depends(get_db)):
         interesados=interesados,
         interesados_mes=interes_mes,
     )
+
+
+@router.post("/devices", status_code=status.HTTP_204_NO_CONTENT)
+def registrar_device(
+    body: DeviceIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_superadmin),
+):
+    """La app registra su push token de Expo. Idempotente: si el token ya existe
+    se actualiza el dueño/plataforma en vez de duplicar."""
+    device = db.query(Device).filter(Device.expo_token == body.expo_token).first()
+    if device:
+        device.user_id = current_user.id
+        device.platform = body.platform
+    else:
+        db.add(Device(expo_token=body.expo_token, user_id=current_user.id, platform=body.platform))
+    db.commit()
+
+
+@router.get("/eventos", response_model=list[EventoOut])
+def listar_eventos(db: Session = Depends(get_db), limit: int = 100):
+    """Feed de avisos: primeras respuestas e interesados de todos los clientes,
+    más recientes primero. Alimenta la pantalla de Avisos (y es el respaldo por
+    si te perdiste el push)."""
+    limit = max(1, min(limit, 300))
+    rows = (
+        db.query(ProspectHistorial, Prospect.nombre, Tenant.id, Tenant.nombre)
+        .join(Prospect, ProspectHistorial.prospect_id == Prospect.id)
+        .join(Tenant, ProspectHistorial.tenant_id == Tenant.id)
+        .filter(ProspectHistorial.tipo.in_(EVENTO_TIPOS))
+        .order_by(ProspectHistorial.fecha.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        EventoOut(
+            id=h.id,
+            fecha=h.fecha,
+            tipo=h.tipo,
+            tenant_id=tid,
+            cliente=tnombre,
+            prospect_id=h.prospect_id,
+            prospect_nombre=pnombre,
+            detalle=h.detalle,
+        )
+        for h, pnombre, tid, tnombre in rows
+    ]

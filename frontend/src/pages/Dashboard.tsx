@@ -7,26 +7,46 @@ import {
 import { api } from '../api/client'
 import { DashboardStats, ESTADOS } from '../api/types'
 
-// Tooltip read-only del gráfico histórico (solo muestra valores). La navegación
-// se hace clickeando el punto de la línea (ver makeClickDot), no el tooltip,
-// para evitar el problema de "el recuadro se escapa" al mover el mouse.
-function HistTooltip({ active, payload }: any) {
+// Cada serie de la evolución histórica → estado por el que filtra en Prospects
+const SERIE_ESTADO: Record<string, string> = {
+  'Encontrados': '',
+  'Interesados': 'interesado',
+  'No le interesa': 'no_le_interesa',
+}
+
+// Tooltip clickeable y compacto: clic en una fila → Prospects filtrado por ese
+// mes + estado. Sin "ver" para que el clic sea sobre el propio dato.
+function HistTooltip({ active, payload, navigate }: any) {
   if (!active || !payload?.length) return null
   const point = payload[0]?.payload ?? {}
+  const go = (estado: string) => {
+    const p = new URLSearchParams({ mes: point._mesRaw })
+    if (estado) p.set('estado', estado)
+    navigate(`/prospects?${p.toString()}`)
+  }
   return (
     <div style={{
       background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8,
-      padding: '8px 10px', boxShadow: '0 2px 10px rgba(0,0,0,.14)',
-      fontSize: 11, minWidth: 160,
+      padding: '5px 6px', boxShadow: '0 2px 10px rgba(0,0,0,.14)',
+      fontSize: 11, pointerEvents: 'auto',
     }}>
-      <p style={{ fontWeight: 600, marginBottom: 4 }}>{point.mes}</p>
+      <p style={{ fontWeight: 600, margin: '0 0 3px', padding: '0 2px' }}>{point.mes}</p>
       {payload.map((item: any) => (
-        <div key={item.name} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}>
+        <button
+          key={item.name}
+          onClick={() => go(SERIE_ESTADO[item.name] ?? '')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+            textAlign: 'left', padding: '3px 6px', borderRadius: 4,
+            cursor: 'pointer', background: 'transparent', border: 'none', fontSize: 11,
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = '#f3f4f6')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+        >
           <span style={{ width: 8, height: 8, borderRadius: 9999, background: item.color, flexShrink: 0 }} />
           <span>{item.name}: <b>{item.value}</b></span>
-        </div>
+        </button>
       ))}
-      <p style={{ color: '#9ca3af', marginTop: 4, fontSize: 10 }}>Cliqueá un punto de la línea para ver esos registros</p>
     </div>
   )
 }
@@ -102,25 +122,6 @@ function TerminoChart({ data }: { data: TerminoRow[] }) {
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const navigate = useNavigate()
-
-  // Punto clickeable para una serie: navega a Prospects filtrado por mes + estado
-  const makeClickDot = (estado: string) => (props: any) => {
-    const { cx, cy, stroke, payload } = props
-    if (cx == null || cy == null) return <g />
-    return (
-      <circle
-        cx={cx} cy={cy} r={6} fill="#fff" stroke={stroke} strokeWidth={2}
-        style={{ cursor: 'pointer' }}
-        onClick={() => {
-          const p = new URLSearchParams({ mes: payload._mesRaw })
-          if (estado) p.set('estado', estado)
-          navigate(`/prospects?${p.toString()}`)
-        }}
-      >
-        <title>Ver registros de {payload.mes}</title>
-      </circle>
-    )
-  }
 
   useEffect(() => {
     api.get<DashboardStats>('/dashboard/stats').then(setStats).catch(console.error)
@@ -258,11 +259,11 @@ export default function Dashboard() {
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} />
-              <Tooltip content={(props: any) => <HistTooltip {...props} />} />
+              <Tooltip content={(props: any) => <HistTooltip {...props} navigate={navigate} />} wrapperStyle={{ pointerEvents: 'auto' }} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Line type="monotone" dataKey="Encontrados"      stroke="#3b82f6" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: '#fff' }} activeDot={makeClickDot('')} />
-              <Line type="monotone" dataKey="Interesados"      stroke="#22c55e" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: '#fff' }} activeDot={makeClickDot('interesado')} />
-              <Line type="monotone" dataKey="No le interesa"   stroke="#6b7280" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: '#fff' }} activeDot={makeClickDot('no_le_interesa')} strokeDasharray="4 2" />
+              <Line type="monotone" dataKey="Encontrados"      stroke="#3b82f6" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 5 }} />
+              <Line type="monotone" dataKey="Interesados"      stroke="#22c55e" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 5 }} />
+              <Line type="monotone" dataKey="No le interesa"   stroke="#6b7280" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 5 }} strokeDasharray="4 2" />
             </LineChart>
           </ResponsiveContainer>
         </div>

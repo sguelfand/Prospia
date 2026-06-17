@@ -4,5 +4,6 @@ from app.models.rubro import Rubro
 from app.models.termino import Termino
 from app.models.prospect import Prospect
 from app.models.historial import ProspectHistorial
+from app.models.device import Device
 
-__all__ = ["Tenant", "TenantConfig", "User", "Rubro", "Termino", "Prospect", "ProspectHistorial"]
+__all__ = ["Tenant", "TenantConfig", "User", "Rubro", "Termino", "Prospect", "ProspectHistorial", "Device"]

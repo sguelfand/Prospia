@@ -12,6 +12,7 @@ from app.models.prospect import ESTADOS, Prospect
 from app.models.user import User
 from app.schemas.prospect import AgendarContactoBody, HistorialCreate, HistorialOut, HistorialUpdate, InteresResumenBody, ProspectClasificacionUpdate, ProspectEstadoUpdate, ProspectOut, ProspectsPage
 from app.services import contact as contact_service
+from app.services import push
 
 router = APIRouter(prefix="/prospects", tags=["prospects"])
 
@@ -171,6 +172,7 @@ def marcar_en_conversacion(
         db.add(entry)
         prospect.estado = "en_conversacion"
         db.commit()
+        push.notificar_evento_async(prospect.id, "en_conversacion")
 
     return {"ok": True}
 
@@ -214,6 +216,7 @@ def marcar_interesado(
         raise HTTPException(status_code=404, detail="Prospect no encontrado")
     _validar_webhook_tenant(db, prospect, x_webhook_token)
 
+    ya_interesado = prospect.estado == "interesado"
     prospect.estado = "interesado"
     prospect.prox_contacto = None  # ya no aplica cadencia
     db.add(ProspectHistorial(
@@ -221,6 +224,8 @@ def marcar_interesado(
         tipo="interesado", detalle=body.resumen or "Cliente interesado (sin resumen)",
     ))
     db.commit()
+    if not ya_interesado:
+        push.notificar_evento_async(prospect.id, "interesado", body.resumen)
     return {"ok": True}
 
 
