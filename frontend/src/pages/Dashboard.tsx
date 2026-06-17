@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart,
@@ -102,34 +102,87 @@ function DiagonalTick({ x, y, payload }: { x?: number; y?: number; payload?: { v
 
 type TerminoRow = { termino: string; termino_id: number; Encontrados: number; 'En conversación': number; Interesados: number }
 
+// Series del gráfico de términos → estado por el que filtra Prospects
+const TERMINO_SERIES: { key: 'Encontrados' | 'En conversación' | 'Interesados'; estado: string; color: string }[] = [
+  { key: 'Encontrados',     estado: '',                color: '#3b82f6' },
+  { key: 'En conversación', estado: 'en_conversacion', color: '#8b5cf6' },
+  { key: 'Interesados',     estado: 'interesado',      color: '#22c55e' },
+]
+
 function TerminoChart({ data, navigate }: { data: TerminoRow[]; navigate: ReturnType<typeof useNavigate> }) {
-  // Clic en una barra → Prospects filtrado por ese término + el estado de la serie.
-  const go = (estado: string) => (d: any) => {
-    const terminoId = d?.payload?.termino_id ?? d?.termino_id
-    if (terminoId == null) return
-    const p = new URLSearchParams({ termino_id: String(terminoId) })
+  // Panel propio (en vez del Tooltip nativo): aparece al pasar sobre una barra,
+  // queda fijo y solo se cierra al salir del gráfico o del panel. Así se puede
+  // entrar al cuadro y clickear el estado, igual que Evolución histórica.
+  const [hover, setHover] = useState<{ row: TerminoRow; left: number } | null>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const PANEL_W = 190
+
+  function onBarEnter(d: any) {
+    const row = d?.payload as TerminoRow | undefined
+    if (!row) return
+    const w = wrapRef.current?.clientWidth ?? 0
+    const center = (d?.x ?? 0) + (d?.width ?? 0) / 2
+    const left = Math.max(4, Math.min(center - PANEL_W / 2, w - PANEL_W - 4))
+    setHover({ row, left })
+  }
+
+  function go(row: TerminoRow, estado: string) {
+    const p = new URLSearchParams({ termino_id: String(row.termino_id) })
     if (estado) p.set('estado', estado)
     navigate(`/prospects?${p.toString()}`)
   }
+
   return (
     <div className="bg-white rounded-xl shadow p-4 md:p-5">
-      <h2 className="font-semibold mb-4 text-sm md:text-base">Prospects por término</h2>
-      <p className="text-xs text-gray-400 mb-2 -mt-2">Clic en una barra para ver esos prospects</p>
-      <ResponsiveContainer width="100%" height={260}>
-        <BarChart data={data} margin={{ top: 5, bottom: 5, left: -10, right: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey="termino" tick={DiagonalTick as any} interval={0} height={80} />
-          <YAxis tick={{ fontSize: 10 }} />
-          <Legend wrapperStyle={{ fontSize: 11 }} />
-          <Tooltip
-            contentStyle={{ fontSize: 11, padding: '6px 10px', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,.12)' }}
-            cursor={{ fill: 'rgba(0,0,0,.04)' }}
-          />
-          <Bar dataKey="Encontrados"     fill="#3b82f6" radius={[3,3,0,0]} cursor="pointer" onClick={go('')} />
-          <Bar dataKey="En conversación" fill="#8b5cf6" radius={[3,3,0,0]} cursor="pointer" onClick={go('en_conversacion')} />
-          <Bar dataKey="Interesados"     fill="#22c55e" radius={[3,3,0,0]} cursor="pointer" onClick={go('interesado')} />
-        </BarChart>
-      </ResponsiveContainer>
+      <h2 className="font-semibold mb-1 text-sm md:text-base">Prospects por término</h2>
+      <p className="text-xs text-gray-400 mb-2">Pasá el mouse por una barra y clickeá el estado</p>
+      <div ref={wrapRef} className="relative" onMouseLeave={() => setHover(null)}>
+        <ResponsiveContainer width="100%" height={260}>
+          <BarChart data={data} margin={{ top: 5, bottom: 5, left: -10, right: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="termino" tick={DiagonalTick as any} interval={0} height={80} />
+            <YAxis tick={{ fontSize: 10 }} />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            {/* Tooltip solo para el resaltado de la columna; el cuadro lo dibujamos nosotros */}
+            <Tooltip cursor={{ fill: 'rgba(0,0,0,.04)' }} content={() => null} />
+            {TERMINO_SERIES.map(s => (
+              <Bar key={s.key} dataKey={s.key} fill={s.color} radius={[3, 3, 0, 0]}
+                cursor="pointer" onMouseEnter={onBarEnter} onClick={(d: any) => go(d.payload, s.estado)} />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+
+        {hover && (
+          <div
+            className="absolute top-0 z-20"
+            style={{ left: hover.left, width: PANEL_W }}
+            onMouseLeave={() => setHover(null)}
+          >
+            <div style={{
+              background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8,
+              padding: '5px 6px', boxShadow: '0 2px 10px rgba(0,0,0,.14)', fontSize: 11,
+            }}>
+              <p className="truncate" style={{ fontWeight: 600, margin: '0 0 3px', padding: '0 2px' }}>{hover.row.termino}</p>
+              {TERMINO_SERIES.map(s => (
+                <button
+                  key={s.key}
+                  onClick={() => go(hover.row, s.estado)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+                    textAlign: 'left', padding: '3px 6px', borderRadius: 4,
+                    cursor: 'pointer', background: 'transparent', border: 'none', fontSize: 11,
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = '#f3f4f6')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <span style={{ width: 8, height: 8, borderRadius: 9999, background: s.color, flexShrink: 0 }} />
+                  <span>{s.key}: <b>{hover.row[s.key]}</b></span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
