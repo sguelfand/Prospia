@@ -20,6 +20,7 @@ from app.models.user import User
 from app.schemas.admin import AdminOverview, ClienteResumen, DeviceIn, EtiguelLead, EventoOut
 from app.schemas.dashboard import DashboardStats
 from app.services import etiguel_monday
+from app.services import push
 from app.services.stats import compute_stats
 
 import logging
@@ -169,6 +170,14 @@ def registrar_device(
     else:
         db.add(Device(expo_token=body.expo_token, user_id=current_user.id, platform=body.platform))
     db.commit()
+
+
+@router.post("/test-push")
+def test_push():
+    """Manda una notificación de prueba a todos los devices registrados.
+    Sirve para verificar el circuito de push de punta a punta."""
+    n = push.enviar_prueba()
+    return {"enviado_a_devices": n}
 
 
 @router.get("/eventos", response_model=list[EventoOut])

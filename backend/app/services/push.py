@@ -81,3 +81,18 @@ def notificar_evento_async(prospect_id: int, tipo: str, detalle: str | None = No
         args=(prospect_id, tipo, detalle),
         daemon=True,
     ).start()
+
+
+def enviar_prueba() -> int:
+    """Manda una notificación de prueba a todos los devices registrados.
+    Devuelve a cuántos se envió. Útil para verificar el circuito de push."""
+    from app.database import SessionLocal
+    from app.models.device import Device
+
+    db = SessionLocal()
+    try:
+        tokens = [d.expo_token for d in db.query(Device).all()]
+        _enviar(tokens, "🔔 Prospia Admin", "Notificación de prueba — ¡funciona! ✓", {"tipo": "test"})
+        return len(tokens)
+    finally:
+        db.close()
