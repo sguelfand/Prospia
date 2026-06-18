@@ -5,14 +5,21 @@
     "owner": "sguelfand",
     "version": "1.0.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
+    "icon": "./assets/icon.png",
     "splash": {
-      "backgroundColor": "#0f172a"
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0C1730"
     },
     "android": {
       "package": "net.prospia.admin",
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0C1730"
+      }
     },
     "extra": {
       "apiUrl": "https://prospia.app/api",
@@ -25,7 +32,7 @@
       [
         "expo-notifications",
         {
-          "color": "#6366f1"
+          "color": "#F5B23D"
         }
       ],
       [
