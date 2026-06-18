@@ -22,3 +22,8 @@ infra/
 
 # Material de clientes (decks, fichas) — no va al repo
 clientes/
+
+# Firebase / FCM service-account secret (admin-app) — NUNCA al repo
+admin-app/fcm-service-account.json
+admin-app/*firebase-adminsdk*.json
+# google-services.json SÍ se trackea (no es secreto; va dentro del APK por diseño)

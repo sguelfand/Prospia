@@ -11,7 +11,8 @@
       "backgroundColor": "#0f172a"
     },
     "android": {
-      "package": "net.prospia.admin"
+      "package": "net.prospia.admin",
+      "googleServicesFile": "./google-services.json"
     },
     "extra": {
       "apiUrl": "https://prospia.app/api",
@@ -27,6 +28,13 @@
           "color": "#6366f1"
         }
       ]
-    ]
+    ],
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/17ef09d1-5518-4962-a5e9-243563659460"
+    },
+    "ios": {}
   }
 }

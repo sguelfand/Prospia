@@ -1,0 +1,10 @@
+# Qué EXCLUIR del archivo que se sube a EAS Build.
+# Ojo: google-services.json NO está acá a propósito → se incluye en el build (lo necesita).
+node_modules/
+.expo/
+dist/
+.git/
+# Secreto: NO debe ir al build (se sube aparte a EAS credentials)
+fcm-service-account.json
+*firebase-adminsdk*.json
+.env
