@@ -3,24 +3,29 @@ import {
   NavigationContainer,
   createNavigationContainerRef,
 } from "@react-navigation/native";
+import { createDrawerNavigator } from "@react-navigation/drawer";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { AuthProvider, useAuth } from "./src/auth";
+import DrawerContent from "./src/components/DrawerContent";
 import { Loader } from "./src/components/ui";
-import { RootStackParamList } from "./src/navigation";
+import { AuthStackParamList, DrawerParamList } from "./src/navigation";
 import { registerForPush } from "./src/push";
 import AvisosScreen from "./src/screens/AvisosScreen";
-import ClienteDetailScreen from "./src/screens/ClienteDetailScreen";
-import ClientesScreen from "./src/screens/ClientesScreen";
+import ClienteViewScreen from "./src/screens/ClienteViewScreen";
+import DashboardScreen from "./src/screens/DashboardScreen";
 import LockScreen from "./src/screens/LockScreen";
 import LoginScreen from "./src/screens/LoginScreen";
+import ProspectDetailScreen from "./src/screens/ProspectDetailScreen";
 import { colors } from "./src/theme";
 
-const Stack = createNativeStackNavigator<RootStackParamList>();
-export const navigationRef = createNavigationContainerRef<RootStackParamList>();
+const Drawer = createDrawerNavigator<DrawerParamList>();
+const AuthStack = createNativeStackNavigator<AuthStackParamList>();
+export const navigationRef = createNavigationContainerRef<DrawerParamList>();
 
 const navTheme = {
   ...DarkTheme,
@@ -37,8 +42,23 @@ const navTheme = {
 const screenOptions = {
   headerStyle: { backgroundColor: colors.card },
   headerTintColor: colors.text,
-  contentStyle: { backgroundColor: colors.bg },
+  drawerStyle: { backgroundColor: colors.card },
+  sceneStyle: { backgroundColor: colors.bg },
 } as const;
+
+function AppDrawer() {
+  return (
+    <Drawer.Navigator
+      screenOptions={screenOptions}
+      drawerContent={(props) => <DrawerContent {...props} />}
+    >
+      <Drawer.Screen name="Dashboard" component={DashboardScreen} options={{ title: "Dashboard" }} />
+      <Drawer.Screen name="ClienteView" component={ClienteViewScreen} options={{ title: "" }} />
+      <Drawer.Screen name="ProspectDetail" component={ProspectDetailScreen} options={{ title: "" }} />
+      <Drawer.Screen name="Avisos" component={AvisosScreen} options={{ title: "Avisos" }} />
+    </Drawer.Navigator>
+  );
+}
 
 function Routes() {
   const { token, loading, locked } = useAuth();
@@ -48,12 +68,10 @@ function Routes() {
     if (token && !locked) registerForPush(token);
   }, [token, locked]);
 
-  // Al tocar una notificación, ir al cliente del evento.
+  // Al tocar una notificación, ir al feed de Avisos.
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data as {
-        tenant_id?: number;
-      };
+      const data = response.notification.request.content.data as { tenant_id?: number };
       if (data?.tenant_id != null && navigationRef.isReady()) {
         navigationRef.navigate("Avisos");
       }
@@ -64,28 +82,26 @@ function Routes() {
   if (loading) return <Loader />;
   if (token && locked) return <LockScreen />;
 
-  return (
-    <Stack.Navigator screenOptions={screenOptions}>
-      {token ? (
-        <>
-          <Stack.Screen name="Clientes" component={ClientesScreen} options={{ title: "Clientes" }} />
-          <Stack.Screen name="Avisos" component={AvisosScreen} options={{ title: "Avisos" }} />
-          <Stack.Screen name="ClienteDetail" component={ClienteDetailScreen} options={{ title: "" }} />
-        </>
-      ) : (
-        <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
-      )}
-    </Stack.Navigator>
-  );
+  if (!token) {
+    return (
+      <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+        <AuthStack.Screen name="Login" component={LoginScreen} />
+      </AuthStack.Navigator>
+    );
+  }
+
+  return <AppDrawer />;
 }
 
 export default function App() {
   return (
-    <AuthProvider>
-      <NavigationContainer theme={navTheme} ref={navigationRef}>
-        <StatusBar style="light" />
-        <Routes />
-      </NavigationContainer>
-    </AuthProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
+        <NavigationContainer theme={navTheme} ref={navigationRef}>
+          <StatusBar style="light" />
+          <Routes />
+        </NavigationContainer>
+      </AuthProvider>
+    </GestureHandlerRootView>
   );
 }

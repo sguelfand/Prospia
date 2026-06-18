@@ -80,6 +80,91 @@ export interface EtiguelLead {
   email: string | null;
 }
 
+export interface ProspectRow {
+  id: number;
+  nombre: string;
+  url: string | null;
+  email: string | null;
+  telefono: string | null;
+  whatsapp: string | null;
+  estado: string;
+  termino_id: number | null;
+  termino_texto: string | null;
+  rubro_id: number | null;
+  rubro_nombre: string | null;
+  cant_contactos: number;
+  cant_mensajes: number;
+  ult_contacto: string | null;
+  prox_contacto: string | null;
+  clasificacion: string | null;
+  clasificacion_detalle: string | null;
+  clasificacion_verificada: boolean;
+  created_at: string;
+}
+
+export interface ProspectsPage {
+  items: ProspectRow[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface OpcionFiltro {
+  id: number;
+  label: string;
+}
+
+export interface FiltrosCliente {
+  estados: string[];
+  terminos: OpcionFiltro[];
+  rubros: OpcionFiltro[];
+  meses: string[];
+}
+
+export interface MensajeRow {
+  id: number;
+  direccion: string; // "in" | "out"
+  texto: string;
+  fecha: string;
+}
+
+export interface HistorialRow {
+  id: number;
+  fecha: string;
+  tipo: string;
+  detalle: string | null;
+}
+
+export interface ClienteComparativa {
+  tenant_id: number;
+  nombre: string;
+  fuente: string;
+  total_prospects: number;
+  contactados: number;
+  en_conversacion: number;
+  interesados: number;
+  interesados_mes: number;
+  tasa_respuesta: number;
+  tasa_conversion: number;
+}
+
+export interface DashboardComparativa {
+  total_clientes: number;
+  total_prospects: number;
+  en_conversacion: number;
+  interesados: number;
+  interesados_mes: number;
+  clientes: ClienteComparativa[];
+}
+
+export interface ProspectsFiltro {
+  estado?: string | null;
+  termino_id?: number | null;
+  rubro_id?: number | null;
+  mes?: string | null;
+  q?: string | null;
+}
+
 // tenant_id sentinela de Etiguel (coincide con el backend)
 export const ETIGUEL_TENANT_ID = -1;
 
@@ -142,6 +227,50 @@ export const getEventos = (token: string) => request<Evento[]>("/admin/eventos",
 
 export const getEtiguelLeads = (token: string) =>
   request<EtiguelLead[]>("/admin/etiguel/leads", {}, token);
+
+export function getProspectsCliente(
+  token: string,
+  tenantId: number,
+  filtro: ProspectsFiltro = {},
+  page = 1,
+  pageSize = 50,
+): Promise<ProspectsPage> {
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  params.set("page_size", String(pageSize));
+  if (filtro.estado) params.set("estado", filtro.estado);
+  if (filtro.termino_id != null) params.set("termino_id", String(filtro.termino_id));
+  if (filtro.rubro_id != null) params.set("rubro_id", String(filtro.rubro_id));
+  if (filtro.mes) params.set("mes", filtro.mes);
+  if (filtro.q) params.set("q", filtro.q);
+  return request<ProspectsPage>(`/admin/clientes/${tenantId}/prospects?${params}`, {}, token);
+}
+
+export const getFiltrosCliente = (token: string, tenantId: number) =>
+  request<FiltrosCliente>(`/admin/clientes/${tenantId}/filtros`, {}, token);
+
+export const getMensajesProspect = (token: string, tenantId: number, prospectId: number) =>
+  request<MensajeRow[]>(`/admin/clientes/${tenantId}/prospects/${prospectId}/mensajes`, {}, token);
+
+export const getHistorialProspect = (token: string, tenantId: number, prospectId: number) =>
+  request<HistorialRow[]>(`/admin/clientes/${tenantId}/prospects/${prospectId}/historial`, {}, token);
+
+export const getComparativa = (token: string) =>
+  request<DashboardComparativa>("/admin/comparativa", {}, token);
+
+export const getPushPref = (token: string, tenantId: number, expoToken: string) =>
+  request<{ enabled: boolean }>(
+    `/admin/clientes/${tenantId}/push?expo_token=${encodeURIComponent(expoToken)}`,
+    {},
+    token,
+  );
+
+export const setPushPref = (token: string, tenantId: number, expoToken: string, enabled: boolean) =>
+  request<{ enabled: boolean }>(
+    `/admin/clientes/${tenantId}/push`,
+    { method: "PUT", body: JSON.stringify({ expo_token: expoToken, enabled }) },
+    token,
+  );
 
 export const registerDevice = (token: string, expoToken: string, platform: string) =>
   request<void>(

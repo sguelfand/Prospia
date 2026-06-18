@@ -43,6 +43,56 @@ class EtiguelLead(BaseModel):
     email: str | None
 
 
+class OpcionFiltro(BaseModel):
+    """Una opción seleccionable en el panel de filtros (término o rubro)."""
+    id: int
+    label: str
+
+
+class FiltrosCliente(BaseModel):
+    """Opciones disponibles para filtrar los prospects de un cliente. Alimenta el
+    botón 'Filtrar' de la vista de cliente en la app admin."""
+    estados: list[str]                 # estados posibles (fijos)
+    terminos: list[OpcionFiltro]       # términos del tenant
+    rubros: list[OpcionFiltro]         # rubros del tenant
+    meses: list[str]                   # meses con prospects (YYYY-MM), desc
+
+
+class PushPrefIn(BaseModel):
+    """La app setea si un device quiere o no push de un cliente."""
+    expo_token: str
+    enabled: bool
+
+
+class PushPrefOut(BaseModel):
+    """Estado del push de un cliente para un device."""
+    enabled: bool
+
+
+class ClienteComparativa(BaseModel):
+    """Métricas comparables de un cliente para el dashboard (APP.6)."""
+    tenant_id: int
+    nombre: str
+    fuente: str
+    total_prospects: int
+    contactados: int
+    en_conversacion: int
+    interesados: int
+    interesados_mes: int
+    tasa_respuesta: float    # respondieron / contactados * 100
+    tasa_conversion: float   # interesados / contactados * 100
+
+
+class DashboardComparativa(BaseModel):
+    """Dashboard agregado: totales globales + métricas por cliente en un request."""
+    total_clientes: int
+    total_prospects: int
+    en_conversacion: int
+    interesados: int
+    interesados_mes: int
+    clientes: list[ClienteComparativa]
+
+
 class EventoOut(BaseModel):
     """Un evento del feed de Avisos: primera respuesta o interesado."""
     id: int

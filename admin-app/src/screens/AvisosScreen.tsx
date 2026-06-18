@@ -70,7 +70,11 @@ export default function AvisosScreen({ navigation }: AvisosProps) {
             key={e.id}
             style={styles.card}
             onPress={() =>
-              navigation.navigate("ClienteDetail", { tenantId: e.tenant_id, nombre: e.cliente })
+              navigation.navigate("ClienteView", {
+                tenantId: e.tenant_id,
+                nombre: e.cliente,
+                fuente: "plataforma",
+              })
             }
           >
             <View style={styles.row}>

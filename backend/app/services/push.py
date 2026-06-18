@@ -42,6 +42,7 @@ def _notificar_evento(prospect_id: int, tipo: str, detalle: str | None) -> None:
     from app.database import SessionLocal
     from app.models.device import Device
     from app.models.prospect import Prospect
+    from app.models.push_mute import PushMute
     from app.models.tenant import Tenant
 
     db = SessionLocal()
@@ -62,7 +63,13 @@ def _notificar_evento(prospect_id: int, tipo: str, detalle: str | None) -> None:
         else:
             return
 
-        tokens = [d.expo_token for d in db.query(Device).all()]
+        # Devices que silenciaron este cliente (APP.4): se excluyen del envío.
+        muteados = {
+            t for (t,) in db.query(PushMute.expo_token)
+            .filter(PushMute.tenant_id == prospect.tenant_id)
+            .all()
+        }
+        tokens = [d.expo_token for d in db.query(Device).all() if d.expo_token not in muteados]
         _enviar(tokens, title, body, {
             "tenant_id": prospect.tenant_id,
             "prospect_id": prospect_id,

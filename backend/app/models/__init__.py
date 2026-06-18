@@ -6,5 +6,6 @@ from app.models.prospect import Prospect
 from app.models.historial import ProspectHistorial
 from app.models.mensaje import ProspectMensaje
 from app.models.device import Device
+from app.models.push_mute import PushMute
 
-__all__ = ["Tenant", "TenantConfig", "User", "Rubro", "Termino", "Prospect", "ProspectHistorial", "ProspectMensaje", "Device"]
+__all__ = ["Tenant", "TenantConfig", "User", "Rubro", "Termino", "Prospect", "ProspectHistorial", "ProspectMensaje", "Device", "PushMute"]

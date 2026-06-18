@@ -24,6 +24,29 @@ function getProjectId(): string | undefined {
   );
 }
 
+// Último expo token obtenido. Lo necesita el interruptor de push por cliente
+// (APP.4) para identificar este device ante el backend.
+let cachedExpoToken: string | null = null;
+
+export function getCachedExpoToken(): string | null {
+  return cachedExpoToken;
+}
+
+/** Devuelve el expo token de este device (cacheado o pidiéndolo). null si no se
+ *  puede (emulador / sin projectId). No rompe la app. */
+export async function getExpoTokenAsync(): Promise<string | null> {
+  if (cachedExpoToken) return cachedExpoToken;
+  try {
+    if (!Device.isDevice) return null;
+    const projectId = getProjectId();
+    const resp = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
+    cachedExpoToken = resp.data;
+    return cachedExpoToken;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Pide permiso, obtiene el push token de Expo y lo registra en el backend.
  * Es tolerante a fallos: si algo no está (emulador, sin permiso, sin projectId)
@@ -60,6 +83,7 @@ export async function registerForPush(authToken: string): Promise<void> {
       projectId ? { projectId } : undefined,
     );
     const expoToken = tokenResp.data;
+    cachedExpoToken = expoToken;
     console.log("[push] expo token:", expoToken);
 
     await registerDevice(authToken, expoToken, Platform.OS);
