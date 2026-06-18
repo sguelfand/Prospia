@@ -11,6 +11,7 @@ export interface Prospect {
   rubro_id: number | null
   rubro_nombre: string | null
   cant_contactos: number
+  cant_mensajes: number
   ult_contacto: string | null
   clasificacion: 'ALTO' | 'MEDIO' | 'BAJO' | 'CANCELADO' | null
   clasificacion_detalle: string | null

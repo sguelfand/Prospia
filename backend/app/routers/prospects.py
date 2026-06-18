@@ -22,6 +22,7 @@ def _enrich(p: Prospect) -> ProspectOut:
     out = ProspectOut.model_validate(p)
     out.termino_texto = p.termino.texto if p.termino else None
     out.rubro_nombre = p.rubro.nombre if p.rubro else None
+    out.cant_mensajes = len(p.mensajes)
     return out
 
 

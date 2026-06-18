@@ -17,6 +17,7 @@ class ProspectOut(BaseModel):
     rubro_id: int | None
     rubro_nombre: str | None = None
     cant_contactos: int
+    cant_mensajes: int = 0                   # mensajes del chat (espejo WhatsApp)
     ult_contacto: datetime | None
     prox_contacto: datetime | None = None   # callback agendado
     clasificacion: str | None           # ALTO | MEDIO | BAJO
