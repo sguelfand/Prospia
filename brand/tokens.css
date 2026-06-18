@@ -1,0 +1,42 @@
+/* ===========================================================================
+   PROSPIA — Design Tokens · Sistema "La señal"
+   Fuente de verdad de la marca. Importar en el frontend (o copiar a Tailwind).
+   =========================================================================== */
+
+:root {
+  /* ---- Marca / Brand ---------------------------------------------------- */
+  --navy:        #0C1730; /* base · fondo · tinta                           */
+  --navy-2:      #0F1B36; /* barra / header                                 */
+  --surface-up:  #13213C; /* superficie elevada (cards sobre navy)          */
+  --steel:       #43577B; /* nodos apagados · líneas · bordes               */
+  --amber:       #F5B23D; /* ACENTO · CTA · "lo hallado" (único color cálido) */
+  --fog:         #EEF3FB; /* texto sobre oscuro · superficies claras        */
+  --fog-muted:   #8294B4; /* texto secundario sobre oscuro                  */
+
+  /* Superficies claras (modo claro / docs) */
+  --paper:       #E9E7E2; /* fondo cálido neutro (brand sheet)              */
+  --ink:         #0C1730; /* texto sobre claro                              */
+  --ink-soft:    #3C465C; /* texto secundario sobre claro                   */
+  --border:      #E3DCCE; /* bordes sobre claro                             */
+
+  /* ---- Semánticos ------------------------------------------------------- */
+  --success: #46B17B;
+  --warning: #F5B23D; /* reusa ámbar */
+  --danger:  #E5664D;
+
+  /* ---- Tipografía ------------------------------------------------------- */
+  --font-display: 'Sora', system-ui, -apple-system, sans-serif;     /* títulos, logo, UI */
+  --font-mono:    'JetBrains Mono', ui-monospace, monospace;        /* etiquetas, datos, métricas */
+
+  /* ---- Radios ----------------------------------------------------------- */
+  --radius-sm: 8px;
+  --radius:    10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;   /* app icon / tiles */
+  --radius-pill: 999px;
+
+  /* ---- Sombras ---------------------------------------------------------- */
+  --shadow-sm: 0 1px 2px rgba(12, 23, 48, .10);
+  --shadow:    0 6px 20px rgba(12, 23, 48, .14);
+  --shadow-amber: 0 8px 24px rgba(245, 178, 61, .28); /* foco / CTA */
+}

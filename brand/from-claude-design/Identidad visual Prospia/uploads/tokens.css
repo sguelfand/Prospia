@@ -1,0 +1,47 @@
+/* ===========================================================================
+   PROSPIA — Design Tokens
+   Fuente de verdad de la marca. Importar en el frontend (o copiar a Tailwind).
+   =========================================================================== */
+
+:root {
+  /* ---- Marca / Brand ---------------------------------------------------- */
+  --prospia-indigo:        #4F46E5; /* color principal (índigo 600)         */
+  --prospia-indigo-light:  #6366F1; /* hover / tope del gradiente           */
+  --prospia-indigo-dark:   #4338CA; /* active / pressed                     */
+  --prospia-blue:          #2563EB; /* base del gradiente                   */
+  --prospia-accent:        #22D3EE; /* acento cian — highlights, foco, dato */
+
+  /* Gradiente de marca (isotipo, botones primarios, fondos hero) */
+  --prospia-gradient: linear-gradient(135deg, #6366F1 0%, #4F46E5 50%, #2563EB 100%);
+
+  /* ---- Tinta y neutros (escala slate) ----------------------------------- */
+  --ink:        #0F172A; /* texto principal / slate-900   */
+  --ink-soft:   #334155; /* texto secundario / slate-700  */
+  --muted:      #64748B; /* texto terciario / slate-500   */
+  --border:     #E2E8F0; /* bordes / slate-200            */
+  --surface-2:  #F1F5F9; /* superficies elevadas / slate-100 */
+  --surface:    #F8FAFC; /* fondo de app / slate-50       */
+  --white:      #FFFFFF;
+
+  /* ---- Semánticos ------------------------------------------------------- */
+  --success: #22C55E;
+  --warning: #F59E0B;
+  --danger:  #DC2626;
+  --info:    #3B82F6;
+
+  /* ---- Tipografía ------------------------------------------------------- */
+  --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; /* títulos, logo */
+  --font-body:    'Inter', system-ui, -apple-system, sans-serif;             /* UI y texto */
+
+  /* ---- Radios ----------------------------------------------------------- */
+  --radius-sm: 8px;
+  --radius:    12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;   /* tiles / app icon */
+  --radius-pill: 999px;
+
+  /* ---- Sombras ---------------------------------------------------------- */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, .06);
+  --shadow:    0 4px 16px rgba(15, 23, 42, .08);
+  --shadow-lg: 0 12px 32px rgba(79, 70, 229, .18); /* sombra con tinte de marca */
+}

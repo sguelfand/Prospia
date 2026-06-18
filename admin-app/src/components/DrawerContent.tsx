@@ -45,7 +45,10 @@ export default function DrawerContent({ navigation, state }: DrawerContentCompon
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
-      <Text style={styles.brand}>Prospia Admin</Text>
+      <View style={styles.brandRow}>
+        <View style={styles.signal} />
+        <Text style={styles.brand}>Prospia Admin</Text>
+      </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <NavItem
@@ -114,7 +117,9 @@ function NavItem({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.card },
-  brand: { color: colors.text, fontSize: 18, fontWeight: "800", paddingHorizontal: 16, marginBottom: 8 },
+  brandRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, marginBottom: 8 },
+  signal: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary, marginRight: 8 },
+  brand: { color: colors.text, fontSize: 18, fontWeight: "800" },
   scroll: { paddingHorizontal: 8, paddingBottom: 20 },
   section: { color: colors.textDim, fontSize: 12, fontWeight: "700", marginTop: 18, marginBottom: 6, marginLeft: 12, textTransform: "uppercase" },
   item: {

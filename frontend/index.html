@@ -3,7 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#0C1730" />
     <title>Prospia</title>
+    <meta name="description" content="Prospección B2B con IA, en piloto automático. Encontrá al cliente correcto entre el ruido." />
+    <meta property="og:title" content="Prospia" />
+    <meta property="og:description" content="Prospección B2B con IA, en piloto automático." />
+    <meta property="og:image" content="/og-image.svg" />
+    <meta property="og:type" content="website" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <script>
+      // Aplica el tema antes del render para evitar parpadeo
+      (function () {
+        try {
+          var q = new URLSearchParams(location.search).get('theme');
+          var t = q || localStorage.getItem('prospia-theme');
+          if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          if (t === 'dark') document.documentElement.classList.add('dark');
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

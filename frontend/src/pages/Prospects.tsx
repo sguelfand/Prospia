@@ -124,31 +124,31 @@ function HistorialPanel({ prospect, onClose }: { prospect: Prospect; onClose: ()
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative w-[420px] bg-white h-full shadow-2xl flex flex-col">
+      <div className="relative w-[420px] bg-card h-full shadow-2xl flex flex-col">
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b">
           <div>
-            <p className="font-semibold text-gray-900">{prospect.nombre}</p>
-            <p className="text-xs text-gray-500 mt-0.5">Historial de contacto</p>
+            <p className="font-semibold text-ink">{prospect.nombre}</p>
+            <p className="text-xs text-muted mt-0.5">Historial de contacto</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded">
+          <button onClick={onClose} className="text-faint hover:text-muted p-1 rounded">
             <X size={18} />
           </button>
         </div>
 
         {/* Stats */}
-        <div className="flex gap-4 px-5 py-3 border-b bg-gray-50 text-sm">
-          <div><span className="text-gray-500">Contactos: </span><span className="font-semibold">{prospect.cant_contactos}</span></div>
-          <div><span className="text-gray-500">Último: </span><span className="font-semibold">{formatDate(prospect.ult_contacto)}</span></div>
+        <div className="flex gap-4 px-5 py-3 border-b bg-app text-sm">
+          <div><span className="text-muted">Contactos: </span><span className="font-semibold">{prospect.cant_contactos}</span></div>
+          <div><span className="text-muted">Último: </span><span className="font-semibold">{formatDate(prospect.ult_contacto)}</span></div>
         </div>
 
         {/* Timeline */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          {entries === null && <p className="text-center text-gray-400 py-8">Cargando...</p>}
-          {entries?.length === 0 && <p className="text-center text-gray-400 py-8">Sin historial todavía</p>}
+          {entries === null && <p className="text-center text-faint py-8">Cargando...</p>}
+          {entries?.length === 0 && <p className="text-center text-faint py-8">Sin historial todavía</p>}
           {entries && entries.length > 0 && (
-            <ol className="relative border-l border-gray-200 space-y-5 ml-2">
+            <ol className="relative border-l border-line space-y-5 ml-2">
               {entries.map(e => {
                 const meta = HISTORIAL_TIPOS[e.tipo] ?? { label: e.tipo, color: '#94a3b8' }
                 const isEditing = editingId === e.id
@@ -159,11 +159,11 @@ function HistorialPanel({ prospect, onClose }: { prospect: Prospect; onClose: ()
                       style={{ backgroundColor: meta.color }}
                     />
                     {isEditing ? (
-                      <div className="space-y-2 bg-gray-50 rounded-lg p-3 border">
+                      <div className="space-y-2 bg-app rounded-lg p-3 border">
                         <select
                           value={editForm.tipo}
                           onChange={ev => setEditForm(f => ({ ...f, tipo: ev.target.value }))}
-                          className="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none"
+                          className="w-full text-xs border border-line rounded px-2 py-1 focus:outline-none"
                         >
                           {TIPOS_OPCIONES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </select>
@@ -172,17 +172,17 @@ function HistorialPanel({ prospect, onClose }: { prospect: Prospect; onClose: ()
                           onChange={ev => setEditForm(f => ({ ...f, detalle: ev.target.value }))}
                           placeholder="Detalle (opcional)"
                           rows={2}
-                          className="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none resize-none"
+                          className="w-full text-xs border border-line rounded px-2 py-1 focus:outline-none resize-none"
                         />
                         <input
                           type="datetime-local"
                           value={editForm.fecha}
                           onChange={ev => setEditForm(f => ({ ...f, fecha: ev.target.value }))}
-                          className="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none"
+                          className="w-full text-xs border border-line rounded px-2 py-1 focus:outline-none"
                         />
                         <div className="flex gap-2 justify-end">
-                          <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Cancelar</button>
-                          <button onClick={saveEdit} disabled={saving} className="flex items-center gap-1 text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 disabled:opacity-50">
+                          <button onClick={() => setEditingId(null)} className="text-xs text-muted hover:text-ink-soft px-2 py-1">Cancelar</button>
+                          <button onClick={saveEdit} disabled={saving} className="flex items-center gap-1 text-xs bg-primary text-on-primary px-3 py-1 rounded hover:bg-primary-dark disabled:opacity-50">
                             <Check size={11} /> Guardar
                           </button>
                         </div>
@@ -190,15 +190,15 @@ function HistorialPanel({ prospect, onClose }: { prospect: Prospect; onClose: ()
                     ) : (
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="text-xs text-gray-400">{formatDate(e.fecha)}</p>
+                          <p className="text-xs text-faint">{formatDate(e.fecha)}</p>
                           <p className="text-sm font-medium" style={{ color: meta.color }}>{meta.label}</p>
-                          {e.detalle && <p className="text-xs text-gray-500 mt-0.5 break-words">{e.detalle}</p>}
+                          {e.detalle && <p className="text-xs text-muted mt-0.5 break-words">{e.detalle}</p>}
                         </div>
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5">
-                          <button onClick={() => startEdit(e)} className="text-gray-400 hover:text-blue-600 p-1 rounded">
+                          <button onClick={() => startEdit(e)} className="text-faint hover:text-accent p-1 rounded">
                             <Pencil size={12} />
                           </button>
-                          <button onClick={() => deleteEntry(e.id)} className="text-gray-400 hover:text-red-500 p-1 rounded">
+                          <button onClick={() => deleteEntry(e.id)} className="text-faint hover:text-red-500 p-1 rounded">
                             <Trash2 size={12} />
                           </button>
                         </div>
@@ -212,21 +212,21 @@ function HistorialPanel({ prospect, onClose }: { prospect: Prospect; onClose: ()
         </div>
 
         {/* Add entry */}
-        <div className="border-t bg-white px-5 py-4">
+        <div className="border-t bg-card px-5 py-4">
           {!showAddForm ? (
             <button
               onClick={() => setShowAddForm(true)}
-              className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium"
+              className="flex items-center gap-2 text-sm text-accent hover:text-accent font-medium"
             >
               <Plus size={14} /> Agregar registro
             </button>
           ) : (
             <div className="space-y-2">
-              <p className="text-xs font-semibold text-gray-700">Nuevo registro</p>
+              <p className="text-xs font-semibold text-ink-soft">Nuevo registro</p>
               <select
                 value={addForm.tipo}
                 onChange={ev => setAddForm(f => ({ ...f, tipo: ev.target.value }))}
-                className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none"
+                className="w-full text-xs border border-line rounded px-2 py-1.5 focus:outline-none"
               >
                 {TIPOS_OPCIONES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
@@ -235,17 +235,17 @@ function HistorialPanel({ prospect, onClose }: { prospect: Prospect; onClose: ()
                 onChange={ev => setAddForm(f => ({ ...f, detalle: ev.target.value }))}
                 placeholder="Detalle (opcional)"
                 rows={2}
-                className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none resize-none"
+                className="w-full text-xs border border-line rounded px-2 py-1.5 focus:outline-none resize-none"
               />
               <input
                 type="datetime-local"
                 value={addForm.fecha}
                 onChange={ev => setAddForm(f => ({ ...f, fecha: ev.target.value }))}
-                className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none"
+                className="w-full text-xs border border-line rounded px-2 py-1.5 focus:outline-none"
               />
               <div className="flex gap-2 justify-end">
-                <button onClick={() => setShowAddForm(false)} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Cancelar</button>
-                <button onClick={saveAdd} disabled={saving} className="flex items-center gap-1 text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 disabled:opacity-50">
+                <button onClick={() => setShowAddForm(false)} className="text-xs text-muted hover:text-ink-soft px-2 py-1">Cancelar</button>
+                <button onClick={saveAdd} disabled={saving} className="flex items-center gap-1 text-xs bg-primary text-on-primary px-3 py-1.5 rounded hover:bg-primary-dark disabled:opacity-50">
                   <Plus size={11} /> Guardar
                 </button>
               </div>
@@ -261,7 +261,7 @@ const CLASIF_STYLES = {
   ALTO:      { bg: 'bg-green-100',  text: 'text-green-700',  border: 'border-green-300',  label: 'ALTO'      },
   MEDIO:     { bg: 'bg-yellow-100', text: 'text-yellow-700', border: 'border-yellow-300', label: 'MEDIO'     },
   BAJO:      { bg: 'bg-red-100',    text: 'text-red-700',    border: 'border-red-300',    label: 'BAJO'      },
-  CANCELADO: { bg: 'bg-gray-100',   text: 'text-gray-500',   border: 'border-gray-300',   label: 'CANCELADO' },
+  CANCELADO: { bg: 'bg-subtle',   text: 'text-muted',   border: 'border-line',   label: 'CANCELADO' },
 } as const
 
 type NivelClasif = keyof typeof CLASIF_STYLES
@@ -338,31 +338,31 @@ function ClasificacionCell({
         ) : (
           <span
             onClick={startEdit}
-            className="text-gray-300 text-xs cursor-pointer hover:text-gray-400 select-none"
+            className="text-faint text-xs cursor-pointer hover:text-faint select-none"
             title="Clic para clasificar"
           >—</span>
         )}
 
         {/* Tooltip con detalle (solo cuando el popover está cerrado) */}
         {!open && prospect.clasificacion_detalle && (
-          <div className="absolute left-0 top-full mt-1 z-20 w-56 bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 hidden group-hover/clasif:block pointer-events-none">
-            <p className="text-xs text-gray-700 leading-snug">{prospect.clasificacion_detalle}</p>
+          <div className="absolute left-0 top-full mt-1 z-20 w-56 bg-card border border-line rounded-lg shadow-lg px-3 py-2 hidden group-hover/clasif:block pointer-events-none">
+            <p className="text-xs text-ink-soft leading-snug">{prospect.clasificacion_detalle}</p>
           </div>
         )}
 
         {/* Popover */}
         {open && (
-          <div className={`absolute ${alignRight ? 'right-0' : 'left-0'} ${openUp ? 'bottom-full mb-2' : 'top-full mt-2'} z-50 w-52 bg-white border border-gray-200 rounded-xl shadow-xl p-3 flex flex-col gap-2`}>
+          <div className={`absolute ${alignRight ? 'right-0' : 'left-0'} ${openUp ? 'bottom-full mb-2' : 'top-full mt-2'} z-50 w-52 bg-card border border-line rounded-xl shadow-xl p-3 flex flex-col gap-2`}>
             {/* Flechita */}
-            <div className={`absolute ${openUp ? '-bottom-[5px] border-r border-b' : '-top-[5px] border-l border-t'} ${alignRight ? 'right-3' : 'left-3'} w-2.5 h-2.5 bg-white border-gray-200 rotate-45`} />
+            <div className={`absolute ${openUp ? '-bottom-[5px] border-r border-b' : '-top-[5px] border-l border-t'} ${alignRight ? 'right-3' : 'left-3'} w-2.5 h-2.5 bg-card border-line rotate-45`} />
 
-            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Clasificación</p>
+            <p className="text-[11px] font-semibold text-faint uppercase tracking-wide">Clasificación</p>
 
             <select
               value={nivel}
               onChange={e => setNivel(e.target.value as NivelClasif)}
               autoFocus
-              className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-gray-50 focus:outline-none focus:border-indigo-400 focus:bg-white"
+              className="text-xs border border-line rounded-lg px-2 py-1.5 bg-app focus:outline-none focus:border-primary focus:bg-card"
             >
               {NIVELES.map(n => (
                 <option key={n} value={n}>{n}</option>
@@ -374,21 +374,21 @@ function ClasificacionCell({
               onChange={e => setRazon(e.target.value)}
               placeholder="¿Por qué? (opcional)"
               rows={2}
-              className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-gray-50 resize-none focus:outline-none focus:border-indigo-400 focus:bg-white"
+              className="text-xs border border-line rounded-lg px-2 py-1.5 bg-app resize-none focus:outline-none focus:border-primary focus:bg-card"
             />
 
             <div className="flex gap-1.5 pt-0.5">
               <button
                 onClick={handleOk}
                 disabled={saving}
-                className="flex-1 flex items-center justify-center gap-1 text-xs font-semibold bg-indigo-500 text-white rounded-lg py-1.5 hover:bg-indigo-600 disabled:opacity-50 transition-colors"
+                className="flex-1 flex items-center justify-center gap-1 text-xs font-semibold bg-primary text-on-primary rounded-lg py-1.5 hover:bg-primary-dark disabled:opacity-50 transition-colors"
               >
                 <Check size={11} />
                 {saving ? '...' : 'OK'}
               </button>
               <button
                 onClick={() => setOpen(false)}
-                className="text-xs text-gray-400 hover:text-gray-600 px-2 rounded-lg hover:bg-gray-100 transition-colors"
+                className="text-xs text-faint hover:text-muted px-2 rounded-lg hover:bg-subtle transition-colors"
               >
                 <X size={13} />
               </button>
@@ -407,7 +407,7 @@ function ClasificacionCell({
           size={15}
           className={prospect.clasificacion_verificada
             ? 'text-green-500'
-            : 'text-gray-300 hover:text-green-400'}
+            : 'text-faint hover:text-green-400'}
         />
       </button>
     </div>
@@ -437,16 +437,16 @@ function ProspectCard({
   const estadoInfo = ESTADOS[p.estado]
 
   return (
-    <div className="bg-white rounded-xl shadow overflow-hidden">
+    <div className="bg-card rounded-xl shadow overflow-hidden">
       {/* Cuerpo principal */}
       <div className="p-4 space-y-2.5">
         {/* Nombre + clasificación */}
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="font-semibold text-gray-900 text-sm leading-snug">{p.nombre}</p>
+            <p className="font-semibold text-ink text-sm leading-snug">{p.nombre}</p>
             {p.url && (
               <a href={p.url} target="_blank" rel="noopener noreferrer"
-                className="text-xs text-indigo-500 hover:underline truncate block">
+                className="text-xs text-accent hover:underline truncate block">
                 {p.url.replace(/^https?:\/\//, '')}
               </a>
             )}
@@ -455,7 +455,7 @@ function ProspectCard({
         </div>
 
         {/* Meta: estado + contactos + fecha */}
-        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full shrink-0" style={{ background: estadoInfo?.color ?? '#94a3b8' }} />
             {estadoInfo?.label ?? p.estado}
@@ -471,29 +471,29 @@ function ProspectCard({
 
       {/* Expandible */}
       {expanded && (
-        <div className="px-4 pb-3 border-t border-gray-50 pt-3 space-y-1.5">
-          {p.email       && <div className="flex gap-2 text-xs"><span className="text-gray-400 w-20 shrink-0">Email</span><span className="text-gray-700">{p.email}</span></div>}
-          {p.whatsapp    && <div className="flex gap-2 text-xs"><span className="text-gray-400 w-20 shrink-0">WhatsApp</span><span className="text-gray-700">{p.whatsapp}</span></div>}
-          {p.termino_texto && <div className="flex gap-2 text-xs"><span className="text-gray-400 w-20 shrink-0">Término</span><span className="text-gray-700">{p.termino_texto}</span></div>}
-          {p.rubro_nombre  && <div className="flex gap-2 text-xs"><span className="text-gray-400 w-20 shrink-0">Rubro</span><span className="text-gray-700">{p.rubro_nombre}</span></div>}
-          {p.clasificacion_detalle && <div className="flex gap-2 text-xs"><span className="text-gray-400 w-20 shrink-0">Detalle IA</span><span className="text-gray-700 italic">{p.clasificacion_detalle}</span></div>}
+        <div className="px-4 pb-3 border-t border-line pt-3 space-y-1.5">
+          {p.email       && <div className="flex gap-2 text-xs"><span className="text-faint w-20 shrink-0">Email</span><span className="text-ink-soft">{p.email}</span></div>}
+          {p.whatsapp    && <div className="flex gap-2 text-xs"><span className="text-faint w-20 shrink-0">WhatsApp</span><span className="text-ink-soft">{p.whatsapp}</span></div>}
+          {p.termino_texto && <div className="flex gap-2 text-xs"><span className="text-faint w-20 shrink-0">Término</span><span className="text-ink-soft">{p.termino_texto}</span></div>}
+          {p.rubro_nombre  && <div className="flex gap-2 text-xs"><span className="text-faint w-20 shrink-0">Rubro</span><span className="text-ink-soft">{p.rubro_nombre}</span></div>}
+          {p.clasificacion_detalle && <div className="flex gap-2 text-xs"><span className="text-faint w-20 shrink-0">Detalle IA</span><span className="text-ink-soft italic">{p.clasificacion_detalle}</span></div>}
         </div>
       )}
 
       {/* Toggle expandir */}
       <button
         onClick={() => setExpanded(e => !e)}
-        className="w-full text-center text-xs text-gray-400 hover:text-gray-600 py-1.5 border-t border-gray-50"
+        className="w-full text-center text-xs text-faint hover:text-muted py-1.5 border-t border-line"
       >
         {expanded ? '▴ Ver menos' : '▾ Ver más'}
       </button>
 
       {/* Acciones */}
-      <div className="flex gap-2 px-4 py-3 bg-gray-50 border-t border-gray-100">
+      <div className="flex gap-2 px-4 py-3 bg-app border-t border-line">
         <button
           onClick={() => onContactar(p.id)}
           disabled={contacting.has(p.id) || p.estado === 'contactado' || p.estado === 'en_conversacion'}
-          className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium bg-blue-50 text-blue-700 py-2 rounded-lg hover:bg-blue-100 disabled:opacity-40"
+          className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium bg-primary-soft text-accent py-2 rounded-lg hover:bg-primary-soft disabled:opacity-40"
         >
           <MessageCircle size={12} />
           {contacting.has(p.id) ? 'Enviando...' : 'Contactar'}
@@ -512,7 +512,7 @@ function ProspectCard({
         </button>
         <button
           onClick={() => onHistorial(p)}
-          className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium bg-gray-100 text-gray-600 py-2 rounded-lg hover:bg-gray-200"
+          className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium bg-subtle text-muted py-2 rounded-lg hover:bg-subtle"
         >
           <Clock size={12} />
           Historial
@@ -569,12 +569,12 @@ function ConversacionPanel({ prospect, onClose }: { prospect: Prospect; onClose:
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative w-[420px] bg-white h-full shadow-2xl flex flex-col">
+      <div className="relative w-[420px] bg-card h-full shadow-2xl flex flex-col">
 
         {/* Header estilo WhatsApp */}
         <div className="flex items-center justify-between px-5 py-3 border-b bg-[#008069] text-white">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="h-9 w-9 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+            <div className="h-9 w-9 rounded-full bg-card/20 flex items-center justify-center shrink-0">
               <MessageCircle size={18} />
             </div>
             <div className="min-w-0">
@@ -589,9 +589,9 @@ function ConversacionPanel({ prospect, onClose }: { prospect: Prospect; onClose:
 
         {/* Hilo de mensajes */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-1 bg-[#efeae2]">
-          {mensajes === null && <p className="text-center text-gray-500 py-8 text-sm">Cargando...</p>}
+          {mensajes === null && <p className="text-center text-muted py-8 text-sm">Cargando...</p>}
           {mensajes?.length === 0 && (
-            <p className="text-center text-gray-500 py-8 text-sm">Todavía no hay mensajes en esta conversación</p>
+            <p className="text-center text-muted py-8 text-sm">Todavía no hay mensajes en esta conversación</p>
           )}
           {mensajes?.map(m => {
             const sep = fechaSeparador(m.fecha)
@@ -602,17 +602,17 @@ function ConversacionPanel({ prospect, onClose }: { prospect: Prospect; onClose:
               <React.Fragment key={m.id}>
                 {mostrarSep && (
                   <div className="flex justify-center my-3">
-                    <span className="text-[11px] text-gray-600 bg-white/80 rounded-md px-2 py-0.5 shadow-sm">{sep}</span>
+                    <span className="text-[11px] text-muted bg-card/80 rounded-md px-2 py-0.5 shadow-sm">{sep}</span>
                   </div>
                 )}
                 <div className={`flex ${out ? 'justify-end' : 'justify-start'}`}>
                   <div
                     className={`max-w-[78%] rounded-lg px-2.5 py-1.5 shadow-sm text-sm whitespace-pre-wrap break-words ${
-                      out ? 'bg-[#d9fdd3]' : 'bg-white'
+                      out ? 'bg-[#d9fdd3]' : 'bg-card'
                     }`}
                   >
-                    <span className="text-gray-800">{m.texto}</span>
-                    <span className="text-[10px] text-gray-500 ml-2 float-right mt-1.5">{horaMsg(m.fecha)}</span>
+                    <span className="text-ink">{m.texto}</span>
+                    <span className="text-[10px] text-muted ml-2 float-right mt-1.5">{horaMsg(m.fecha)}</span>
                   </div>
                 </div>
               </React.Fragment>
@@ -621,8 +621,8 @@ function ConversacionPanel({ prospect, onClose }: { prospect: Prospect; onClose:
         </div>
 
         {/* Footer informativo: el chat es de solo lectura (lo maneja Camila) */}
-        <div className="border-t bg-gray-50 px-5 py-2.5 text-center">
-          <p className="text-[11px] text-gray-400">Conversación gestionada por Camila — solo lectura</p>
+        <div className="border-t bg-app px-5 py-2.5 text-center">
+          <p className="text-[11px] text-faint">Conversación gestionada por Camila — solo lectura</p>
         </div>
       </div>
     </div>
@@ -701,7 +701,7 @@ function ResizableTh({ id, children, startResize }: {
       {children}
       <div
         onMouseDown={e => startResize(id, e)}
-        className="absolute right-0 top-2 bottom-2 w-[3px] rounded-full cursor-col-resize bg-gray-300 opacity-0 hover:opacity-100 transition-opacity"
+        className="absolute right-0 top-2 bottom-2 w-[3px] rounded-full cursor-col-resize bg-faint opacity-0 hover:opacity-100 transition-opacity"
       />
     </th>
   )
@@ -861,12 +861,12 @@ export default function Prospects() {
           placeholder="Buscar nombre, email, web..."
           value={q}
           onChange={e => { setQ(e.target.value); setPage(1) }}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="border border-line rounded-lg px-3 py-2 text-sm flex-1 focus:outline-none focus:ring-2 focus:ring-primary"
         />
         <select
           value={estado}
           onChange={e => { setEstado(e.target.value); setPage(1) }}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
+          className="border border-line rounded-lg px-3 py-2 text-sm focus:outline-none"
         >
           <option value="">Todos los estados</option>
           {Object.entries(ESTADOS).map(([k, v]) => (
@@ -882,7 +882,7 @@ export default function Prospects() {
               setMes('')
               setPage(1)
             }}
-            className="flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg px-3 py-2 text-sm hover:bg-blue-100 whitespace-nowrap"
+            className="flex items-center gap-1 bg-primary-soft text-accent border border-line rounded-lg px-3 py-2 text-sm hover:bg-primary-soft whitespace-nowrap"
             title="Quitar filtro de mes"
           >
             Mes: {mesChipLabel(mes)} ✕
@@ -892,8 +892,8 @@ export default function Prospects() {
 
       {/* Mobile: cards */}
       <div className="md:hidden space-y-3">
-        {!data && <p className="text-center text-gray-400 py-8">Cargando...</p>}
-        {data?.items.length === 0 && <p className="text-center text-gray-400 py-8">No hay prospects</p>}
+        {!data && <p className="text-center text-faint py-8">Cargando...</p>}
+        {data?.items.length === 0 && <p className="text-center text-faint py-8">No hay prospects</p>}
         {data?.items.map(p => (
           <ProspectCard
             key={p.id}
@@ -909,13 +909,13 @@ export default function Prospects() {
       </div>
 
       {/* Desktop: tabla */}
-      <div className="hidden md:block bg-white rounded-xl shadow overflow-x-auto">
+      <div className="hidden md:block bg-card rounded-xl shadow overflow-x-auto">
         <table className="text-sm" style={{ tableLayout: 'fixed', width: COL_DEFS.reduce((s, c) => s + widths[c.id], 0), minWidth: '100%' }}>
           <colgroup>
             {COL_DEFS.map(c => <col key={c.id} style={{ width: widths[c.id] }} />)}
           </colgroup>
           <thead>
-            <tr className="border-b bg-gray-50 text-gray-600">
+            <tr className="border-b bg-app text-muted">
               <th className="px-4 py-3 text-left">
                 <input type="checkbox" onChange={toggleAll} checked={data ? selected.size === data.items.length && data.items.length > 0 : false} />
               </th>
@@ -934,25 +934,25 @@ export default function Prospects() {
           </thead>
           <tbody>
             {data?.items.map(p => (
-              <tr key={p.id} className="border-b hover:bg-gray-50">
+              <tr key={p.id} className="border-b hover:bg-app">
                 <td className="px-4 py-3">
                   <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />
                 </td>
                 <td className="px-4 py-3 font-medium truncate overflow-hidden">{p.nombre}</td>
                 <td className="px-4 py-3 truncate overflow-hidden">
-                  {p.url ? <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{p.url.replace(/^https?:\/\//, '')}</a> : '—'}
+                  {p.url ? <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">{p.url.replace(/^https?:\/\//, '')}</a> : '—'}
                 </td>
-                <td className="px-4 py-3 text-gray-600 truncate overflow-hidden">{p.email || '—'}</td>
-                <td className="px-4 py-3 text-gray-600 truncate overflow-hidden">{p.whatsapp || '—'}</td>
-                <td className="px-4 py-3 text-gray-500 text-xs truncate overflow-hidden">{p.termino_texto || '—'}</td>
-                <td className="px-4 py-3 text-gray-500 text-xs truncate overflow-hidden">{p.rubro_nombre || '—'}</td>
+                <td className="px-4 py-3 text-muted truncate overflow-hidden">{p.email || '—'}</td>
+                <td className="px-4 py-3 text-muted truncate overflow-hidden">{p.whatsapp || '—'}</td>
+                <td className="px-4 py-3 text-muted text-xs truncate overflow-hidden">{p.termino_texto || '—'}</td>
+                <td className="px-4 py-3 text-muted text-xs truncate overflow-hidden">{p.rubro_nombre || '—'}</td>
                 <td className="px-4 py-3 text-center">
                   {p.cant_contactos > 0
-                    ? <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold">{p.cant_contactos}</span>
-                    : <span className="text-gray-300">—</span>
+                    ? <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary-soft text-accent text-xs font-semibold">{p.cant_contactos}</span>
+                    : <span className="text-faint">—</span>
                   }
                 </td>
-                <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">{formatDate(p.ult_contacto)}</td>
+                <td className="px-4 py-3 text-muted text-xs whitespace-nowrap">{formatDate(p.ult_contacto)}</td>
                 <td className="px-4 py-3">
                   <ClasificacionCell prospect={p} onVerificar={toggleVerificacion} onCambiar={cambiarClasificacion} />
                 </td>
@@ -973,7 +973,7 @@ export default function Prospects() {
                     <button
                       onClick={() => contactar(p.id)}
                       disabled={contacting.has(p.id) || p.estado === 'contactado' || p.estado === 'en_conversacion'}
-                      className="flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2.5 py-1.5 rounded hover:bg-blue-100 disabled:opacity-40"
+                      className="flex items-center gap-1 text-xs bg-primary-soft text-accent px-2.5 py-1.5 rounded hover:bg-primary-soft disabled:opacity-40"
                     >
                       <MessageCircle size={12} />
                       {contacting.has(p.id) ? 'Enviando...' : 'Contactar'}
@@ -993,7 +993,7 @@ export default function Prospects() {
                     </button>
                     <button
                       onClick={() => setHistorialProspect(p)}
-                      className="flex items-center gap-1 text-xs bg-gray-100 text-gray-600 px-2.5 py-1.5 rounded hover:bg-gray-200"
+                      className="flex items-center gap-1 text-xs bg-subtle text-muted px-2.5 py-1.5 rounded hover:bg-subtle"
                     >
                       <Clock size={12} />
                       Historial
@@ -1004,18 +1004,18 @@ export default function Prospects() {
             ))}
           </tbody>
         </table>
-        {!data && <div className="p-6 text-center text-gray-400">Cargando...</div>}
-        {data?.items.length === 0 && <div className="p-6 text-center text-gray-400">No hay prospects</div>}
+        {!data && <div className="p-6 text-center text-faint">Cargando...</div>}
+        {data?.items.length === 0 && <div className="p-6 text-center text-faint">No hay prospects</div>}
       </div>{/* /tabla desktop */}
 
       {/* Paginación */}
       {data && totalPages > 1 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-gray-500">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-muted">
           <span>{data.total} prospects en total</span>
           <div className="flex gap-2">
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="px-3 py-1 border rounded disabled:opacity-40 hover:bg-gray-100">← Ant.</button>
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="px-3 py-1 border rounded disabled:opacity-40 hover:bg-subtle">← Ant.</button>
             <span className="px-3 py-1">Pág. {page} / {totalPages}</span>
-            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="px-3 py-1 border rounded disabled:opacity-40 hover:bg-gray-100">Sig. →</button>
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="px-3 py-1 border rounded disabled:opacity-40 hover:bg-subtle">Sig. →</button>
           </div>
         </div>
       )}

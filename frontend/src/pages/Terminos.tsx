@@ -54,7 +54,7 @@ export default function Terminos() {
       <h1 className="text-xl md:text-2xl font-bold">Términos de búsqueda</h1>
 
       {/* Agregar nuevo */}
-      <div className="bg-white rounded-xl shadow p-4 md:p-5">
+      <div className="bg-card rounded-xl shadow p-4 md:p-5">
         <h2 className="font-semibold mb-3 text-sm md:text-base">Agregar término</h2>
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           <input
@@ -63,11 +63,11 @@ export default function Terminos() {
             value={nuevoTexto}
             onChange={e => setNuevoTexto(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && crear()}
-            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 border border-line rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
           />
           <button
             onClick={crear}
-            className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700"
+            className="flex items-center justify-center gap-2 bg-primary text-on-primary px-4 py-2 rounded-lg text-sm hover:bg-primary-dark"
           >
             <Plus size={16} />
             Agregar
@@ -78,14 +78,14 @@ export default function Terminos() {
       {/* Lista */}
       <div className="space-y-3">
         {terminos.map(t => (
-          <div key={t.id} className="bg-white rounded-xl shadow p-4">
+          <div key={t.id} className="bg-card rounded-xl shadow p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="font-medium text-gray-900 text-sm leading-snug">{t.texto}</p>
+                <p className="font-medium text-ink text-sm leading-snug">{t.texto}</p>
                 <div className="flex flex-wrap gap-3 mt-1.5 text-xs">
                   <button
                     onClick={() => navigate(`/prospects?termino_id=${t.id}`)}
-                    className="text-gray-500 hover:text-blue-600 hover:underline"
+                    className="text-muted hover:text-accent hover:underline"
                   >
                     {t.encontrados} encontrados
                   </button>
@@ -99,7 +99,7 @@ export default function Terminos() {
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {t.scraper_running ? (
-                  <span className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded whitespace-nowrap">
+                  <span className="flex items-center gap-1 text-xs text-accent bg-primary-soft px-3 py-1.5 rounded whitespace-nowrap">
                     <Loader2 size={12} className="animate-spin" />
                     Scrapeando...
                   </span>
@@ -114,7 +114,7 @@ export default function Terminos() {
                 )}
                 <button
                   onClick={() => eliminar(t.id)}
-                  className="text-gray-400 hover:text-red-500 p-1.5 rounded"
+                  className="text-faint hover:text-red-500 p-1.5 rounded"
                 >
                   <Trash2 size={14} />
                 </button>
@@ -123,7 +123,7 @@ export default function Terminos() {
           </div>
         ))}
         {terminos.length === 0 && (
-          <p className="text-center text-gray-400 py-8">No hay términos todavía</p>
+          <p className="text-center text-faint py-8">No hay términos todavía</p>
         )}
       </div>
     </div>

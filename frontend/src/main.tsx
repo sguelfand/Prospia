@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard'
 import Prospects from './pages/Prospects'
 import Terminos from './pages/Terminos'
 import Layout from './components/Layout'
+import { ThemeProvider } from './theme'
 import './index.css'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -14,6 +15,7 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
+    <ThemeProvider>
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
@@ -25,5 +27,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         </Route>
       </Routes>
     </BrowserRouter>
+    </ThemeProvider>
   </React.StrictMode>
 )

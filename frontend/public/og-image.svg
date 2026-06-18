@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" role="img" aria-label="Prospia">
+  <defs>
+    <style>@import url('https://fonts.googleapis.com/css2?family=Sora:wght@700;800&amp;family=JetBrains+Mono:wght@500&amp;display=swap');</style>
+    <radialGradient id="glow" cx="50%" cy="22%" r="60%">
+      <stop offset="0" stop-color="#1d2b48" stop-opacity=".9"/>
+      <stop offset="1" stop-color="#0C1730" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="#0C1730"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+
+  <!-- Isotipo centrado -->
+  <g transform="translate(550,82)">
+    <line x1="50" y1="52" x2="22" y2="24" stroke="#43577B" stroke-width="2.5"/>
+    <line x1="50" y1="52" x2="82" y2="22" stroke="#43577B" stroke-width="2.5"/>
+    <line x1="50" y1="52" x2="76" y2="78" stroke="#43577B" stroke-width="2.5"/>
+    <circle cx="22" cy="24" r="5.5" fill="#43577B"/>
+    <circle cx="82" cy="22" r="5.5" fill="#43577B"/>
+    <circle cx="76" cy="78" r="5.5" fill="#43577B"/>
+    <circle cx="24" cy="74" r="5.5" fill="#43577B"/>
+    <circle cx="50" cy="52" r="13" fill="#F5B23D"/>
+  </g>
+
+  <text x="600" y="318" text-anchor="middle" font-family="'Sora', sans-serif"
+        font-weight="800" font-size="84" letter-spacing="-2.5" fill="#EEF3FB">Prospia</text>
+
+  <text x="600" y="390" text-anchor="middle" font-family="'Sora', sans-serif" font-weight="700"
+        font-size="31" letter-spacing="-.5" fill="#AEBBD3">Encontrá al cliente correcto entre el ruido.</text>
+  <text x="600" y="433" text-anchor="middle" font-family="'Sora', sans-serif" font-weight="400"
+        font-size="23" fill="#8294B4">Prospección B2B con IA, en piloto automático.</text>
+
+  <text x="600" y="548" text-anchor="middle" font-family="'JetBrains Mono', monospace"
+        font-weight="500" font-size="21" letter-spacing="3" fill="#F5B23D">PROSPIA.APP</text>
+</svg>

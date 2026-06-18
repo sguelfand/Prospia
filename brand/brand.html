@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prospia — Brand Sheet · La señal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-display); color: var(--ink); background: var(--paper); line-height: 1.5; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 56px 28px 120px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .14em; color: var(--steel); margin: 52px 0 18px; font-weight: 700; font-family: var(--font-mono); }
+  .mono { font-family: var(--font-mono); }
+  .hero { background: #0C1730; border-radius: var(--radius-xl); padding: 64px 48px; color: var(--fog); position: relative; overflow: hidden; }
+  .hero .grid-dots { position:absolute; inset:0; background-image: radial-gradient(#1d2b48 1.4px, transparent 1.4px); background-size: 26px 26px; opacity:.55; }
+  .hero .inner { position: relative; }
+  .hero h1 { font-size: 60px; font-weight: 800; letter-spacing: -.03em; line-height: 1; margin: 28px 0 14px; }
+  .hero p { font-size: 19px; color: var(--fog-muted); max-width: 520px; }
+  .tag { font-family: var(--font-mono); font-size: 11px; letter-spacing:.2em; text-transform: uppercase; color: var(--amber); }
+  .card { background:#fff; border:1px solid var(--border); border-radius: var(--radius-lg); padding: 30px; }
+  .grid { display:grid; gap: 16px; }
+  .g2 { grid-template-columns: 1fr 1fr; } .g3 { grid-template-columns: repeat(3,1fr); } .g4 { grid-template-columns: repeat(4,1fr); }
+  @media (max-width:760px){ .g2,.g3,.g4{ grid-template-columns:1fr 1fr; } }
+  .logo-box { display:flex; align-items:center; justify-content:center; min-height:140px; border-radius: var(--radius); border:1px solid var(--border); background:#fff; }
+  .on-dark { background:#0C1730; border-color:#243454; }
+  .logo-box img { max-width: 72%; max-height: 84px; }
+  .label { font-size:11px; color:var(--steel); margin-top:9px; text-align:center; font-family: var(--font-mono); }
+  .sw { border-radius: var(--radius); overflow:hidden; border:1px solid var(--border); }
+  .sw .chip { height:92px; }
+  .sw .meta { padding:12px 14px; font-size:13px; }
+  .sw .meta b { font-weight:600; } .sw .meta .hex { font-family: var(--font-mono); font-size:12px; color: var(--steel); margin-top:3px; }
+  .type-row { padding:16px 0; border-bottom:1px solid var(--border); }
+  .type-row:last-child{ border:0; }
+  .btn { font-family: var(--font-display); font-weight:600; font-size:15px; border:0; border-radius: var(--radius); padding:13px 22px; cursor:pointer; }
+  .btn-primary { background: var(--amber); color: var(--navy); }
+  .btn-ghost { background: transparent; color: var(--navy); border:1.5px solid #C3CBDB; }
+  code { font-family: var(--font-mono); font-size:13px; background:#F6F8FC; padding:2px 6px; border-radius:6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <div class="grid-dots"></div>
+    <div class="inner">
+      <div class="tag">Prospia · Sistema de marca · prospia.app</div>
+      <img src="logo/prospia-logo-horizontal-white.svg" alt="Prospia" style="height:60px;margin-top:34px">
+      <h1>Prospia</h1>
+      <p>La señal — encontrar al cliente correcto entre el ruido y conectarlo, en piloto automático.</p>
+    </div>
+  </div>
+
+  <h2>01 · Logo</h2>
+  <div class="grid g3">
+    <div><div class="logo-box"><img src="logo/prospia-logo-horizontal.svg"></div><div class="label">Horizontal · principal</div></div>
+    <div><div class="logo-box"><img src="logo/prospia-logo-stacked.svg"></div><div class="label">Apilado</div></div>
+    <div><div class="logo-box"><img src="logo/prospia-isotipo.svg" style="max-width:90px"></div><div class="label">Isotipo</div></div>
+    <div><div class="logo-box on-dark"><img src="logo/prospia-logo-horizontal-white.svg"></div><div class="label">Horizontal · oscuro</div></div>
+    <div><div class="logo-box on-dark"><img src="logo/prospia-isotipo-tile.svg" style="max-width:88px"></div><div class="label">Tile · app icon</div></div>
+    <div><div class="logo-box on-dark"><img src="favicon/favicon.svg" style="max-width:64px"></div><div class="label">Favicon (simplificado)</div></div>
+  </div>
+  <div class="card" style="margin-top:16px; font-size:14px; color:var(--ink-soft);">
+    <b>El concepto.</b> Un campo de contactos apagados (acero) y uno encendido en ámbar:
+    Prospia encuentra al prospecto correcto entre todos y lo conecta. El nodo central
+    es <i>la señal</i> — en versiones a color nunca cambia de color.
+  </div>
+
+  <h2>02 · Color</h2>
+  <div class="grid g4">
+    <div class="sw"><div class="chip" style="background:#0C1730"></div><div class="meta"><b>Navy</b><div class="hex">#0C1730</div></div></div>
+    <div class="sw"><div class="chip" style="background:#F5B23D"></div><div class="meta"><b>Ámbar señal</b><div class="hex">#F5B23D</div></div></div>
+    <div class="sw"><div class="chip" style="background:#43577B"></div><div class="meta"><b>Acero</b><div class="hex">#43577B</div></div></div>
+    <div class="sw"><div class="chip" style="background:#EEF3FB"></div><div class="meta"><b>Niebla</b><div class="hex">#EEF3FB</div></div></div>
+  </div>
+  <div class="card" style="margin-top:14px; font-size:13px; color:#7a5a18; background:#FBF1DC; border-color:#F0DFB6;">
+    El ámbar es el único color cálido — usalo con moderación, solo para lo que importa (CTA, dato clave, "lo hallado").
+  </div>
+
+  <h2>03 · Tipografía</h2>
+  <div class="card">
+    <div class="type-row">
+      <div style="font-weight:800; font-size:44px; letter-spacing:-.03em">Sora · Vendé en automático</div>
+      <div class="label" style="text-align:left">Display / UI / logo · 400–800</div>
+    </div>
+    <div class="type-row">
+      <div style="font-weight:400; font-size:18px; color:var(--ink-soft)">Prospia encuentra clientes potenciales, los contacta por WhatsApp y mail, y hace el seguimiento.</div>
+      <div class="label" style="text-align:left">Sora 400 · cuerpo</div>
+    </div>
+    <div class="type-row">
+      <div class="mono" style="font-size:14px; letter-spacing:.04em; color:var(--steel)">PIPELINE · 2.847 PROSPECTOS ACTIVOS</div>
+      <div class="label" style="text-align:left">JetBrains Mono · etiquetas y datos</div>
+    </div>
+  </div>
+
+  <h2>04 · Botones</h2>
+  <div class="card" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
+    <button class="btn btn-primary">Activá tu máquina</button>
+    <button class="btn btn-ghost">Ver demo</button>
+  </div>
+
+  <h2>05 · Uso</h2>
+  <div class="card">
+    <p style="font-size:14px; color:var(--ink-soft)">Espacio libre: mínimo la altura del isotipo. Tamaño mínimo del isotipo completo: 28&nbsp;px
+    (más chico, usar el favicon simplificado). No deformar, no rotar, no recolorear el ámbar central,
+    no usar el ámbar como fondo de grandes áreas. Tokens en <code>tokens.css</code>.</p>
+  </div>
+
+</div>
+</body>
+</html>

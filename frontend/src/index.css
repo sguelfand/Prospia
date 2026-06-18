@@ -2,6 +2,49 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ===========================================================================
+   Prospia — tokens de tema (sistema "La señal")
+   Las variables son tripletes RGB para que Tailwind aplique opacidad.
+   =========================================================================== */
+:root {
+  --c-app:          246 248 252;  /* #F6F8FC */
+  --c-card:         255 255 255;  /* #FFFFFF */
+  --c-subtle:       241 245 249;  /* #F1F5F9 */
+  --c-line:         227 233 243;  /* #E3E9F3 */
+  --c-ink:          12 23 48;     /* #0C1730 */
+  --c-ink-soft:     51 65 85;     /* #334155 */
+  --c-muted:        100 116 139;  /* #64748B */
+  --c-faint:        148 163 184;  /* #94A3B8 */
+  --c-primary:      245 178 61;   /* #F5B23D ámbar */
+  --c-primary-dark: 224 160 46;   /* #E0A02E */
+  --c-primary-soft: 251 241 220;  /* #FBF1DC */
+  --c-on-primary:   12 23 48;     /* navy sobre ámbar */
+  --c-accent:       47 64 104;    /* #2F4068 (links/énfasis en claro) */
+
+  color-scheme: light;
+}
+
+.dark {
+  --c-app:          12 23 48;     /* #0C1730 navy */
+  --c-card:         19 33 60;     /* #13213C */
+  --c-subtle:       27 42 71;     /* #1B2A47 */
+  --c-line:         36 52 84;     /* #243454 */
+  --c-ink:          238 243 251;  /* #EEF3FB niebla */
+  --c-ink-soft:     199 210 228;  /* #C7D2E4 */
+  --c-muted:        130 148 180;  /* #8294B4 */
+  --c-faint:        92 110 144;   /* #5C6E90 */
+  --c-primary:      245 178 61;   /* ámbar (igual) */
+  --c-primary-dark: 224 160 46;
+  --c-primary-soft: 42 36 18;     /* ámbar tenue sobre oscuro */
+  --c-on-primary:   12 23 48;
+  --c-accent:       245 178 61;   /* ámbar como énfasis en oscuro */
+
+  color-scheme: dark;
+}
+
+html { font-family: 'Sora', system-ui, -apple-system, sans-serif; }
+
 body {
-  @apply bg-gray-50 text-gray-900;
+  @apply bg-app text-ink;
+  transition: background-color .2s ease, color .2s ease;
 }
