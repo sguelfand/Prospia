@@ -15,6 +15,7 @@ import { registerForPush } from "./src/push";
 import AvisosScreen from "./src/screens/AvisosScreen";
 import ClienteDetailScreen from "./src/screens/ClienteDetailScreen";
 import ClientesScreen from "./src/screens/ClientesScreen";
+import LockScreen from "./src/screens/LockScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import { colors } from "./src/theme";
 
@@ -40,12 +41,12 @@ const screenOptions = {
 } as const;
 
 function Routes() {
-  const { token, loading } = useAuth();
+  const { token, loading, locked } = useAuth();
 
-  // Registrar el dispositivo para push apenas hay sesión.
+  // Registrar el dispositivo para push apenas hay sesión desbloqueada.
   useEffect(() => {
-    if (token) registerForPush(token);
-  }, [token]);
+    if (token && !locked) registerForPush(token);
+  }, [token, locked]);
 
   // Al tocar una notificación, ir al cliente del evento.
   useEffect(() => {
@@ -61,6 +62,7 @@ function Routes() {
   }, []);
 
   if (loading) return <Loader />;
+  if (token && locked) return <LockScreen />;
 
   return (
     <Stack.Navigator screenOptions={screenOptions}>

@@ -27,6 +27,12 @@
         {
           "color": "#6366f1"
         }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Permitir que Prospia Admin use Face ID para desbloquear la app."
+        }
       ]
     ],
     "runtimeVersion": {

@@ -17,6 +17,7 @@ export default function LoginScreen() {
   const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -40,7 +41,7 @@ export default function LoginScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View style={styles.inner}>
-        <Text style={styles.title}>Admin Prospects</Text>
+        <Text style={styles.title}>Prospia Admin</Text>
         <Text style={styles.subtitle}>Panel de administración</Text>
 
         <TextInput
@@ -53,15 +54,24 @@ export default function LoginScreen() {
           value={email}
           onChangeText={setEmail}
         />
-        <TextInput
-          style={styles.input}
-          placeholder="Contraseña"
-          placeholderTextColor={colors.textDim}
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-          onSubmitEditing={onSubmit}
-        />
+        <View style={styles.passwordWrap}>
+          <TextInput
+            style={[styles.input, styles.passwordInput]}
+            placeholder="Contraseña"
+            placeholderTextColor={colors.textDim}
+            secureTextEntry={!showPassword}
+            value={password}
+            onChangeText={setPassword}
+            onSubmitEditing={onSubmit}
+          />
+          <TouchableOpacity
+            style={styles.eyeButton}
+            onPress={() => setShowPassword((v) => !v)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Text style={styles.eyeIcon}>{showPassword ? "🙈" : "👁️"}</Text>
+          </TouchableOpacity>
+        </View>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -91,6 +101,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 12,
   },
+  passwordWrap: { position: "relative", justifyContent: "center" },
+  passwordInput: { paddingRight: 48 },
+  eyeButton: { position: "absolute", right: 14, height: "100%", justifyContent: "center", paddingBottom: 12 },
+  eyeIcon: { fontSize: 20 },
   error: { color: colors.red, fontSize: 14, marginBottom: 12, textAlign: "center" },
   button: {
     backgroundColor: colors.primary,
