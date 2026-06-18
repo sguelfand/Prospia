@@ -500,16 +500,12 @@ function ProspectCard({
         </button>
         <button
           onClick={() => onConversacion(p)}
-          className={`relative flex-1 flex items-center justify-center gap-1.5 text-xs font-medium py-2 rounded-lg ${
-            p.cant_mensajes > 0
-              ? 'bg-green-600 text-white hover:bg-green-700'
-              : 'bg-green-50 text-green-700 hover:bg-green-100'
-          }`}
+          className="relative flex-1 flex items-center justify-center gap-1.5 text-xs font-medium py-2 rounded-lg bg-green-50 text-green-700 hover:bg-green-100"
         >
           <MessageCircle size={12} />
           Chat
           {p.cant_mensajes > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-white text-green-700 text-[10px] font-bold flex items-center justify-center shadow border border-green-600">
+            <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-green-600 text-white text-[10px] font-bold flex items-center justify-center shadow">
               {p.cant_mensajes}
             </span>
           )}
@@ -985,16 +981,12 @@ export default function Prospects() {
                     <button
                       onClick={() => setConversacionProspect(p)}
                       title={p.cant_mensajes > 0 ? `${p.cant_mensajes} mensajes` : 'Sin conversación'}
-                      className={`relative flex items-center gap-1 text-xs px-2.5 py-1.5 rounded ${
-                        p.cant_mensajes > 0
-                          ? 'bg-green-600 text-white hover:bg-green-700'
-                          : 'bg-green-50 text-green-700 hover:bg-green-100'
-                      }`}
+                      className="relative flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-green-50 text-green-700 hover:bg-green-100"
                     >
                       <MessageCircle size={12} />
                       Chat
                       {p.cant_mensajes > 0 && (
-                        <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-white text-green-700 text-[10px] font-bold flex items-center justify-center shadow border border-green-600">
+                        <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-green-600 text-white text-[10px] font-bold flex items-center justify-center shadow">
                           {p.cant_mensajes}
                         </span>
                       )}
