@@ -93,6 +93,41 @@ class DashboardComparativa(BaseModel):
     clientes: list[ClienteComparativa]
 
 
+class EtiguelMirrorIn(BaseModel):
+    """Payload que manda el webhook de Camila para espejar un lead/prospect de
+    Etiguel (APP.7). Si vienen direccion+texto, además agrega ese mensaje."""
+    tipo: str                          # "lead" | "prospect"
+    item_id: str                       # id del item en Monday
+    nombre: str | None = None
+    telefono: str | None = None
+    email: str | None = None
+    estado: str | None = None
+    direccion: str | None = None       # "in" | "out" (opcional: solo si hay mensaje)
+    texto: str | None = None
+
+
+class EtiguelMirrorMensajeOut(BaseModel):
+    id: int
+    direccion: str
+    texto: str
+    fecha: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class EtiguelMirrorItem(BaseModel):
+    """Un lead/prospect de Etiguel espejado, para la lista de la app."""
+    id: int
+    tipo: str
+    item_id: str
+    nombre: str | None
+    telefono: str | None
+    email: str | None
+    estado: str | None
+    ultima_actividad: datetime
+    cant_mensajes: int
+
+
 class EventoOut(BaseModel):
     """Un evento del feed de Avisos: primera respuesta o interesado."""
     id: int

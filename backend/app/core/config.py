@@ -7,6 +7,9 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     WEBHOOK_TOKEN: str = "dev-webhook-token"
+    # Token que usa el webhook de Camila para espejar leads/prospects de Etiguel
+    # a la app (APP.7). Si queda vacío, cae de fallback a WEBHOOK_TOKEN.
+    ETIGUEL_MIRROR_TOKEN: str = ""
 
     class Config:
         env_file = ".env"

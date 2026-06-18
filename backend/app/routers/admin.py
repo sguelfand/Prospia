@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_superadmin
 from app.database import get_db
 from app.models.device import Device
+from app.models.etiguel_mirror import EtiguelMirror, EtiguelMirrorMensaje
 from app.models.historial import ProspectHistorial
 from app.models.mensaje import ProspectMensaje
 from app.models.prospect import ESTADOS, Prospect
@@ -29,6 +30,8 @@ from app.schemas.admin import (
     DashboardComparativa,
     DeviceIn,
     EtiguelLead,
+    EtiguelMirrorItem,
+    EtiguelMirrorMensajeOut,
     EventoOut,
     FiltrosCliente,
     OpcionFiltro,
@@ -263,6 +266,45 @@ def etiguel_leads():
     except Exception as e:
         log.warning("No se pudieron traer los leads de Etiguel: %s", e)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Error consultando Monday")
+
+
+@router.get("/etiguel/mirror", response_model=list[EtiguelMirrorItem])
+def etiguel_mirror(tipo: str | None = Query(None), db: Session = Depends(get_db)):
+    """Leads/prospects de Etiguel que Camila contactó, espejados a la app (APP.7).
+    Ordenados por última actividad (más reciente arriba). `tipo` opcional filtra
+    'lead' o 'prospect'."""
+    q = db.query(EtiguelMirror)
+    if tipo in ("lead", "prospect"):
+        q = q.filter(EtiguelMirror.tipo == tipo)
+    items = q.order_by(EtiguelMirror.ultima_actividad.desc()).all()
+    return [
+        EtiguelMirrorItem(
+            id=m.id,
+            tipo=m.tipo,
+            item_id=m.item_id,
+            nombre=m.nombre,
+            telefono=m.telefono,
+            email=m.email,
+            estado=m.estado,
+            ultima_actividad=m.ultima_actividad,
+            cant_mensajes=len(m.mensajes),
+        )
+        for m in items
+    ]
+
+
+@router.get("/etiguel/mirror/{mirror_id}/mensajes", response_model=list[EtiguelMirrorMensajeOut])
+def etiguel_mirror_mensajes(mirror_id: int, db: Session = Depends(get_db)):
+    """Conversación de Camila con un item espejado de Etiguel (orden cronológico)."""
+    mirror = db.get(EtiguelMirror, mirror_id)
+    if not mirror:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No encontrado")
+    return (
+        db.query(EtiguelMirrorMensaje)
+        .filter(EtiguelMirrorMensaje.mirror_id == mirror_id)
+        .order_by(EtiguelMirrorMensaje.fecha.asc(), EtiguelMirrorMensaje.id.asc())
+        .all()
+    )
 
 
 @router.get("/overview", response_model=AdminOverview)

@@ -13,12 +13,12 @@ import {
 import {
   DashboardStats,
   ETIGUEL_TENANT_ID,
-  EtiguelLead,
+  EtiguelMirrorItem,
   FiltrosCliente,
   ProspectRow,
   ProspectsFiltro,
   getClienteStats,
-  getEtiguelLeads,
+  getEtiguelMirror,
   getFiltrosCliente,
   getProspectsCliente,
   getPushPref,
@@ -38,7 +38,9 @@ export default function ClienteViewScreen({ route, navigation }: ClienteViewProp
   const { token } = useAuth();
 
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [leads, setLeads] = useState<EtiguelLead[]>([]);
+  const [mirror, setMirror] = useState<EtiguelMirrorItem[]>([]);
+  const [expandLeads, setExpandLeads] = useState(true);
+  const [expandProspects, setExpandProspects] = useState(true);
   const [filtrosOpts, setFiltrosOpts] = useState<FiltrosCliente | null>(null);
   const [filtro, setFiltro] = useState<ProspectsFiltro>({});
   const [prospects, setProspects] = useState<ProspectRow[]>([]);
@@ -75,7 +77,7 @@ export default function ClienteViewScreen({ route, navigation }: ClienteViewProp
         getClienteStats(token, tenantId),
         (async () => {
           if (esEtiguel) {
-            setLeads(await getEtiguelLeads(token));
+            setMirror(await getEtiguelMirror(token));
           } else {
             const [f] = await Promise.all([
               getFiltrosCliente(token, tenantId),
@@ -132,6 +134,10 @@ export default function ClienteViewScreen({ route, navigation }: ClienteViewProp
   const maxEstado = Math.max(1, ...stats.por_estado.map((e) => e.count));
   const maxTermino = Math.max(1, ...stats.por_termino.map((t) => t.encontrados));
 
+  // Etiguel: espejo separado en leads / prospects (backend ya los manda por más reciente).
+  const mirrorLeads = mirror.filter((m) => m.tipo === "lead");
+  const mirrorProspects = mirror.filter((m) => m.tipo === "prospect");
+
   const header = (
     <View>
       {/* ── Interruptor de push de este cliente (APP.4) ──────────── */}
@@ -181,14 +187,33 @@ export default function ClienteViewScreen({ route, navigation }: ClienteViewProp
         </Section>
       ) : null}
 
-      {/* ── Leads (solo Etiguel) ─────────────────────────────────── */}
+      {/* ── Etiguel: contactados por Camila (espejo, APP.7) ──────── */}
       {esEtiguel ? (
-        <Section title={`Leads (${leads.length})`}>
-          {leads.map((l, i) => (
-            <LeadCard key={`${i}-${l.descripcion}`} lead={l} />
-          ))}
-          {leads.length === 0 ? <Text style={styles.empty}>Sin leads en el período.</Text> : null}
-        </Section>
+        <View style={{ marginTop: 20 }}>
+          <CollapsibleSection
+            title="Leads"
+            count={mirrorLeads.length}
+            expanded={expandLeads}
+            onToggle={() => setExpandLeads((v) => !v)}
+          >
+            {mirrorLeads.map((m) => (
+              <MirrorCard key={m.id} item={m} onPress={() => navigation.navigate("EtiguelMirrorDetail", { item: m })} />
+            ))}
+            {mirrorLeads.length === 0 ? <Text style={styles.empty}>Todavía no contactó ningún lead.</Text> : null}
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Prospects"
+            count={mirrorProspects.length}
+            expanded={expandProspects}
+            onToggle={() => setExpandProspects((v) => !v)}
+          >
+            {mirrorProspects.map((m) => (
+              <MirrorCard key={m.id} item={m} onPress={() => navigation.navigate("EtiguelMirrorDetail", { item: m })} />
+            ))}
+            {mirrorProspects.length === 0 ? <Text style={styles.empty}>Todavía no contactó ningún prospect.</Text> : null}
+          </CollapsibleSection>
+        </View>
       ) : null}
 
       {/* ── Prospects (Prospia) ──────────────────────────────────── */}
@@ -336,23 +361,53 @@ function ProspectCard({ prospect, onPress }: { prospect: ProspectRow; onPress: (
   );
 }
 
-// ── Card de lead de Etiguel (igual que la pantalla previa) ────────────────────
-function LeadCard({ lead }: { lead: EtiguelLead }) {
+// ── Sección colapsable (Leads / Prospects de Etiguel) ─────────────────────────
+function CollapsibleSection({
+  title,
+  count,
+  expanded,
+  onToggle,
+  children,
+}: {
+  title: string;
+  count: number;
+  expanded: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
   return (
-    <View style={styles.leadCard}>
-      <View style={styles.cardRow}>
-        <Text style={styles.cardTitle} numberOfLines={2}>{lead.descripcion}</Text>
-        <Text style={styles.leadEstado}>{lead.estado}</Text>
-      </View>
-      {lead.nombre ? <Text style={styles.leadNombre}>{lead.nombre}</Text> : null}
-      <View style={styles.cardMeta}>
-        {lead.origen ? <Text style={styles.metaItem}>📍 {lead.origen}</Text> : null}
-        {lead.fecha_creacion ? <Text style={styles.metaItem}>🗓 {lead.fecha_creacion}</Text> : null}
-      </View>
-      {lead.telefono ? <Text style={styles.leadContacto}>📞 {lead.telefono}</Text> : null}
-      {lead.email ? <Text style={styles.leadContacto}>✉️ {lead.email}</Text> : null}
+    <View style={styles.collapsible}>
+      <TouchableOpacity style={styles.collapsibleHeader} onPress={onToggle} activeOpacity={0.7}>
+        <Text style={styles.collapsibleArrow}>{expanded ? "▾" : "▸"}</Text>
+        <Text style={styles.collapsibleTitle}>{title}</Text>
+        <Text style={styles.collapsibleCount}>{count}</Text>
+      </TouchableOpacity>
+      {expanded ? <View>{children}</View> : null}
     </View>
   );
+}
+
+// ── Card de item espejado de Etiguel (lead/prospect) ──────────────────────────
+function MirrorCard({ item, onPress }: { item: EtiguelMirrorItem; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={styles.card} onPress={onPress}>
+      <View style={styles.cardRow}>
+        <Text style={styles.cardTitle} numberOfLines={1}>{item.nombre ?? "(sin nombre)"}</Text>
+        {item.estado ? <Text style={styles.leadEstado}>{item.estado}</Text> : null}
+      </View>
+      <View style={styles.cardMeta}>
+        {item.telefono ? <Text style={styles.metaItem}>📞 {item.telefono}</Text> : null}
+        {item.cant_mensajes > 0 ? <Text style={styles.metaItem}>💬 {item.cant_mensajes}</Text> : null}
+        <Text style={styles.metaItem}>🕒 {fmtFecha(item.ultima_actividad)}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function fmtFecha(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
 // ── Modal de filtros ─────────────────────────────────────────────────────────
@@ -500,10 +555,13 @@ const styles = StyleSheet.create({
   cardMeta: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 8 },
   metaItem: { color: colors.textDim, fontSize: 12 },
 
-  leadCard: { backgroundColor: colors.card, borderRadius: 12, padding: 14, marginBottom: 10 },
   leadEstado: { color: colors.primary, fontSize: 11, fontWeight: "700", borderColor: colors.primary, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, overflow: "hidden" },
-  leadNombre: { color: colors.textDim, fontSize: 13, marginTop: 4 },
-  leadContacto: { color: colors.text, fontSize: 13, marginTop: 4 },
+
+  collapsible: { marginBottom: 14 },
+  collapsibleHeader: { flexDirection: "row", alignItems: "center", paddingVertical: 10, borderBottomColor: colors.border, borderBottomWidth: 1, marginBottom: 10 },
+  collapsibleArrow: { color: colors.textDim, fontSize: 14, width: 20 },
+  collapsibleTitle: { color: colors.text, fontSize: 16, fontWeight: "700", flex: 1 },
+  collapsibleCount: { color: colors.textDim, fontSize: 14, fontWeight: "700" },
 
   modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   modalSheet: { backgroundColor: colors.bg, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 18, maxHeight: "80%" },

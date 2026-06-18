@@ -165,6 +165,18 @@ export interface ProspectsFiltro {
   q?: string | null;
 }
 
+export interface EtiguelMirrorItem {
+  id: number;
+  tipo: string; // "lead" | "prospect"
+  item_id: string;
+  nombre: string | null;
+  telefono: string | null;
+  email: string | null;
+  estado: string | null;
+  ultima_actividad: string;
+  cant_mensajes: number;
+}
+
 // tenant_id sentinela de Etiguel (coincide con el backend)
 export const ETIGUEL_TENANT_ID = -1;
 
@@ -227,6 +239,13 @@ export const getEventos = (token: string) => request<Evento[]>("/admin/eventos",
 
 export const getEtiguelLeads = (token: string) =>
   request<EtiguelLead[]>("/admin/etiguel/leads", {}, token);
+
+// Espejo de Etiguel (APP.7): leads/prospects que Camila contactó, más reciente arriba.
+export const getEtiguelMirror = (token: string) =>
+  request<EtiguelMirrorItem[]>("/admin/etiguel/mirror", {}, token);
+
+export const getEtiguelMirrorMensajes = (token: string, mirrorId: number) =>
+  request<MensajeRow[]>(`/admin/etiguel/mirror/${mirrorId}/mensajes`, {}, token);
 
 export function getProspectsCliente(
   token: string,

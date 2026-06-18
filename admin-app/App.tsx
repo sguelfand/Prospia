@@ -18,6 +18,7 @@ import { registerForPush } from "./src/push";
 import AvisosScreen from "./src/screens/AvisosScreen";
 import ClienteViewScreen from "./src/screens/ClienteViewScreen";
 import DashboardScreen from "./src/screens/DashboardScreen";
+import EtiguelMirrorDetailScreen from "./src/screens/EtiguelMirrorDetailScreen";
 import LockScreen from "./src/screens/LockScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import ProspectDetailScreen from "./src/screens/ProspectDetailScreen";
@@ -55,6 +56,7 @@ function AppDrawer() {
       <Drawer.Screen name="Dashboard" component={DashboardScreen} options={{ title: "Dashboard" }} />
       <Drawer.Screen name="ClienteView" component={ClienteViewScreen} options={{ title: "" }} />
       <Drawer.Screen name="ProspectDetail" component={ProspectDetailScreen} options={{ title: "" }} />
+      <Drawer.Screen name="EtiguelMirrorDetail" component={EtiguelMirrorDetailScreen} options={{ title: "" }} />
       <Drawer.Screen name="Avisos" component={AvisosScreen} options={{ title: "Avisos" }} />
     </Drawer.Navigator>
   );

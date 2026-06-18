@@ -1,7 +1,7 @@
 import type { DrawerScreenProps } from "@react-navigation/drawer";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
-import type { ProspectRow } from "./api";
+import type { EtiguelMirrorItem, ProspectRow } from "./api";
 
 // ── Área autenticada: Drawer (menú lateral) ──────────────────────────────────
 // El menú lista el Dashboard (home) + cada cliente. ClienteView y ProspectDetail
@@ -14,6 +14,7 @@ export type DrawerParamList = {
     clienteNombre: string;
     prospect: ProspectRow;
   };
+  EtiguelMirrorDetail: { item: EtiguelMirrorItem };
   Avisos: undefined;
 };
 
@@ -25,5 +26,6 @@ export type AuthStackParamList = {
 export type DashboardProps = DrawerScreenProps<DrawerParamList, "Dashboard">;
 export type ClienteViewProps = DrawerScreenProps<DrawerParamList, "ClienteView">;
 export type ProspectDetailProps = DrawerScreenProps<DrawerParamList, "ProspectDetail">;
+export type EtiguelMirrorDetailProps = DrawerScreenProps<DrawerParamList, "EtiguelMirrorDetail">;
 export type AvisosProps = DrawerScreenProps<DrawerParamList, "Avisos">;
 export type LoginProps = NativeStackScreenProps<AuthStackParamList, "Login">;
