@@ -15,6 +15,7 @@ export type DrawerParamList = {
     prospect: ProspectRow;
   };
   EtiguelMirrorDetail: { item: EtiguelMirrorItem };
+  Errores: undefined;
   Avisos: undefined;
 };
 
@@ -27,5 +28,6 @@ export type DashboardProps = DrawerScreenProps<DrawerParamList, "Dashboard">;
 export type ClienteViewProps = DrawerScreenProps<DrawerParamList, "ClienteView">;
 export type ProspectDetailProps = DrawerScreenProps<DrawerParamList, "ProspectDetail">;
 export type EtiguelMirrorDetailProps = DrawerScreenProps<DrawerParamList, "EtiguelMirrorDetail">;
+export type ErroresProps = DrawerScreenProps<DrawerParamList, "Errores">;
 export type AvisosProps = DrawerScreenProps<DrawerParamList, "Avisos">;
 export type LoginProps = NativeStackScreenProps<AuthStackParamList, "Login">;

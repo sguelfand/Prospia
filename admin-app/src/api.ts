@@ -177,6 +177,17 @@ export interface EtiguelMirrorItem {
   cant_mensajes: number;
 }
 
+export interface AgentError {
+  id: number; // el #número
+  fuente: string;
+  agente: string | null;
+  telefono: string | null;
+  patron: string | null;
+  contenido: string;
+  resuelto: boolean;
+  fecha: string;
+}
+
 // tenant_id sentinela de Etiguel (coincide con el backend)
 export const ETIGUEL_TENANT_ID = -1;
 
@@ -276,6 +287,15 @@ export const getHistorialProspect = (token: string, tenantId: number, prospectId
 
 export const getComparativa = (token: string) =>
   request<DashboardComparativa>("/admin/comparativa", {}, token);
+
+export const getErrores = (token: string) =>
+  request<AgentError[]>("/admin/errores", {}, token);
+
+export const resolverError = (token: string, id: number, resuelto: boolean) =>
+  request<AgentError>(`/admin/errores/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ resuelto }),
+  }, token);
 
 export const getPushPref = (token: string, tenantId: number, expoToken: string) =>
   request<{ enabled: boolean }>(

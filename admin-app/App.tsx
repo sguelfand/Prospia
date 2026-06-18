@@ -18,6 +18,7 @@ import { registerForPush } from "./src/push";
 import AvisosScreen from "./src/screens/AvisosScreen";
 import ClienteViewScreen from "./src/screens/ClienteViewScreen";
 import DashboardScreen from "./src/screens/DashboardScreen";
+import ErroresScreen from "./src/screens/ErroresScreen";
 import EtiguelMirrorDetailScreen from "./src/screens/EtiguelMirrorDetailScreen";
 import LockScreen from "./src/screens/LockScreen";
 import LoginScreen from "./src/screens/LoginScreen";
@@ -57,6 +58,7 @@ function AppDrawer() {
       <Drawer.Screen name="ClienteView" component={ClienteViewScreen} options={{ title: "" }} />
       <Drawer.Screen name="ProspectDetail" component={ProspectDetailScreen} options={{ title: "" }} />
       <Drawer.Screen name="EtiguelMirrorDetail" component={EtiguelMirrorDetailScreen} options={{ title: "" }} />
+      <Drawer.Screen name="Errores" component={ErroresScreen} options={{ title: "Errores" }} />
       <Drawer.Screen name="Avisos" component={AvisosScreen} options={{ title: "Avisos" }} />
     </Drawer.Navigator>
   );
@@ -73,8 +75,11 @@ function Routes() {
   // Al tocar una notificación, ir al feed de Avisos.
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data as { tenant_id?: number };
-      if (data?.tenant_id != null && navigationRef.isReady()) {
+      const data = response.notification.request.content.data as { tenant_id?: number; tipo?: string };
+      if (!navigationRef.isReady()) return;
+      if (data?.tipo === "agent_error") {
+        navigationRef.navigate("Errores");
+      } else if (data?.tenant_id != null) {
         navigationRef.navigate("Avisos");
       }
     });

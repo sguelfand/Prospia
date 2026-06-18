@@ -61,6 +61,11 @@ export default function DrawerContent({ navigation, state }: DrawerContentCompon
           active={activeRoute === "Avisos"}
           onPress={() => navigation.navigate("Avisos")}
         />
+        <NavItem
+          label="⚠️  Errores"
+          active={activeRoute === "Errores"}
+          onPress={() => navigation.navigate("Errores")}
+        />
 
         <Text style={styles.section}>Clientes</Text>
         {loading ? (

@@ -90,6 +90,29 @@ def notificar_evento_async(prospect_id: int, tipo: str, detalle: str | None = No
     ).start()
 
 
+def _notificar_error(error_id: int, fuente: str, contenido: str) -> None:
+    from app.database import SessionLocal
+    from app.models.device import Device
+
+    db = SessionLocal()
+    try:
+        title = f"⚠️ Error de Camila #{error_id}"
+        resumen = (contenido or "").strip().replace("\n", " ")
+        body = (f"[{fuente}] " + resumen)[:140] if resumen else f"[{fuente}] error capturado"
+        # Alerta global: a TODOS los devices (no aplica el silencio por cliente).
+        tokens = [d.expo_token for d in db.query(Device).all()]
+        _enviar(tokens, title, body, {"tipo": "agent_error", "error_id": error_id})
+    except Exception as e:
+        print(f"[PUSH] error armando alerta de error: {type(e).__name__}: {e}")
+    finally:
+        db.close()
+
+
+def notificar_error_async(error_id: int, fuente: str, contenido: str) -> None:
+    """Dispara el push de alerta de error en background (no bloquea el ingest)."""
+    threading.Thread(target=_notificar_error, args=(error_id, fuente, contenido), daemon=True).start()
+
+
 def enviar_prueba() -> int:
     """Manda una notificación de prueba a todos los devices registrados.
     Devuelve a cuántos se envió. Útil para verificar el circuito de push."""

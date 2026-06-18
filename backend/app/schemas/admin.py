@@ -128,6 +128,32 @@ class EtiguelMirrorItem(BaseModel):
     cant_mensajes: int
 
 
+class AgentErrorIn(BaseModel):
+    """Payload del plugin outbound-guard cuando bloquea un error de Camila."""
+    contenido: str
+    fuente: str = "etiguel"
+    agente: str | None = None
+    telefono: str | None = None
+    patron: str | None = None
+
+
+class AgentErrorOut(BaseModel):
+    id: int                  # el "#número"
+    fuente: str
+    agente: str | None
+    telefono: str | None
+    patron: str | None
+    contenido: str
+    resuelto: bool
+    fecha: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AgentErrorResolve(BaseModel):
+    resuelto: bool
+
+
 class EventoOut(BaseModel):
     """Un evento del feed de Avisos: primera respuesta o interesado."""
     id: int

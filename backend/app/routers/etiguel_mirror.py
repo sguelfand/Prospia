@@ -11,8 +11,10 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.database import get_db
+from app.models.agent_error import AgentError
 from app.models.etiguel_mirror import EtiguelMirror, EtiguelMirrorMensaje
-from app.schemas.admin import EtiguelMirrorIn
+from app.schemas.admin import AgentErrorIn, EtiguelMirrorIn
+from app.services import push
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 
@@ -77,3 +79,48 @@ def ingest_etiguel_mirror(
 
     db.commit()
     return {"ok": True, "tipo": mirror.tipo, "item_id": mirror.item_id, "mensaje_agregado": agregado}
+
+
+@router.post("/agent-error")
+def ingest_agent_error(
+    body: AgentErrorIn,
+    x_mirror_token: str | None = Header(None),
+    db: Session = Depends(get_db),
+):
+    """El outbound-guard reporta acá un error de Camila que bloqueó (no llegó al
+    cliente), para que lo veamos en la app y nos llegue un push. Devuelve el
+    `id` = el #número con el que se identifica."""
+    _check_token(x_mirror_token)
+    err = AgentError(
+        contenido=(body.contenido or "")[:5000],
+        fuente=body.fuente or "etiguel",
+        agente=body.agente,
+        telefono=body.telefono,
+        patron=body.patron,
+    )
+    db.add(err)
+    db.commit()
+    db.refresh(err)
+    # Push de alerta (no bloquea; best-effort).
+    try:
+        push.notificar_error_async(err.id, err.fuente, err.contenido)
+    except Exception:
+        pass
+    return {"ok": True, "id": err.id}
+
+
+@router.delete("/agent-error/{error_id}")
+def delete_agent_error(
+    error_id: int,
+    x_mirror_token: str | None = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Borra un error ya resuelto. Lo llama Claude cuando el problema se solucionó
+    (procedimiento: Sebi pasa el #número, se arregla, se borra). Auth: token."""
+    _check_token(x_mirror_token)
+    err = db.get(AgentError, error_id)
+    if not err:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No existe ese error")
+    db.delete(err)
+    db.commit()
+    return {"ok": True, "borrado": error_id}

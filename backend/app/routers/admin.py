@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_superadmin
 from app.database import get_db
+from app.models.agent_error import AgentError
 from app.models.device import Device
 from app.models.etiguel_mirror import EtiguelMirror, EtiguelMirrorMensaje
 from app.models.historial import ProspectHistorial
@@ -25,6 +26,8 @@ from app.models.user import User
 from app.routers.prospects import _enrich
 from app.schemas.admin import (
     AdminOverview,
+    AgentErrorOut,
+    AgentErrorResolve,
     ClienteComparativa,
     ClienteResumen,
     DashboardComparativa,
@@ -305,6 +308,28 @@ def etiguel_mirror_mensajes(mirror_id: int, db: Session = Depends(get_db)):
         .order_by(EtiguelMirrorMensaje.fecha.asc(), EtiguelMirrorMensaje.id.asc())
         .all()
     )
+
+
+@router.get("/errores", response_model=list[AgentErrorOut])
+def listar_errores(incluir_resueltos: bool = Query(True), db: Session = Depends(get_db)):
+    """Errores de Camila capturados por el outbound-guard, más reciente arriba.
+    El `id` es el #número con el que Sebi los identifica."""
+    q = db.query(AgentError)
+    if not incluir_resueltos:
+        q = q.filter(AgentError.resuelto.is_(False))
+    return q.order_by(AgentError.fecha.desc()).all()
+
+
+@router.patch("/errores/{error_id}", response_model=AgentErrorOut)
+def resolver_error(error_id: int, body: AgentErrorResolve, db: Session = Depends(get_db)):
+    """Marca/desmarca un error como resuelto (el tilde de la app)."""
+    err = db.get(AgentError, error_id)
+    if not err:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No existe ese error")
+    err.resuelto = body.resuelto
+    db.commit()
+    db.refresh(err)
+    return err
 
 
 @router.get("/overview", response_model=AdminOverview)
