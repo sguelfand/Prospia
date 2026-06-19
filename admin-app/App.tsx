@@ -5,13 +5,16 @@ import {
 } from "@react-navigation/native";
 import { createDrawerNavigator } from "@react-navigation/drawer";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { Sora_600SemiBold, Sora_700Bold, Sora_800ExtraBold, useFonts } from "@expo-google-fonts/sora";
 import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
+import { View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { AuthProvider, useAuth } from "./src/auth";
 import DrawerContent from "./src/components/DrawerContent";
+import { ProspiaMark } from "./src/components/Logo";
 import { Loader } from "./src/components/ui";
 import { AuthStackParamList, DrawerParamList } from "./src/navigation";
 import { registerForPush } from "./src/push";
@@ -46,6 +49,12 @@ const screenOptions = {
   headerTintColor: colors.text,
   drawerStyle: { backgroundColor: colors.card },
   sceneStyle: { backgroundColor: colors.bg },
+  // Isotipo siempre arriba a la derecha, en cualquier pantalla.
+  headerRight: () => (
+    <View style={{ marginRight: 16 }}>
+      <ProspiaMark size={26} />
+    </View>
+  ),
 } as const;
 
 function AppDrawer() {
@@ -101,6 +110,16 @@ function Routes() {
 }
 
 export default function App() {
+  const [fontsLoaded] = useFonts({ Sora_600SemiBold, Sora_700Bold, Sora_800ExtraBold });
+
+  if (!fontsLoaded) {
+    return (
+      <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
+        <Loader />
+      </GestureHandlerRootView>
+    );
+  }
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>

@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ClienteResumen, getClientes } from "../api";
 import { useAuth } from "../auth";
+import { ProspiaLogo } from "./Logo";
 import { colors } from "../theme";
 
 /** Contenido del menú lateral: Dashboard (home) + cada cliente + Avisos + salir.
@@ -45,9 +46,9 @@ export default function DrawerContent({ navigation, state }: DrawerContentCompon
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
-      <View style={styles.brandRow}>
-        <View style={styles.signal} />
-        <Text style={styles.brand}>Prospia Admin</Text>
+      <View style={styles.brandBlock}>
+        <ProspiaLogo markSize={28} />
+        <Text style={styles.brandSub}>Admin</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -122,9 +123,8 @@ function NavItem({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.card },
-  brandRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, marginBottom: 8 },
-  signal: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary, marginRight: 8 },
-  brand: { color: colors.text, fontSize: 18, fontWeight: "800" },
+  brandBlock: { paddingHorizontal: 16, marginBottom: 10 },
+  brandSub: { color: colors.textDim, fontSize: 11, fontWeight: "700", letterSpacing: 2, textTransform: "uppercase", marginTop: 4, marginLeft: 40 },
   scroll: { paddingHorizontal: 8, paddingBottom: 20 },
   section: { color: colors.textDim, fontSize: 12, fontWeight: "700", marginTop: 18, marginBottom: 6, marginLeft: 12, textTransform: "uppercase" },
   item: {

@@ -40,7 +40,8 @@
         {
           "faceIDPermission": "Permitir que Prospia Admin use Face ID para desbloquear la app."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "runtimeVersion": {
       "policy": "appVersion"
