@@ -371,11 +371,20 @@ def listar_pendientes(
 
 @router.post("/pendientes", response_model=PendienteOut, status_code=status.HTTP_201_CREATED)
 def crear_pendiente(body: PendienteIn, db: Session = Depends(get_db)):
-    """Alta manual de un pendiente desde la app (texto + prioridad + área)."""
+    """Alta manual de un pendiente desde la app o la web (texto + prioridad +
+    área + campos ricos opcionales)."""
+    def _clean(v):
+        v = (v or "").strip()
+        return v or None
     p = Pendiente(
         texto=body.texto.strip(),
         prioridad=body.prioridad if body.prioridad in ("alta", "media", "baja") else "media",
         area=body.area if body.area in ("app", "web", "etiguel") else "app",
+        contexto=_clean(body.contexto),
+        que_armar=_clean(body.que_armar),
+        consideraciones=_clean(body.consideraciones),
+        depende=_clean(body.depende),
+        alcance=_clean(body.alcance),
     )
     db.add(p)
     db.commit()
@@ -397,6 +406,11 @@ def editar_pendiente(pendiente_id: int, body: PendienteUpdate, db: Session = Dep
         p.area = body.area
     if body.hecho is not None:
         p.hecho = body.hecho
+    # Campos ricos: si vienen en el body (no None), se actualizan; "" → NULL.
+    for campo in ("contexto", "que_armar", "consideraciones", "depende", "alcance"):
+        val = getattr(body, campo)
+        if val is not None:
+            setattr(p, campo, val.strip() or None)
     db.commit()
     db.refresh(p)
     return p

@@ -9,8 +9,9 @@ from app.database import Base
 
 class Pendiente(Base):
     """Una cosa pendiente de hacer (cross-proyecto). Lo carga Sebi desde la app
-    o se migran los que ya estaban en el tracker HTML local. Modelo simple:
-    texto + prioridad + área (para dónde es)."""
+    o desde la web (prospia.app/pendientes.html). Campos base: texto + prioridad
+    + área. Campos ricos (opcionales) = las secciones del tracker original:
+    contexto, qué armar, consideraciones, depende, alcance (texto multilínea)."""
     __tablename__ = "pendientes"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -21,3 +22,9 @@ class Pendiente(Base):
     fecha: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
     )
+    # Detalle rico (opcional) — secciones que se ven al desplegar el ítem.
+    contexto: Mapped[str | None] = mapped_column(Text, nullable=True)
+    que_armar: Mapped[str | None] = mapped_column(Text, nullable=True)
+    consideraciones: Mapped[str | None] = mapped_column(Text, nullable=True)
+    depende: Mapped[str | None] = mapped_column(Text, nullable=True)
+    alcance: Mapped[str | None] = mapped_column(Text, nullable=True)

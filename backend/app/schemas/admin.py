@@ -155,10 +155,15 @@ class AgentErrorResolve(BaseModel):
 
 
 class PendienteIn(BaseModel):
-    """Alta de un pendiente desde la app."""
+    """Alta de un pendiente desde la app o la web."""
     texto: str
     prioridad: str = "media"   # alta | media | baja
     area: str = "app"          # app | web | etiguel
+    contexto: str | None = None
+    que_armar: str | None = None
+    consideraciones: str | None = None
+    depende: str | None = None
+    alcance: str | None = None
 
 
 class PendienteUpdate(BaseModel):
@@ -167,6 +172,11 @@ class PendienteUpdate(BaseModel):
     prioridad: str | None = None
     area: str | None = None
     hecho: bool | None = None
+    contexto: str | None = None
+    que_armar: str | None = None
+    consideraciones: str | None = None
+    depende: str | None = None
+    alcance: str | None = None
 
 
 class PendienteOut(BaseModel):
@@ -176,6 +186,11 @@ class PendienteOut(BaseModel):
     area: str
     hecho: bool
     fecha: datetime
+    contexto: str | None = None
+    que_armar: str | None = None
+    consideraciones: str | None = None
+    depende: str | None = None
+    alcance: str | None = None
 
     model_config = {"from_attributes": True}
 
