@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Swipeable } from "react-native-gesture-handler";
 
 import { Area, Pendiente, Prioridad, borrarPendiente, crearPendiente, editarPendiente, getPendientes } from "../api";
 import { useAuth } from "../auth";
@@ -92,7 +93,7 @@ export default function PendientesScreen(_props: PendientesProps) {
           <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />
         }
         renderItem={({ item }) => (
-          <PendienteCard item={item} onDone={() => marcarHecho(item)} onDelete={() => borrar(item)} />
+          <SwipeablePendiente item={item} onDone={() => marcarHecho(item)} onDelete={() => borrar(item)} />
         )}
       />
 
@@ -101,12 +102,37 @@ export default function PendientesScreen(_props: PendientesProps) {
   );
 }
 
-function PendienteCard({ item, onDone, onDelete }: { item: Pendiente; onDone: () => void; onDelete: () => void }) {
+function SwipeablePendiente({ item, onDone, onDelete }: { item: Pendiente; onDone: () => void; onDelete: () => void }) {
+  const leftAction = () => (
+    <View style={[styles.action, styles.actionDone]}>
+      <Text style={styles.actionIcon}>✓</Text>
+    </View>
+  );
+  const rightAction = () => (
+    <View style={[styles.action, styles.actionDelete, { alignItems: "flex-end" }]}>
+      <Text style={styles.actionIcon}>✕</Text>
+    </View>
+  );
+  return (
+    <Swipeable
+      renderLeftActions={leftAction}
+      renderRightActions={rightAction}
+      leftThreshold={70}
+      rightThreshold={70}
+      onSwipeableOpen={(direction) => {
+        // derecha → verde ✓ (terminado); izquierda → rojo ✕ (borrar).
+        if (direction === "right") onDone();
+        else onDelete();
+      }}
+    >
+      <PendienteCard item={item} />
+    </Swipeable>
+  );
+}
+
+function PendienteCard({ item }: { item: Pendiente }) {
   return (
     <View style={styles.card}>
-      <TouchableOpacity style={styles.tilde} onPress={onDone} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-        <Text style={styles.tildeText}>○</Text>
-      </TouchableOpacity>
       <View style={styles.cardBody}>
         <Text style={styles.texto}>{item.texto}</Text>
         <View style={styles.badges}>
@@ -118,9 +144,6 @@ function PendienteCard({ item, onDone, onDelete }: { item: Pendiente; onDone: ()
           </Text>
         </View>
       </View>
-      <TouchableOpacity onPress={onDelete} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-        <Text style={styles.del}>✕</Text>
-      </TouchableOpacity>
     </View>
   );
 }
@@ -217,13 +240,15 @@ const styles = StyleSheet.create({
   addBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
 
   card: { backgroundColor: colors.card, borderRadius: 12, padding: 14, marginBottom: 10, flexDirection: "row", alignItems: "center" },
-  tilde: { marginRight: 10 },
-  tildeText: { color: colors.textDim, fontSize: 22 },
   cardBody: { flex: 1 },
   texto: { color: colors.text, fontSize: 14 },
   badges: { flexDirection: "row", gap: 8, marginTop: 8 },
   badge: { fontSize: 11, fontWeight: "700", borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, overflow: "hidden", textTransform: "capitalize" },
-  del: { color: colors.textDim, fontSize: 16, marginLeft: 10 },
+
+  action: { flex: 1, justifyContent: "center", paddingHorizontal: 24, borderRadius: 12, marginBottom: 10 },
+  actionDone: { backgroundColor: colors.green, alignItems: "flex-start" },
+  actionDelete: { backgroundColor: colors.red },
+  actionIcon: { color: "#fff", fontSize: 24, fontWeight: "800" },
 
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   sheet: { backgroundColor: colors.bg, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 18 },
