@@ -25,15 +25,18 @@ import {
   setPushPref,
 } from "../api";
 import { useAuth } from "../auth";
+import { Icon, IconText } from "../components/Icon";
 import { Bar, ErrorBox, KpiCard, Loader, Section } from "../components/ui";
 import { ClienteViewProps } from "../navigation";
 import { getExpoTokenAsync } from "../push";
 import { colors, estadoColor, estadoLabel } from "../theme";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const PAGE_SIZE = 50;
 
 export default function ClienteViewScreen({ route, navigation }: ClienteViewProps) {
   const { tenantId, nombre } = route.params;
+  const insets = useSafeAreaInsets();
   const esEtiguel = tenantId === ETIGUEL_TENANT_ID;
   const { token } = useAuth();
 
@@ -238,7 +241,7 @@ export default function ClienteViewScreen({ route, navigation }: ClienteViewProp
     return (
       <FlatList
         style={styles.container}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
         data={[]}
         renderItem={null}
         ListHeaderComponent={header}
@@ -252,7 +255,7 @@ export default function ClienteViewScreen({ route, navigation }: ClienteViewProp
   return (
     <View style={styles.container}>
       <FlatList
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
         data={prospects}
         keyExtractor={(p) => String(p.id)}
         ListHeaderComponent={header}
@@ -324,7 +327,10 @@ function PushToggle({ tenantId }: { tenantId: number }) {
 
   return (
     <View style={styles.pushRow}>
-      <Text style={styles.pushLabel}>🔔 Notificaciones de este cliente</Text>
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <Icon name="bell" size={16} color={colors.text} />
+        <Text style={[styles.pushLabel, { marginLeft: 6 }]}>Notificaciones de este cliente</Text>
+      </View>
       <Switch
         value={enabled}
         onValueChange={onToggle}
@@ -352,10 +358,10 @@ function ProspectCard({ prospect, onPress }: { prospect: ProspectRow; onPress: (
         </Text>
       </View>
       <View style={styles.cardMeta}>
-        {prospect.termino_texto ? <Text style={styles.metaItem}>🔍 {prospect.termino_texto}</Text> : null}
-        {prospect.clasificacion ? <Text style={styles.metaItem}>⭐ {prospect.clasificacion}</Text> : null}
-        <Text style={styles.metaItem}>📨 {prospect.cant_contactos}</Text>
-        {prospect.cant_mensajes > 0 ? <Text style={styles.metaItem}>💬 {prospect.cant_mensajes}</Text> : null}
+        {prospect.termino_texto ? <IconText name="search" text={prospect.termino_texto} /> : null}
+        {prospect.clasificacion ? <IconText name="star" text={prospect.clasificacion} /> : null}
+        <IconText name="send" text={String(prospect.cant_contactos)} />
+        {prospect.cant_mensajes > 0 ? <IconText name="message" text={String(prospect.cant_mensajes)} /> : null}
       </View>
     </TouchableOpacity>
   );
@@ -396,9 +402,9 @@ function MirrorCard({ item, onPress }: { item: EtiguelMirrorItem; onPress: () =>
         {item.estado ? <Text style={styles.leadEstado}>{item.estado}</Text> : null}
       </View>
       <View style={styles.cardMeta}>
-        {item.telefono ? <Text style={styles.metaItem}>📞 {item.telefono}</Text> : null}
-        {item.cant_mensajes > 0 ? <Text style={styles.metaItem}>💬 {item.cant_mensajes}</Text> : null}
-        <Text style={styles.metaItem}>🕒 {fmtFecha(item.ultima_actividad)}</Text>
+        {item.telefono ? <IconText name="phone" text={item.telefono} /> : null}
+        {item.cant_mensajes > 0 ? <IconText name="message" text={String(item.cant_mensajes)} /> : null}
+        <IconText name="clock" text={fmtFecha(item.ultima_actividad)} />
       </View>
     </TouchableOpacity>
   );
@@ -425,6 +431,7 @@ function FiltroModal({
   onApply: (f: ProspectsFiltro) => void;
 }) {
   const [draft, setDraft] = useState<ProspectsFiltro>(filtro);
+  const insets = useSafeAreaInsets();
   useEffect(() => {
     if (visible) setDraft(filtro);
   }, [visible, filtro]);
@@ -436,7 +443,7 @@ function FiltroModal({
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.modalBackdrop}>
-        <View style={styles.modalSheet}>
+        <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 18 }]}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Filtrar prospects</Text>
             <TouchableOpacity onPress={() => onApply({})}>

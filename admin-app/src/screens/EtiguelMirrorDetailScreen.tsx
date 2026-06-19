@@ -5,9 +5,12 @@ import { MensajeRow, getEtiguelMirrorMensajes } from "../api";
 import { useAuth } from "../auth";
 import { Loader, Section } from "../components/ui";
 import { EtiguelMirrorDetailProps } from "../navigation";
+import { IconText } from "../components/Icon";
 import { colors } from "../theme";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function EtiguelMirrorDetailScreen({ route, navigation }: EtiguelMirrorDetailProps) {
+  const insets = useSafeAreaInsets();
   const { item } = route.params;
   const { token } = useAuth();
   const [mensajes, setMensajes] = useState<MensajeRow[]>([]);
@@ -37,7 +40,7 @@ export default function EtiguelMirrorDetailScreen({ route, navigation }: Etiguel
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />
       }
@@ -48,8 +51,8 @@ export default function EtiguelMirrorDetailScreen({ route, navigation }: Etiguel
           <Text style={styles.tag}>{item.tipo === "lead" ? "Lead" : "Prospect"}</Text>
         </View>
         {item.estado ? <Text style={styles.meta}>Estado: {item.estado}</Text> : null}
-        {item.telefono ? <Text style={styles.meta}>📞 {item.telefono}</Text> : null}
-        {item.email ? <Text style={styles.meta}>✉️ {item.email}</Text> : null}
+        {item.telefono ? <IconText name="phone" text={item.telefono} size={14} textStyle={{ fontSize: 13, marginTop: 4 }} /> : null}
+        {item.email ? <IconText name="mail" text={item.email} size={14} textStyle={{ fontSize: 13, marginTop: 4 }} /> : null}
       </View>
 
       <Section title={`Conversación con Camila (${mensajes.length})`}>

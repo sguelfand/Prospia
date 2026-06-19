@@ -6,8 +6,10 @@ import { useAuth } from "../auth";
 import { Bar, ErrorBox, KpiCard, Loader, Section } from "../components/ui";
 import { DashboardProps } from "../navigation";
 import { colors } from "../theme";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function DashboardScreen({ navigation }: DashboardProps) {
+  const insets = useSafeAreaInsets();
   const { token } = useAuth();
   const [data, setData] = useState<DashboardComparativa | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,7 +46,7 @@ export default function DashboardScreen({ navigation }: DashboardProps) {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />
       }

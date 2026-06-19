@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { useAuth } from "../auth";
+import { Icon } from "../components/Icon";
 import { colors } from "../theme";
 
 export default function LockScreen() {
@@ -22,7 +23,9 @@ export default function LockScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.lock}>🔒</Text>
+      <View style={styles.lock}>
+        <Icon name="lock" size={44} color={colors.textDim} strokeWidth={1.6} />
+      </View>
       <Text style={styles.title}>Prospia Admin</Text>
       <Text style={styles.subtitle}>Sesión bloqueada</Text>
 
@@ -41,7 +44,7 @@ export default function LockScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center", padding: 24 },
-  lock: { fontSize: 56, marginBottom: 16 },
+  lock: { marginBottom: 16 },
   title: { color: colors.text, fontSize: 26, fontWeight: "800" },
   subtitle: { color: colors.textDim, fontSize: 15, marginTop: 4, marginBottom: 32 },
   button: { backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 16, paddingHorizontal: 24, alignItems: "center" },

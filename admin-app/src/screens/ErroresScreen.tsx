@@ -2,16 +2,20 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
 
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 import { AgentError, deleteError, getErrores, resolverError } from "../api";
 import { useAuth } from "../auth";
 import { ErrorBox, Loader } from "../components/ui";
 import { ErroresProps } from "../navigation";
+import { IconText } from "../components/Icon";
 import { colors } from "../theme";
 
 type Filtro = "activos" | "solucionados";
 
 export default function ErroresScreen(_props: ErroresProps) {
   const { token } = useAuth();
+  const insets = useSafeAreaInsets();
   const [errores, setErrores] = useState<AgentError[]>([]);
   const [filtro, setFiltro] = useState<Filtro>("activos");
   const [loading, setLoading] = useState(true);
@@ -71,7 +75,7 @@ export default function ErroresScreen(_props: ErroresProps) {
       </View>
 
       <FlatList
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
         data={visibles}
         keyExtractor={(e) => String(e.id)}
         ListHeaderComponent={error ? <ErrorBox message={error} onRetry={load} /> : null}
@@ -151,8 +155,8 @@ function ErrorCard({ err }: { err: AgentError }) {
       </View>
       <Text style={styles.contenido}>{err.contenido}</Text>
       <View style={styles.metaRow}>
-        {err.telefono ? <Text style={styles.meta}>📞 {err.telefono}</Text> : null}
-        {err.patron ? <Text style={styles.meta} numberOfLines={1}>🔎 {err.patron}</Text> : null}
+        {err.telefono ? <IconText name="phone" text={err.telefono} /> : null}
+        {err.patron ? <IconText name="search" text={err.patron} /> : null}
       </View>
     </View>
   );

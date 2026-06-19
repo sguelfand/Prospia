@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ClienteResumen, getClientes } from "../api";
 import { useAuth } from "../auth";
+import { Icon, IconName } from "./Icon";
 import { ProspiaLogo } from "./Logo";
 import { colors } from "../theme";
 
@@ -53,22 +54,26 @@ export default function DrawerContent({ navigation, state }: DrawerContentCompon
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <NavItem
-          label="📊  Dashboard"
+          icon="dashboard"
+          label="Dashboard"
           active={activeRoute === "Dashboard"}
           onPress={() => navigation.navigate("Dashboard")}
         />
         <NavItem
-          label="🔔  Avisos"
+          icon="bell"
+          label="Avisos"
           active={activeRoute === "Avisos"}
           onPress={() => navigation.navigate("Avisos")}
         />
         <NavItem
-          label="⚠️  Errores"
+          icon="alert"
+          label="Errores"
           active={activeRoute === "Errores"}
           onPress={() => navigation.navigate("Errores")}
         />
         <NavItem
-          label="📝  Pendientes"
+          icon="list"
+          label="Pendientes"
           active={activeRoute === "Pendientes"}
           onPress={() => navigation.navigate("Pendientes")}
         />
@@ -110,14 +115,21 @@ function NavItem({
   onPress,
   active,
   tag,
+  icon,
 }: {
   label: string;
   onPress: () => void;
   active?: boolean;
   tag?: string;
+  icon?: IconName;
 }) {
   return (
     <TouchableOpacity style={[styles.item, active ? styles.itemActive : null]} onPress={onPress}>
+      {icon ? (
+        <View style={styles.itemIcon}>
+          <Icon name={icon} size={18} color={active ? colors.primary : colors.textDim} />
+        </View>
+      ) : null}
       <Text style={[styles.itemText, active ? styles.itemTextActive : null]} numberOfLines={1}>
         {label}
       </Text>
@@ -142,6 +154,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   itemActive: { backgroundColor: colors.cardAlt },
+  itemIcon: { width: 26, alignItems: "flex-start" },
   itemText: { color: colors.text, fontSize: 15, flex: 1 },
   itemTextActive: { color: colors.primary, fontWeight: "700" },
   tag: {

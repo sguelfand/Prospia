@@ -10,9 +10,11 @@ import {
   View,
 } from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Area, Pendiente, Prioridad, borrarPendiente, crearPendiente, editarPendiente, getPendientes } from "../api";
 import { useAuth } from "../auth";
+import { Icon } from "../components/Icon";
 import { ErrorBox, Loader } from "../components/ui";
 import { PendientesProps } from "../navigation";
 import { colors } from "../theme";
@@ -25,6 +27,7 @@ const areaColor: Record<Area, string> = { app: colors.primary, web: colors.blue,
 
 export default function PendientesScreen(_props: PendientesProps) {
   const { token } = useAuth();
+  const insets = useSafeAreaInsets();
   const [items, setItems] = useState<Pendiente[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -80,11 +83,12 @@ export default function PendientesScreen(_props: PendientesProps) {
   return (
     <View style={styles.container}>
       <TouchableOpacity style={styles.addBtn} onPress={() => setFormOpen(true)}>
-        <Text style={styles.addBtnText}>＋  Nuevo pendiente</Text>
+        <Icon name="plus" size={18} color="#fff" />
+        <Text style={styles.addBtnText}>Nuevo pendiente</Text>
       </TouchableOpacity>
 
       <FlatList
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
         data={items}
         keyExtractor={(p) => String(p.id)}
         ListHeaderComponent={error ? <ErrorBox message={error} onRetry={load} /> : null}
@@ -161,6 +165,7 @@ function FormModal({
   const [prioridad, setPrioridad] = useState<Prioridad>("media");
   const [area, setArea] = useState<Area>("app");
   const [saving, setSaving] = useState(false);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (visible) { setTexto(""); setPrioridad("media"); setArea("app"); }
@@ -180,7 +185,7 @@ function FormModal({
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.backdrop}>
-        <View style={styles.sheet}>
+        <View style={[styles.sheet, { paddingBottom: insets.bottom + 18 }]}>
           <Text style={styles.sheetTitle}>Nuevo pendiente</Text>
           <TextInput
             style={styles.input}
@@ -236,8 +241,8 @@ const styles = StyleSheet.create({
   content: { padding: 12, paddingBottom: 40 },
   empty: { color: colors.textDim, textAlign: "center", marginTop: 40 },
 
-  addBtn: { backgroundColor: colors.primary, margin: 12, marginBottom: 4, borderRadius: 10, paddingVertical: 12, alignItems: "center" },
-  addBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  addBtn: { backgroundColor: colors.primary, margin: 12, marginBottom: 4, borderRadius: 10, paddingVertical: 12, flexDirection: "row", alignItems: "center", justifyContent: "center" },
+  addBtnText: { color: "#fff", fontSize: 15, fontWeight: "700", marginLeft: 6 },
 
   card: { backgroundColor: colors.card, borderRadius: 12, padding: 14, marginBottom: 10, flexDirection: "row", alignItems: "center" },
   cardBody: { flex: 1 },

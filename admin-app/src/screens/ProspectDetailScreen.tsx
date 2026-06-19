@@ -11,8 +11,10 @@ import { useAuth } from "../auth";
 import { Loader, Section } from "../components/ui";
 import { ProspectDetailProps } from "../navigation";
 import { colors, estadoColor, estadoLabel } from "../theme";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function ProspectDetailScreen({ route, navigation }: ProspectDetailProps) {
+  const insets = useSafeAreaInsets();
   const { tenantId, prospect } = route.params;
   const { token } = useAuth();
   const [mensajes, setMensajes] = useState<MensajeRow[]>([]);
@@ -50,7 +52,7 @@ export default function ProspectDetailScreen({ route, navigation }: ProspectDeta
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />
       }

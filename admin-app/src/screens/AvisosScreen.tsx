@@ -5,6 +5,7 @@ import { Evento, getEventos } from "../api";
 import { useAuth } from "../auth";
 import { ErrorBox, Loader } from "../components/ui";
 import { AvisosProps } from "../navigation";
+import { Icon } from "../components/Icon";
 import { colors } from "../theme";
 
 function tiempoRelativo(iso: string): string {
@@ -78,7 +79,9 @@ export default function AvisosScreen({ navigation }: AvisosProps) {
             }
           >
             <View style={styles.row}>
-              <Text style={styles.emoji}>{esInteresado ? "🔥" : "💬"}</Text>
+              <View style={styles.emoji}>
+                <Icon name={esInteresado ? "flame" : "message"} size={22} color={esInteresado ? colors.amber : colors.primary} />
+              </View>
               <View style={styles.body}>
                 <View style={styles.headerRow}>
                   <Text style={styles.tipo}>
@@ -111,7 +114,7 @@ const styles = StyleSheet.create({
   content: { padding: 12, paddingBottom: 40 },
   card: { backgroundColor: colors.card, borderRadius: 14, padding: 14, marginBottom: 10 },
   row: { flexDirection: "row" },
-  emoji: { fontSize: 22, marginRight: 12, marginTop: 2 },
+  emoji: { marginRight: 12, marginTop: 2 },
   body: { flex: 1 },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   tipo: { color: colors.primary, fontSize: 13, fontWeight: "700" },
