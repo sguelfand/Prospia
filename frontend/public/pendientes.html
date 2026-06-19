@@ -4,32 +4,29 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pendientes · Prospia</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
+    /* Tokens de marca Prospia — sistema "La señal" (brand/tokens.css) */
     :root {
-      --bg: #fafaf9; --bg-card: #ffffff; --text: #1a1a1a; --text-muted: #6b6b6b;
-      --border: #ebeae8; --border-strong: #d4d3d0; --accent: #7c3aed; --accent-soft: #ede4ff;
-      --green: #15803d; --green-soft: #dcfce7; --red: #dc2626;
-      --prio-alta: #dc2626; --prio-alta-soft: #fee2e2;
-      --prio-media: #d97706; --prio-media-soft: #fef3c7;
-      --prio-baja: #6b6b6b; --prio-baja-soft: #ececec;
-      --shadow: 0 1px 2px rgba(0,0,0,0.04), 0 1px 6px rgba(0,0,0,0.03);
-      --mono: 'SF Mono', 'JetBrains Mono', Menlo, Monaco, 'Courier New', monospace;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #0f0f10; --bg-card: #1a1a1c; --text: #ededed; --text-muted: #9a9a9a;
-        --border: #2a2a2c; --border-strong: #3a3a3c; --accent: #a78bfa; --accent-soft: #4c1d9555;
-        --green: #4ade80; --green-soft: #14532d55; --red: #f87171;
-        --prio-alta: #f87171; --prio-alta-soft: #7f1d1d55;
-        --prio-media: #fbbf24; --prio-media-soft: #78350f55;
-        --prio-baja: #9a9a9a; --prio-baja-soft: #2a2a2c;
-        --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.15);
-      }
+      --bg: #0C1730; --bg-2: #0F1B36; --bg-card: #13213C;
+      --text: #EEF3FB; --text-muted: #8294B4;
+      --border: #233150; --border-strong: #43577B;
+      --accent: #F5B23D; --accent-soft: rgba(245,178,61,0.16);
+      --green: #46B17B; --green-soft: rgba(70,177,123,0.18);
+      --red: #E5664D;
+      --prio-alta: #E5664D; --prio-alta-soft: rgba(229,102,77,0.18);
+      --prio-media: #F5B23D; --prio-media-soft: rgba(245,178,61,0.16);
+      --prio-baja: #8294B4; --prio-baja-soft: rgba(130,148,180,0.16);
+      --shadow: 0 6px 20px rgba(0,0,0,0.35);
+      --mono: 'JetBrains Mono', ui-monospace, monospace;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { scroll-behavior: smooth; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+      font-family: 'Sora', system-ui, -apple-system, sans-serif;
       background: var(--bg); color: var(--text); line-height: 1.55;
       -webkit-font-smoothing: antialiased; min-height: 100vh;
     }
@@ -57,7 +54,12 @@
     }
     .header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; display: flex; align-items: center; gap: 10px; }
-    h1 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+    /* Marca Prospia */
+    .brandbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+    .brand { display: flex; align-items: center; gap: 9px; }
+    .brand .mark { flex-shrink: 0; display: block; }
+    .wordmark { font-family: 'Sora', sans-serif; font-weight: 800; font-size: 23px; letter-spacing: -0.02em; color: var(--text); }
+    .pagetitle { font-size: 25px; font-weight: 700; letter-spacing: -0.02em; }
     .subtitle { color: var(--text-muted); font-size: 13px; margin-top: 2px; }
     .progress { margin-top: 14px; display: flex; align-items: center; gap: 12px; }
     .progress-bar-wrap { flex: 1; height: 6px; background: var(--border); border-radius: 999px; overflow: hidden; }
@@ -118,7 +120,7 @@
     .empty { text-align: center; padding: 70px 20px; color: var(--text-muted); font-size: 14px; }
 
     /* Floating add button */
-    .fab { position: fixed; bottom: 28px; right: 28px; z-index: 20; width: 56px; height: 56px; border-radius: 50%; background: var(--accent); color: #fff; border: none; font-size: 28px; line-height: 1; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.25); transition: transform 0.15s; }
+    .fab { position: fixed; bottom: 28px; right: 28px; z-index: 20; width: 56px; height: 56px; border-radius: 50%; background: var(--accent); color: var(--bg); border: none; font-size: 28px; line-height: 1; cursor: pointer; box-shadow: var(--shadow-amber, 0 8px 24px rgba(245,178,61,0.28)); transition: transform 0.15s; }
     .fab:hover { transform: scale(1.06); }
 
     /* Toast */
@@ -133,7 +135,7 @@
     .modal h2 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
     .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
     .btn { padding: 9px 16px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: 1px solid var(--border-strong); background: var(--bg); color: var(--text); }
-    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 700; }
     .btn:disabled { opacity: 0.5; cursor: default; }
     .row2 { display: flex; gap: 12px; }
     .row2 > * { flex: 1; }
@@ -154,8 +156,20 @@
   <!-- LOGIN -->
   <div id="login" class="login-wrap">
     <div class="login-card">
-      <h1><span class="dot"></span>Pendientes</h1>
-      <p class="subtitle">Iniciá sesión (admin de Prospia)</p>
+      <span class="brand" style="margin-bottom: 8px;">
+        <svg class="mark" width="34" height="34" viewBox="0 0 100 100" aria-hidden="true">
+          <line x1="50" y1="52" x2="22" y2="24" stroke="#43577B" stroke-width="3"/>
+          <line x1="50" y1="52" x2="82" y2="22" stroke="#43577B" stroke-width="3"/>
+          <line x1="50" y1="52" x2="76" y2="78" stroke="#43577B" stroke-width="3"/>
+          <circle cx="22" cy="24" r="6" fill="#43577B"/>
+          <circle cx="82" cy="22" r="6" fill="#43577B"/>
+          <circle cx="76" cy="78" r="6" fill="#43577B"/>
+          <circle cx="24" cy="74" r="6" fill="#43577B"/>
+          <circle cx="50" cy="52" r="13" fill="#F5B23D"/>
+        </svg>
+        <span class="wordmark">Prospia</span>
+      </span>
+      <p class="subtitle" style="margin-bottom: 20px;">Pendientes · iniciá sesión</p>
       <label class="field"><span>Usuario</span><input id="login-email" type="text" autocomplete="username" autocapitalize="none" placeholder="usuario"></label>
       <label class="field"><span>Contraseña</span><input id="login-pass" type="password" autocomplete="current-password" placeholder="••••••••"></label>
       <p class="err" id="login-err"></p>
@@ -167,13 +181,24 @@
   <div id="app" class="hidden">
     <header>
       <div class="container">
-        <div class="header-row">
-          <div>
-            <h1><span class="dot"></span>Implementaciones pendientes</h1>
-            <p class="subtitle">Cosas que decidimos armar y todavía no construimos</p>
-          </div>
+        <div class="brandbar">
+          <span class="brand">
+            <svg class="mark" width="30" height="30" viewBox="0 0 100 100" aria-hidden="true">
+              <line x1="50" y1="52" x2="22" y2="24" stroke="#43577B" stroke-width="3"/>
+              <line x1="50" y1="52" x2="82" y2="22" stroke="#43577B" stroke-width="3"/>
+              <line x1="50" y1="52" x2="76" y2="78" stroke="#43577B" stroke-width="3"/>
+              <circle cx="22" cy="24" r="6" fill="#43577B"/>
+              <circle cx="82" cy="22" r="6" fill="#43577B"/>
+              <circle cx="76" cy="78" r="6" fill="#43577B"/>
+              <circle cx="24" cy="74" r="6" fill="#43577B"/>
+              <circle cx="50" cy="52" r="13" fill="#F5B23D"/>
+            </svg>
+            <span class="wordmark">Prospia</span>
+          </span>
           <button class="topbar-btn" id="logout-btn">Salir</button>
         </div>
+        <h1 class="pagetitle">Pendientes</h1>
+        <p class="subtitle">Cosas que decidimos armar y todavía no construimos</p>
         <div class="progress">
           <div class="progress-bar-wrap"><div class="progress-bar" id="progress-bar"></div></div>
           <span class="progress-text" id="progress-text">0 / 0</span>

@@ -1,10 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" role="img" aria-label="Prospia">
   <rect width="100" height="100" rx="22" fill="#0C1730"/>
-  <g transform="translate(15.7,22.3) scale(0.66)">
-    <line x1="50" y1="52" x2="24" y2="26" stroke="#43577B" stroke-width="4"/>
-    <line x1="50" y1="52" x2="80" y2="24" stroke="#43577B" stroke-width="4"/>
-    <circle cx="24" cy="26" r="6" fill="#43577B"/>
-    <circle cx="80" cy="24" r="6" fill="#43577B"/>
-    <circle cx="50" cy="52" r="14" fill="#F5B23D"/>
-  </g>
+  <line x1="50" y1="55" x2="27" y2="30" stroke="#43577B" stroke-width="8" stroke-linecap="round"/>
+  <line x1="50" y1="55" x2="76" y2="28" stroke="#43577B" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="27" cy="30" r="11" fill="#43577B"/>
+  <circle cx="76" cy="28" r="11" fill="#43577B"/>
+  <circle cx="50" cy="55" r="22" fill="#F5B23D"/>
 </svg>
