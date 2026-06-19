@@ -3,7 +3,7 @@ import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native
 
 import { MensajeRow, getEtiguelMirrorMensajes } from "../api";
 import { useAuth } from "../auth";
-import { Loader, Section } from "../components/ui";
+import { CollapsibleSection, Loader } from "../components/ui";
 import { EtiguelMirrorDetailProps } from "../navigation";
 import { IconText } from "../components/Icon";
 import { colors } from "../theme";
@@ -55,7 +55,7 @@ export default function EtiguelMirrorDetailScreen({ route, navigation }: Etiguel
         {item.email ? <IconText name="mail" text={item.email} size={14} textStyle={{ fontSize: 13, marginTop: 4 }} /> : null}
       </View>
 
-      <Section title={`Conversación con Camila (${mensajes.length})`}>
+      <CollapsibleSection title="Conversación con Camila" count={mensajes.length}>
         {loading ? (
           <Loader />
         ) : mensajes.length === 0 ? (
@@ -63,7 +63,7 @@ export default function EtiguelMirrorDetailScreen({ route, navigation }: Etiguel
         ) : (
           mensajes.map((m) => <Burbuja key={m.id} mensaje={m} />)
         )}
-      </Section>
+      </CollapsibleSection>
     </ScrollView>
   );
 }

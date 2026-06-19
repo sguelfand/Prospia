@@ -8,7 +8,7 @@ import {
   getMensajesProspect,
 } from "../api";
 import { useAuth } from "../auth";
-import { Loader, Section } from "../components/ui";
+import { CollapsibleSection, Loader } from "../components/ui";
 import { ProspectDetailProps } from "../navigation";
 import { colors, estadoColor, estadoLabel } from "../theme";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -81,7 +81,7 @@ export default function ProspectDetailScreen({ route, navigation }: ProspectDeta
       </View>
 
       {/* ── Conversación con Camila ──────────────────────────────── */}
-      <Section title={`Conversación con Camila (${mensajes.length})`}>
+      <CollapsibleSection title="Conversación con Camila" count={mensajes.length}>
         {loading ? (
           <Loader />
         ) : mensajes.length === 0 ? (
@@ -89,11 +89,11 @@ export default function ProspectDetailScreen({ route, navigation }: ProspectDeta
         ) : (
           mensajes.map((m) => <Burbuja key={m.id} mensaje={m} />)
         )}
-      </Section>
+      </CollapsibleSection>
 
-      {/* ── Historial ────────────────────────────────────────────── */}
+      {/* ── Historial de estados ─────────────────────────────────── */}
       {historial.length > 0 ? (
-        <Section title="Historial">
+        <CollapsibleSection title="Historial de estados" count={historial.length}>
           {historial.map((h) => (
             <View key={h.id} style={styles.histRow}>
               <Text style={styles.histTipo}>{estadoLabel[h.tipo] ?? h.tipo}</Text>
@@ -101,7 +101,7 @@ export default function ProspectDetailScreen({ route, navigation }: ProspectDeta
               {h.detalle ? <Text style={styles.histDetalle}>{h.detalle}</Text> : null}
             </View>
           ))}
-        </Section>
+        </CollapsibleSection>
       ) : null}
     </ScrollView>
   );

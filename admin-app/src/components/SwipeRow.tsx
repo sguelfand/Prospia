@@ -34,7 +34,9 @@ export function SwipeRow({
       leftThreshold={70}
       rightThreshold={70}
       onSwipeableOpen={(direction) => {
-        if (direction === "right") left.onTrigger();
+        // `direction` = el LADO de acciones que se abrió: "left" = las de la
+        // izquierda (lo que se ve al deslizar a la derecha).
+        if (direction === "left") left.onTrigger();
         else right.onTrigger();
         ref.current?.close();
       }}

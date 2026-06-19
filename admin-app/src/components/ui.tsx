@@ -1,5 +1,5 @@
-import React from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import React, { useState } from "react";
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { colors } from "../theme";
 
@@ -51,6 +51,31 @@ export function Section({ title, children }: { title: string; children: React.Re
   );
 }
 
+/** Sección con título tocable que se expande/retrae. */
+export function CollapsibleSection({
+  title,
+  count,
+  defaultExpanded = true,
+  children,
+}: {
+  title: string;
+  count?: number;
+  defaultExpanded?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultExpanded);
+  return (
+    <View style={styles.section}>
+      <TouchableOpacity style={styles.collHeader} onPress={() => setOpen((v) => !v)} activeOpacity={0.7}>
+        <Text style={styles.collArrow}>{open ? "▾" : "▸"}</Text>
+        <Text style={[styles.sectionTitle, { marginBottom: 0, flex: 1 }]}>{title}</Text>
+        {count != null ? <Text style={styles.collCount}>{count}</Text> : null}
+      </TouchableOpacity>
+      {open ? <View style={{ marginTop: 12 }}>{children}</View> : null}
+    </View>
+  );
+}
+
 export function Loader() {
   return (
     <View style={styles.center}>
@@ -91,6 +116,9 @@ const styles = StyleSheet.create({
   barFill: { height: 8, borderRadius: 4 },
   section: { marginTop: 20 },
   sectionTitle: { color: colors.text, fontSize: 16, fontWeight: "700", marginBottom: 12 },
+  collHeader: { flexDirection: "row", alignItems: "center" },
+  collArrow: { color: colors.textDim, fontSize: 14, width: 20 },
+  collCount: { color: colors.textDim, fontSize: 14, fontWeight: "700" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg },
   errorBox: { backgroundColor: colors.card, borderRadius: 12, padding: 16, margin: 16 },
   errorText: { color: colors.red, fontSize: 14 },

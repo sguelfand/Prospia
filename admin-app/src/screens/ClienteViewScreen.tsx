@@ -135,7 +135,6 @@ export default function ClienteViewScreen({ route, navigation }: ClienteViewProp
   if (!stats) return null;
 
   const maxEstado = Math.max(1, ...stats.por_estado.map((e) => e.count));
-  const maxTermino = Math.max(1, ...stats.por_termino.map((t) => t.encontrados));
 
   // Etiguel: espejo separado en leads / prospects (backend ya los manda por más reciente).
   const mirrorLeads = mirror.filter((m) => m.tipo === "lead");
@@ -175,20 +174,6 @@ export default function ClienteViewScreen({ route, navigation }: ClienteViewProp
           ))}
       </Section>
 
-      {stats.por_termino.length > 0 ? (
-        <Section title="Por término (top 10)">
-          {stats.por_termino.map((t) => (
-            <Bar
-              key={t.termino}
-              label={t.termino}
-              value={t.encontrados}
-              max={maxTermino}
-              color={colors.blue}
-              right={`${t.encontrados} · ${t.interesados} int.`}
-            />
-          ))}
-        </Section>
-      ) : null}
 
       {/* ── Etiguel: contactados por Camila (espejo, APP.7) ──────── */}
       {esEtiguel ? (

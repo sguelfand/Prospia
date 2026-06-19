@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   Alert,
   FlatList,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   RefreshControl,
   StyleSheet,
   Text,
@@ -194,7 +196,10 @@ function FormModal({
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.backdrop}>
+      <KeyboardAvoidingView
+        style={styles.backdrop}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
         <View style={[styles.sheet, { paddingBottom: insets.bottom + 18 }]}>
           <Text style={styles.sheetTitle}>Nuevo pendiente</Text>
           <TextInput
@@ -230,7 +235,7 @@ function FormModal({
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
