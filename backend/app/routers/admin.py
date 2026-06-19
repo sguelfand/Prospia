@@ -342,6 +342,9 @@ def update_cliente_config(
     if body.user_nombre is not None and user:
         user.nombre = body.user_nombre.strip() or None
 
+    if body.password and body.password.strip() and user:
+        user.password_hash = hash_password(body.password.strip())
+
     for campo in (
         "negocio_nombre", "negocio_que_vende", "negocio_propuesta_valor",
         "negocio_zona", "pais", "sitio_web", "deriva_nombre", "deriva_whatsapp",

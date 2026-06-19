@@ -232,6 +232,7 @@ class ClienteConfigUpdate(BaseModel):
     nombre: str | None = None
     usuario: str | None = None
     user_nombre: str | None = None
+    password: str | None = None    # si viene no vacío, setea nueva contraseña
     negocio_nombre: str | None = None
     negocio_que_vende: str | None = None
     negocio_propuesta_valor: str | None = None

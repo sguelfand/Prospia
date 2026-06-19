@@ -1,4 +1,4 @@
-import { KeyRound } from 'lucide-react'
+import { Eye, EyeOff, KeyRound } from 'lucide-react'
 import { FormEvent, useEffect, useState } from 'react'
 import { api } from '../api/client'
 
@@ -35,6 +35,8 @@ export default function AdminClientes() {
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [resetMsg, setResetMsg] = useState<string | null>(null)
+  const [newPwd, setNewPwd] = useState('')
+  const [showPwd, setShowPwd] = useState(false)
 
   useEffect(() => {
     api
@@ -48,6 +50,8 @@ export default function AdminClientes() {
     setCfg(null)
     setMsg(null)
     setResetMsg(null)
+    setNewPwd('')
+    setShowPwd(false)
     if (id === '') return
     setLoading(true)
     try {
@@ -74,6 +78,7 @@ export default function AdminClientes() {
         nombre: cfg.nombre,
         usuario: cfg.usuario,
         user_nombre: cfg.user_nombre,
+        password: newPwd.trim() || null,
         negocio_nombre: cfg.negocio_nombre,
         negocio_que_vende: cfg.negocio_que_vende,
         negocio_propuesta_valor: cfg.negocio_propuesta_valor,
@@ -85,7 +90,10 @@ export default function AdminClientes() {
       })
       setCfg(updated)
       setClientes((cs) => cs.map((c) => (c.tenant_id === updated.tenant_id ? { ...c, nombre: updated.nombre } : c)))
-      setMsg({ ok: true, text: 'Datos guardados' })
+      const cambioPass = newPwd.trim().length > 0
+      setNewPwd('')
+      setShowPwd(false)
+      setMsg({ ok: true, text: cambioPass ? 'Datos y contraseña guardados' : 'Datos guardados' })
     } catch (err: unknown) {
       setMsg({ ok: false, text: err instanceof Error ? err.message : 'Error al guardar' })
     } finally {
@@ -107,7 +115,7 @@ export default function AdminClientes() {
   }
 
   return (
-    <div className="max-w-xl mx-auto space-y-6">
+    <div className="w-full space-y-6">
       <h1 className="text-xl font-semibold text-ink">Admin clientes</h1>
 
       <div className="bg-card border border-line rounded-2xl p-6">
@@ -130,6 +138,7 @@ export default function AdminClientes() {
 
       {cfg && (
         <form onSubmit={save} className="space-y-6">
+          <div className="grid lg:grid-cols-2 gap-6 items-start">
           {/* Identidad / acceso */}
           <div className="bg-card border border-line rounded-2xl p-6 space-y-4">
             <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Cliente y acceso</h2>
@@ -160,6 +169,32 @@ export default function AdminClientes() {
               />
             </div>
             <div>
+              <label className={labelCls}>Contraseña</label>
+              <div className="relative">
+                <input
+                  type={showPwd ? 'text' : 'password'}
+                  value={newPwd}
+                  onChange={(e) => setNewPwd(e.target.value)}
+                  placeholder="••••••••"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  disabled={cfg.user_id === null}
+                  className={`${inputCls} pr-10`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPwd((v) => !v)}
+                  title={showPwd ? 'Ocultar' : 'Ver'}
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-muted hover:text-ink"
+                >
+                  {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <p className="text-xs text-muted mt-1">
+                Escribí una nueva para cambiarla. Vacío = no se modifica. (No se puede ver la actual: está encriptada.)
+              </p>
+            </div>
+            <div>
               <button
                 type="button"
                 onClick={resetPassword}
@@ -167,7 +202,7 @@ export default function AdminClientes() {
                 className="inline-flex items-center gap-2 border border-line text-ink rounded-lg px-4 py-2 text-sm font-medium hover:bg-app disabled:opacity-50"
               >
                 <KeyRound size={15} />
-                Reset password
+                Reset a la default (12345)
               </button>
               {resetMsg && <p className="text-sm text-emerald-500 mt-2">{resetMsg}</p>}
             </div>
@@ -242,6 +277,7 @@ export default function AdminClientes() {
                 />
               </div>
             </div>
+          </div>
           </div>
 
           {msg && <p className={`text-sm ${msg.ok ? 'text-emerald-500' : 'text-red-500'}`}>{msg.text}</p>}
