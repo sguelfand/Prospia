@@ -297,6 +297,9 @@ export const resolverError = (token: string, id: number, resuelto: boolean) =>
     body: JSON.stringify({ resuelto }),
   }, token);
 
+export const deleteError = (token: string, id: number) =>
+  request<void>(`/admin/errores/${id}`, { method: "DELETE" }, token);
+
 export const getPushPref = (token: string, tenantId: number, expoToken: string) =>
   request<{ enabled: boolean }>(
     `/admin/clientes/${tenantId}/push?expo_token=${encodeURIComponent(expoToken)}`,

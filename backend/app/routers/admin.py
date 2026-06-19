@@ -332,6 +332,16 @@ def resolver_error(error_id: int, body: AgentErrorResolve, db: Session = Depends
     return err
 
 
+@router.delete("/errores/{error_id}", status_code=status.HTTP_204_NO_CONTENT)
+def borrar_error(error_id: int, db: Session = Depends(get_db)):
+    """Borra un error desde la app (swipe). Variante superadmin del DELETE de
+    ingest (que usa token para que lo borre Claude)."""
+    err = db.get(AgentError, error_id)
+    if err:
+        db.delete(err)
+        db.commit()
+
+
 @router.get("/overview", response_model=AdminOverview)
 def overview(db: Session = Depends(get_db)):
     hoy = date.today()
