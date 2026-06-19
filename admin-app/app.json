@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Prospia Admin",
+    "name": "Prospia",
     "slug": "prospia-admin",
     "owner": "sguelfand",
     "version": "1.0.0",
@@ -38,7 +38,7 @@
       [
         "expo-local-authentication",
         {
-          "faceIDPermission": "Permitir que Prospia Admin use Face ID para desbloquear la app."
+          "faceIDPermission": "Permitir que Prospia use Face ID para desbloquear la app."
         }
       ],
       "expo-font"
