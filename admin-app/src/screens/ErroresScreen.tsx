@@ -1,14 +1,13 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { Swipeable } from "react-native-gesture-handler";
-
+import React, { useCallback, useEffect, useState } from "react";
+import { Alert, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AgentError, deleteError, getErrores, resolverError } from "../api";
 import { useAuth } from "../auth";
+import { IconText } from "../components/Icon";
+import { SwipeRow } from "../components/SwipeRow";
 import { ErrorBox, Loader } from "../components/ui";
 import { ErroresProps } from "../navigation";
-import { IconText } from "../components/Icon";
 import { colors } from "../theme";
 
 type Filtro = "activos" | "solucionados";
@@ -60,6 +59,13 @@ export default function ErroresScreen(_props: ErroresProps) {
     }
   };
 
+  const confirmarBorrar = (err: AgentError) => {
+    Alert.alert("Borrar error", `¿Seguro que querés borrar el error #${err.id}? No se puede deshacer.`, [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Borrar", style: "destructive", onPress: () => borrar(err) },
+    ]);
+  };
+
   if (loading) return <Loader />;
 
   const visibles = errores.filter((e) => (filtro === "activos" ? !e.resuelto : e.resuelto));
@@ -86,11 +92,16 @@ export default function ErroresScreen(_props: ErroresProps) {
           <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />
         }
         renderItem={({ item }) => (
-          <SwipeableError
-            err={item}
-            onResolve={() => setResuelto(item, !item.resuelto)}
-            onDelete={() => borrar(item)}
-          />
+          <SwipeRow
+            left={
+              filtro === "activos"
+                ? { icon: "check", color: colors.green, onTrigger: () => setResuelto(item, true) }
+                : { icon: "undo", color: colors.amber, onTrigger: () => setResuelto(item, false) }
+            }
+            right={{ icon: "x", color: colors.red, onTrigger: () => confirmarBorrar(item) }}
+          >
+            <ErrorCard err={item} />
+          </SwipeRow>
         )}
       />
     </View>
@@ -102,43 +113,6 @@ function Tab({ label, active, onPress }: { label: string; active: boolean; onPre
     <TouchableOpacity style={[styles.tab, active ? styles.tabActive : null]} onPress={onPress}>
       <Text style={[styles.tabText, active ? styles.tabTextActive : null]}>{label}</Text>
     </TouchableOpacity>
-  );
-}
-
-function SwipeableError({ err, onResolve, onDelete }: { err: AgentError; onResolve: () => void; onDelete: () => void }) {
-  const ref = useRef<Swipeable>(null);
-
-  const leftAction = () => (
-    <View style={[styles.action, styles.actionResolve]}>
-      <Text style={styles.actionIcon}>✓</Text>
-    </View>
-  );
-  const rightAction = () => (
-    <View style={[styles.action, styles.actionDelete, { alignItems: "flex-end" }]}>
-      <Text style={styles.actionIcon}>✕</Text>
-    </View>
-  );
-
-  return (
-    <Swipeable
-      ref={ref}
-      renderLeftActions={leftAction}
-      renderRightActions={rightAction}
-      leftThreshold={70}
-      rightThreshold={70}
-      onSwipeableOpen={(direction) => {
-        if (direction === "right") {
-          // deslizó hacia la derecha → acción verde → resolver/reactivar
-          onResolve();
-          ref.current?.close();
-        } else {
-          // deslizó hacia la izquierda → acción roja → borrar
-          onDelete();
-        }
-      }}
-    >
-      <ErrorCard err={err} />
-    </Swipeable>
   );
 }
 
@@ -191,8 +165,4 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 8 },
   meta: { color: colors.textDim, fontSize: 12 },
 
-  action: { flex: 1, justifyContent: "center", paddingHorizontal: 24, borderRadius: 12, marginBottom: 10 },
-  actionResolve: { backgroundColor: colors.green, alignItems: "flex-start" },
-  actionDelete: { backgroundColor: colors.red },
-  actionIcon: { color: "#fff", fontSize: 24, fontWeight: "800" },
 });

@@ -21,7 +21,10 @@ export type IconName =
   | "message"
   | "flame"
   | "plus"
-  | "tag";
+  | "tag"
+  | "check"
+  | "x"
+  | "undo";
 
 export function Icon({
   name,
@@ -120,6 +123,19 @@ export function Icon({
         <>
           <Path d="M20.59 13.41 13.42 20.6a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.58a2 2 0 0 1 0 2.83z" {...p} />
           <Line x1="7" y1="7" x2="7.01" y2="7" {...p} />
+        </>
+      )}
+      {name === "check" && <Polyline points="20,6 9,17 4,12" {...p} />}
+      {name === "x" && (
+        <>
+          <Line x1="18" y1="6" x2="6" y2="18" {...p} />
+          <Line x1="6" y1="6" x2="18" y2="18" {...p} />
+        </>
+      )}
+      {name === "undo" && (
+        <>
+          <Polyline points="1,4 1,10 7,10" {...p} />
+          <Path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" {...p} />
         </>
       )}
     </Svg>

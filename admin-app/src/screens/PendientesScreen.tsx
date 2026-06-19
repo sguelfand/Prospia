@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
+  Alert,
   FlatList,
   Modal,
   RefreshControl,
@@ -9,12 +10,12 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Swipeable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Area, Pendiente, Prioridad, borrarPendiente, crearPendiente, editarPendiente, getPendientes } from "../api";
 import { useAuth } from "../auth";
 import { Icon } from "../components/Icon";
+import { SwipeRow } from "../components/SwipeRow";
 import { ErrorBox, Loader } from "../components/ui";
 import { PendientesProps } from "../navigation";
 import { colors } from "../theme";
@@ -29,6 +30,7 @@ export default function PendientesScreen(_props: PendientesProps) {
   const { token } = useAuth();
   const insets = useSafeAreaInsets();
   const [items, setItems] = useState<Pendiente[]>([]);
+  const [filtro, setFiltro] = useState<"pendientes" | "realizados">("pendientes");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +40,7 @@ export default function PendientesScreen(_props: PendientesProps) {
     if (!token) return;
     setError(null);
     try {
-      setItems(await getPendientes(token));
+      setItems(await getPendientes(token, true)); // todos (pendientes + realizados)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al cargar.");
     } finally {
@@ -51,11 +53,11 @@ export default function PendientesScreen(_props: PendientesProps) {
     load();
   }, [load]);
 
-  const marcarHecho = async (p: Pendiente) => {
+  const setHecho = async (p: Pendiente, hecho: boolean) => {
     if (!token) return;
-    setItems((prev) => prev.filter((x) => x.id !== p.id)); // sale de la lista de activos
+    setItems((prev) => prev.map((x) => (x.id === p.id ? { ...x, hecho } : x)));
     try {
-      await editarPendiente(token, p.id, { hecho: true });
+      await editarPendiente(token, p.id, { hecho });
     } catch {
       load();
     }
@@ -72,16 +74,33 @@ export default function PendientesScreen(_props: PendientesProps) {
     }
   };
 
+  const confirmarBorrar = (p: Pendiente) => {
+    Alert.alert("Borrar pendiente", "¿Seguro que querés borrarlo? No se puede deshacer.", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Borrar", style: "destructive", onPress: () => borrar(p) },
+    ]);
+  };
+
   const agregar = async (texto: string, prioridad: Prioridad, area: Area) => {
     if (!token) return;
     const nuevo = await crearPendiente(token, texto, prioridad, area);
     setItems((prev) => [nuevo, ...prev]);
+    setFiltro("pendientes");
   };
 
   if (loading) return <Loader />;
 
+  const visibles = items.filter((p) => (filtro === "pendientes" ? !p.hecho : p.hecho));
+  const nPend = items.filter((p) => !p.hecho).length;
+  const nReal = items.length - nPend;
+
   return (
     <View style={styles.container}>
+      <View style={styles.tabs}>
+        <Tab label={`Pendientes (${nPend})`} active={filtro === "pendientes"} onPress={() => setFiltro("pendientes")} />
+        <Tab label={`Realizados (${nReal})`} active={filtro === "realizados"} onPress={() => setFiltro("realizados")} />
+      </View>
+
       <TouchableOpacity style={styles.addBtn} onPress={() => setFormOpen(true)}>
         <Icon name="plus" size={18} color="#fff" />
         <Text style={styles.addBtnText}>Nuevo pendiente</Text>
@@ -89,15 +108,26 @@ export default function PendientesScreen(_props: PendientesProps) {
 
       <FlatList
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
-        data={items}
+        data={visibles}
         keyExtractor={(p) => String(p.id)}
         ListHeaderComponent={error ? <ErrorBox message={error} onRetry={load} /> : null}
-        ListEmptyComponent={<Text style={styles.empty}>Sin pendientes 🎉</Text>}
+        ListEmptyComponent={
+          <Text style={styles.empty}>{filtro === "pendientes" ? "Sin pendientes 🎉" : "Nada realizado todavía."}</Text>
+        }
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />
         }
         renderItem={({ item }) => (
-          <SwipeablePendiente item={item} onDone={() => marcarHecho(item)} onDelete={() => borrar(item)} />
+          <SwipeRow
+            left={
+              filtro === "pendientes"
+                ? { icon: "check", color: colors.green, onTrigger: () => setHecho(item, true) }
+                : { icon: "undo", color: colors.amber, onTrigger: () => setHecho(item, false) }
+            }
+            right={{ icon: "x", color: colors.red, onTrigger: () => confirmarBorrar(item) }}
+          >
+            <PendienteCard item={item} />
+          </SwipeRow>
         )}
       />
 
@@ -106,31 +136,11 @@ export default function PendientesScreen(_props: PendientesProps) {
   );
 }
 
-function SwipeablePendiente({ item, onDone, onDelete }: { item: Pendiente; onDone: () => void; onDelete: () => void }) {
-  const leftAction = () => (
-    <View style={[styles.action, styles.actionDone]}>
-      <Text style={styles.actionIcon}>✓</Text>
-    </View>
-  );
-  const rightAction = () => (
-    <View style={[styles.action, styles.actionDelete, { alignItems: "flex-end" }]}>
-      <Text style={styles.actionIcon}>✕</Text>
-    </View>
-  );
+function Tab({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
-    <Swipeable
-      renderLeftActions={leftAction}
-      renderRightActions={rightAction}
-      leftThreshold={70}
-      rightThreshold={70}
-      onSwipeableOpen={(direction) => {
-        // derecha → verde ✓ (terminado); izquierda → rojo ✕ (borrar).
-        if (direction === "right") onDone();
-        else onDelete();
-      }}
-    >
-      <PendienteCard item={item} />
-    </Swipeable>
+    <TouchableOpacity style={[styles.tab, active ? styles.tabActive : null]} onPress={onPress}>
+      <Text style={[styles.tabText, active ? styles.tabTextActive : null]}>{label}</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -241,6 +251,12 @@ const styles = StyleSheet.create({
   content: { padding: 12, paddingBottom: 40 },
   empty: { color: colors.textDim, textAlign: "center", marginTop: 40 },
 
+  tabs: { flexDirection: "row", padding: 8, paddingBottom: 0, gap: 8 },
+  tab: { flex: 1, paddingVertical: 9, borderRadius: 9, borderWidth: 1, borderColor: colors.border, alignItems: "center" },
+  tabActive: { backgroundColor: colors.cardAlt, borderColor: colors.primary },
+  tabText: { color: colors.textDim, fontSize: 13, fontWeight: "700" },
+  tabTextActive: { color: colors.text },
+
   addBtn: { backgroundColor: colors.primary, margin: 12, marginBottom: 4, borderRadius: 10, paddingVertical: 12, flexDirection: "row", alignItems: "center", justifyContent: "center" },
   addBtnText: { color: "#fff", fontSize: 15, fontWeight: "700", marginLeft: 6 },
 
@@ -250,10 +266,6 @@ const styles = StyleSheet.create({
   badges: { flexDirection: "row", gap: 8, marginTop: 8 },
   badge: { fontSize: 11, fontWeight: "700", borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, overflow: "hidden", textTransform: "capitalize" },
 
-  action: { flex: 1, justifyContent: "center", paddingHorizontal: 24, borderRadius: 12, marginBottom: 10 },
-  actionDone: { backgroundColor: colors.green, alignItems: "flex-start" },
-  actionDelete: { backgroundColor: colors.red },
-  actionIcon: { color: "#fff", fontSize: 24, fontWeight: "800" },
 
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   sheet: { backgroundColor: colors.bg, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 18 },
