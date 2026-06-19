@@ -121,6 +121,11 @@
     .fab { position: fixed; bottom: 28px; right: 28px; z-index: 20; width: 56px; height: 56px; border-radius: 50%; background: var(--accent); color: #fff; border: none; font-size: 28px; line-height: 1; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.25); transition: transform 0.15s; }
     .fab:hover { transform: scale(1.06); }
 
+    /* Toast */
+    .toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--text); color: var(--bg); padding: 12px 20px; border-radius: 10px; font-size: 14px; font-weight: 600; box-shadow: 0 6px 24px rgba(0,0,0,0.35); opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.25s; z-index: 50; display: flex; align-items: center; gap: 8px; }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast::before { content: '✓'; color: var(--green); font-weight: 800; }
+
     /* Modal */
     .overlay { position: fixed; inset: 0; z-index: 30; background: rgba(0,0,0,0.45); display: none; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; }
     .overlay.show { display: flex; }
@@ -192,6 +197,7 @@
   </div>
 
   <button class="fab hidden" id="fab" title="Nuevo pendiente">+</button>
+  <div class="toast" id="toast"></div>
 
   <!-- MODAL -->
   <div class="overlay" id="overlay">
@@ -322,6 +328,7 @@
           <div class="test-body"><div class="test-body-inner">
             ${sections || '<div class="test-section-content" style="color:var(--text-muted);font-size:13px">Sin detalle. Tocá «Editar» para agregar contexto.</div>'}
             <div class="item-actions">
+              <button onclick="copyItem(${it.id}, event)">Copiar</button>
               <button onclick="openEdit(${it.id}, event)">Editar</button>
               <button class="danger" onclick="del(${it.id}, event)">Borrar</button>
               ${fecha ? `<span class="added-date">Anotado ${esc(fecha)}</span>` : ''}
@@ -359,6 +366,45 @@
       try { await api('/admin/pendientes/' + id, { method: 'DELETE' }); items = items.filter(i => i.id !== id); render(); }
       catch (e) { alert('No se pudo borrar: ' + e.message); }
     };
+
+    // Arma el pendiente como texto plano, listo para pegar.
+    function buildCopyText(it) {
+      const { badge, title } = splitBadge(it.texto);
+      let out = (badge ? `[${badge}] ` : '') + title + '\n';
+      out += `Prioridad: ${it.prioridad} · Área: ${it.area}\n`;
+      for (const k of SECTION_ORDER) {
+        if (!it[k]) continue;
+        out += `\n${SECTION_LABELS[k]}:\n`;
+        if (LIST_SECTIONS.includes(k)) {
+          out += it[k].split('\n').map(s => s.trim()).filter(Boolean).map(l => `- ${l}`).join('\n') + '\n';
+        } else { out += it[k] + '\n'; }
+      }
+      return out.trim();
+    }
+    window.copyItem = async (id, ev) => {
+      ev.stopPropagation();
+      const it = items.find(i => i.id === id); if (!it) return;
+      const text = buildCopyText(it);
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.top = '-1000px';
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        try { document.execCommand('copy'); } catch {}
+        document.body.removeChild(ta);
+      }
+      showToast('Copiado al portapapeles');
+    };
+
+    let toastTimer = null;
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+    }
 
     // ---- Modal ----
     function openModal(id) {
