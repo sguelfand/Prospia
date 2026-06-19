@@ -1,0 +1,168 @@
+import { Eye, EyeOff } from 'lucide-react'
+import { FormEvent, useEffect, useState } from 'react'
+import { api } from '../api/client'
+
+type Me = {
+  id: number
+  tenant_id: number
+  email: string
+  nombre: string | null
+  role: string
+}
+
+const inputCls =
+  'w-full bg-app border border-line text-ink rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary'
+const labelCls = 'block text-sm font-medium text-ink-soft mb-1'
+const btnCls =
+  'bg-primary text-on-primary rounded-lg px-4 py-2 text-sm font-medium hover:bg-primary-dark disabled:opacity-50'
+
+export default function Configuracion() {
+  // ── Perfil ──
+  const [nombre, setNombre] = useState('')
+  const [email, setEmail] = useState('')
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [profileMsg, setProfileMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  // ── Contraseña ──
+  const [currentPwd, setCurrentPwd] = useState('')
+  const [newPwd, setNewPwd] = useState('')
+  const [repeatPwd, setRepeatPwd] = useState('')
+  const [showPwd, setShowPwd] = useState(false)
+  const [savingPwd, setSavingPwd] = useState(false)
+  const [pwdMsg, setPwdMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  useEffect(() => {
+    api
+      .get<Me>('/auth/me')
+      .then((me) => {
+        setNombre(me.nombre ?? '')
+        setEmail(me.email ?? '')
+      })
+      .catch(() => {})
+  }, [])
+
+  async function saveProfile(e: FormEvent) {
+    e.preventDefault()
+    setProfileMsg(null)
+    setSavingProfile(true)
+    try {
+      const me = await api.patch<Me>('/auth/me', { nombre: nombre.trim() || null, email: email.trim() })
+      setNombre(me.nombre ?? '')
+      setEmail(me.email ?? '')
+      setProfileMsg({ ok: true, text: 'Datos guardados' })
+    } catch (err: unknown) {
+      setProfileMsg({ ok: false, text: err instanceof Error ? err.message : 'Error al guardar' })
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
+  async function savePassword(e: FormEvent) {
+    e.preventDefault()
+    setPwdMsg(null)
+    if (newPwd.length < 6) {
+      setPwdMsg({ ok: false, text: 'La nueva contraseña debe tener al menos 6 caracteres' })
+      return
+    }
+    if (newPwd !== repeatPwd) {
+      setPwdMsg({ ok: false, text: 'Las contraseñas no coinciden' })
+      return
+    }
+    setSavingPwd(true)
+    try {
+      await api.post('/auth/change-password', { current_password: currentPwd, new_password: newPwd })
+      setCurrentPwd('')
+      setNewPwd('')
+      setRepeatPwd('')
+      setPwdMsg({ ok: true, text: 'Contraseña actualizada' })
+    } catch (err: unknown) {
+      setPwdMsg({ ok: false, text: err instanceof Error ? err.message : 'Error al cambiar la contraseña' })
+    } finally {
+      setSavingPwd(false)
+    }
+  }
+
+  return (
+    <div className="max-w-xl mx-auto space-y-6">
+      <h1 className="text-xl font-semibold text-ink">Configuración</h1>
+
+      {/* ── Perfil / usuario ── */}
+      <form onSubmit={saveProfile} className="bg-card border border-line rounded-2xl p-6 space-y-4">
+        <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Usuario</h2>
+        <div>
+          <label className={labelCls}>Nombre</label>
+          <input value={nombre} onChange={(e) => setNombre(e.target.value)} className={inputCls} />
+        </div>
+        <div>
+          <label className={labelCls}>Email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            className={inputCls}
+          />
+        </div>
+        {profileMsg && (
+          <p className={`text-sm ${profileMsg.ok ? 'text-emerald-500' : 'text-red-500'}`}>{profileMsg.text}</p>
+        )}
+        <div>
+          <button type="submit" disabled={savingProfile} className={btnCls}>
+            {savingProfile ? 'Guardando...' : 'Guardar'}
+          </button>
+        </div>
+      </form>
+
+      {/* ── Cambiar contraseña ── */}
+      <form onSubmit={savePassword} className="bg-card border border-line rounded-2xl p-6 space-y-4">
+        <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Cambiar contraseña</h2>
+        <div>
+          <label className={labelCls}>Contraseña actual</label>
+          <input
+            type={showPwd ? 'text' : 'password'}
+            value={currentPwd}
+            onChange={(e) => setCurrentPwd(e.target.value)}
+            required
+            className={inputCls}
+          />
+        </div>
+        <div>
+          <label className={labelCls}>Nueva contraseña</label>
+          <div className="relative">
+            <input
+              type={showPwd ? 'text' : 'password'}
+              value={newPwd}
+              onChange={(e) => setNewPwd(e.target.value)}
+              required
+              className={`${inputCls} pr-10`}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPwd((v) => !v)}
+              title={showPwd ? 'Ocultar' : 'Ver'}
+              className="absolute inset-y-0 right-0 flex items-center px-3 text-muted hover:text-ink"
+            >
+              {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+        </div>
+        <div>
+          <label className={labelCls}>Repetir nueva contraseña</label>
+          <input
+            type={showPwd ? 'text' : 'password'}
+            value={repeatPwd}
+            onChange={(e) => setRepeatPwd(e.target.value)}
+            required
+            className={inputCls}
+          />
+        </div>
+        {pwdMsg && <p className={`text-sm ${pwdMsg.ok ? 'text-emerald-500' : 'text-red-500'}`}>{pwdMsg.text}</p>}
+        <div>
+          <button type="submit" disabled={savingPwd} className={btnCls}>
+            {savingPwd ? 'Guardando...' : 'Cambiar contraseña'}
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}

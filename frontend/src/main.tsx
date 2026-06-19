@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Prospects from './pages/Prospects'
 import Terminos from './pages/Terminos'
+import Configuracion from './pages/Configuracion'
 import Layout from './components/Layout'
 import { ThemeProvider } from './theme'
 import './index.css'
@@ -24,6 +25,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="prospects" element={<Prospects />} />
           <Route path="terminos" element={<Terminos />} />
+          <Route path="configuracion" element={<Configuracion />} />
         </Route>
       </Routes>
     </BrowserRouter>

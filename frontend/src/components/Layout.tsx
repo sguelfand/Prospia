@@ -1,4 +1,4 @@
-import { BarChart2, ChevronLeft, ChevronRight, LogOut, Menu, Search, Users, X } from 'lucide-react'
+import { BarChart2, ChevronLeft, ChevronRight, LogOut, Menu, Search, Settings, Users, X } from 'lucide-react'
 import { useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { ProspiaLogo, ProspiaMark } from './Logo'
@@ -66,6 +66,14 @@ export default function Layout() {
                 )
               })}
             </nav>
+            <Link
+              to="/configuracion"
+              onClick={() => setMobileOpen(false)}
+              className={navClass(location.pathname.startsWith('/configuracion'))}
+            >
+              <Settings size={16} />
+              Configuración
+            </Link>
             <button
               onClick={() => { logout(); setMobileOpen(false) }}
               className="flex items-center gap-3 px-6 py-4 text-sm text-[#8294B4] hover:text-fog hover:bg-white/[0.04] border-t border-white/10"
@@ -114,6 +122,14 @@ export default function Layout() {
             )
           })}
         </nav>
+        <Link
+          to="/configuracion"
+          title={collapsed ? 'Configuración' : undefined}
+          className={navClass(location.pathname.startsWith('/configuracion'), collapsed)}
+        >
+          <Settings size={16} />
+          {!collapsed && 'Configuración'}
+        </Link>
         <button
           onClick={logout}
           title={collapsed ? 'Salir' : undefined}
