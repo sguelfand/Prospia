@@ -69,7 +69,7 @@ export default function LoginScreen() {
             onPress={() => setShowPassword((v) => !v)}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Text style={styles.eyeIcon}>{showPassword ? "🙈" : "👁️"}</Text>
+            <EyeIcon off={showPassword} />
           </TouchableOpacity>
         </View>
 
@@ -86,6 +86,44 @@ export default function LoginScreen() {
     </KeyboardAvoidingView>
   );
 }
+
+// Ojo dibujado con Views (sin librería de íconos → OTA-safe).
+// Tono apagado parecido al fondo; lo único que cambia entre estados es la
+// línea diagonal sobre el ojo (ojo / ojo tachado).
+const EYE_COLOR = "#475569";
+
+function EyeIcon({ off }: { off: boolean }) {
+  return (
+    <View style={eye.box}>
+      <View style={eye.eye}>
+        <View style={eye.pupil} />
+      </View>
+      {off ? <View style={eye.slash} /> : null}
+    </View>
+  );
+}
+
+const eye = StyleSheet.create({
+  box: { width: 26, height: 26, alignItems: "center", justifyContent: "center" },
+  eye: {
+    width: 22,
+    height: 13,
+    borderWidth: 1.8,
+    borderColor: EYE_COLOR,
+    borderRadius: 7,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pupil: { width: 5.5, height: 5.5, borderRadius: 3, backgroundColor: EYE_COLOR },
+  slash: {
+    position: "absolute",
+    width: 27,
+    height: 1.8,
+    borderRadius: 1,
+    backgroundColor: EYE_COLOR,
+    transform: [{ rotate: "45deg" }],
+  },
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
@@ -104,7 +142,6 @@ const styles = StyleSheet.create({
   passwordWrap: { position: "relative", justifyContent: "center" },
   passwordInput: { paddingRight: 48 },
   eyeButton: { position: "absolute", right: 14, height: "100%", justifyContent: "center", paddingBottom: 12 },
-  eyeIcon: { fontSize: 20 },
   error: { color: colors.red, fontSize: 14, marginBottom: 12, textAlign: "center" },
   button: {
     backgroundColor: colors.primary,
