@@ -118,7 +118,7 @@ export default function AdminClientes() {
     <div className="w-full space-y-6">
       <h1 className="text-xl font-semibold text-ink">Admin clientes</h1>
 
-      <div className="bg-card border border-line rounded-2xl p-6">
+      <div className="bg-card border border-line rounded-2xl p-6 max-w-sm">
         <label className={labelCls}>Cliente</label>
         <select
           value={selectedId}
@@ -147,6 +147,14 @@ export default function AdminClientes() {
               <input value={cfg.nombre} onChange={(e) => field('nombre', e.target.value)} className={inputCls} />
             </div>
             <div>
+              <label className={labelCls}>Nombre de contacto</label>
+              <input
+                value={cfg.user_nombre ?? ''}
+                onChange={(e) => field('user_nombre', e.target.value)}
+                className={inputCls}
+              />
+            </div>
+            <div>
               <label className={labelCls}>Usuario (login)</label>
               <input
                 value={cfg.usuario ?? ''}
@@ -159,14 +167,6 @@ export default function AdminClientes() {
               {cfg.user_id === null && (
                 <p className="text-xs text-muted mt-1">Este cliente todavía no tiene usuario.</p>
               )}
-            </div>
-            <div>
-              <label className={labelCls}>Nombre de contacto</label>
-              <input
-                value={cfg.user_nombre ?? ''}
-                onChange={(e) => field('user_nombre', e.target.value)}
-                className={inputCls}
-              />
             </div>
             <div>
               <label className={labelCls}>Contraseña</label>
