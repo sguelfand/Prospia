@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import case, extract, func
 from sqlalchemy.orm import Session
 
+from app.core.auth import hash_password
 from app.core.deps import get_superadmin
 from app.database import get_db
 from app.models.agent_error import AgentError
@@ -21,7 +22,7 @@ from app.models.pendiente import Pendiente
 from app.models.prospect import ESTADOS, Prospect
 from app.models.push_mute import PushMute
 from app.models.rubro import Rubro
-from app.models.tenant import Tenant
+from app.models.tenant import Tenant, TenantConfig
 from app.models.termino import Termino
 from app.models.user import User
 from app.routers.prospects import _enrich
@@ -30,6 +31,8 @@ from app.schemas.admin import (
     AgentErrorOut,
     AgentErrorResolve,
     ClienteComparativa,
+    ClienteConfigOut,
+    ClienteConfigUpdate,
     ClienteResumen,
     DashboardComparativa,
     DeviceIn,
@@ -44,6 +47,7 @@ from app.schemas.admin import (
     PendienteUpdate,
     PushPrefIn,
     PushPrefOut,
+    ResetPasswordOut,
 )
 from app.schemas.dashboard import DashboardStats
 from app.schemas.prospect import HistorialOut, MensajeOut, ProspectsPage
@@ -260,6 +264,107 @@ def historial_prospect(tenant_id: int, prospect_id: int, db: Session = Depends(g
         .order_by(ProspectHistorial.fecha.desc())
         .all()
     )
+
+
+# ── Admin clientes: ver/editar config esencial + reset password (nivel 1) ──
+DEFAULT_PASSWORD = "12345"  # pass por defecto; el cliente la cambia desde Configuración
+
+
+def _user_principal(db: Session, tenant_id: int) -> User | None:
+    """Usuario de login del cliente: el primero (por id) del tenant. Hoy cada
+    cliente tiene uno; si en el futuro hay varios, se elige el más antiguo."""
+    return (
+        db.query(User)
+        .filter(User.tenant_id == tenant_id)
+        .order_by(User.id.asc())
+        .first()
+    )
+
+
+def _config_de(db: Session, tenant_id: int) -> TenantConfig:
+    """TenantConfig del cliente, creándolo si no existe."""
+    cfg = db.query(TenantConfig).filter(TenantConfig.tenant_id == tenant_id).first()
+    if not cfg:
+        cfg = TenantConfig(tenant_id=tenant_id)
+        db.add(cfg)
+        db.flush()
+    return cfg
+
+
+@router.get("/clientes/{tenant_id}/config", response_model=ClienteConfigOut)
+def get_cliente_config(tenant_id: int, db: Session = Depends(get_db)):
+    """Config esencial de un cliente para el editor de Admin clientes."""
+    tenant = _tenant_prospia(db, tenant_id)
+    cfg = _config_de(db, tenant_id)
+    db.commit()
+    user = _user_principal(db, tenant_id)
+    return ClienteConfigOut(
+        tenant_id=tenant.id,
+        nombre=tenant.nombre,
+        slug=tenant.slug,
+        user_id=user.id if user else None,
+        usuario=user.email if user else None,
+        user_nombre=user.nombre if user else None,
+        negocio_nombre=cfg.negocio_nombre,
+        negocio_que_vende=cfg.negocio_que_vende,
+        negocio_propuesta_valor=cfg.negocio_propuesta_valor,
+        negocio_zona=cfg.negocio_zona,
+        pais=cfg.pais,
+        sitio_web=cfg.sitio_web,
+        deriva_nombre=cfg.deriva_nombre,
+        deriva_whatsapp=cfg.deriva_whatsapp,
+    )
+
+
+@router.put("/clientes/{tenant_id}/config", response_model=ClienteConfigOut)
+def update_cliente_config(
+    tenant_id: int, body: ClienteConfigUpdate, db: Session = Depends(get_db)
+):
+    """Guarda los datos esenciales del cliente (nombre, usuario, negocio/contacto)."""
+    tenant = _tenant_prospia(db, tenant_id)
+    cfg = _config_de(db, tenant_id)
+    user = _user_principal(db, tenant_id)
+
+    if body.nombre is not None and body.nombre.strip():
+        tenant.nombre = body.nombre.strip()
+
+    if body.usuario is not None and user:
+        nuevo = body.usuario.strip().lower()
+        if nuevo and nuevo != user.email:
+            tomado = (
+                db.query(User)
+                .filter(User.email == nuevo, User.id != user.id)
+                .first()
+            )
+            if tomado:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ese usuario ya está en uso")
+            user.email = nuevo
+    if body.user_nombre is not None and user:
+        user.nombre = body.user_nombre.strip() or None
+
+    for campo in (
+        "negocio_nombre", "negocio_que_vende", "negocio_propuesta_valor",
+        "negocio_zona", "pais", "sitio_web", "deriva_nombre", "deriva_whatsapp",
+    ):
+        val = getattr(body, campo)
+        if val is not None:
+            v = val.strip()
+            setattr(cfg, campo, v or None)
+
+    db.commit()
+    return get_cliente_config(tenant_id, db)
+
+
+@router.post("/clientes/{tenant_id}/reset-password", response_model=ResetPasswordOut)
+def reset_cliente_password(tenant_id: int, db: Session = Depends(get_db)):
+    """Resetea la contraseña del cliente a la default (12345)."""
+    _tenant_prospia(db, tenant_id)
+    user = _user_principal(db, tenant_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El cliente no tiene usuario")
+    user.password_hash = hash_password(DEFAULT_PASSWORD)
+    db.commit()
+    return ResetPasswordOut(password=DEFAULT_PASSWORD)
 
 
 @router.get("/etiguel/leads", response_model=list[EtiguelLead])

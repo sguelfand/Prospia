@@ -1,6 +1,7 @@
-import { BarChart2, ChevronLeft, ChevronRight, LogOut, Menu, Search, Settings, Users, X } from 'lucide-react'
-import { useState } from 'react'
+import { BarChart2, ChevronLeft, ChevronRight, LogOut, Menu, Search, Settings, ShieldCheck, Users, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { api } from '../api/client'
 import { ProspiaLogo, ProspiaMark } from './Logo'
 import ThemeToggle from './ThemeToggle'
 
@@ -26,6 +27,11 @@ export default function Layout() {
   const navigate = useNavigate()
   const [collapsed, setCollapsed]   = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [nivel, setNivel]           = useState<number | null>(null)
+
+  useEffect(() => {
+    api.get<{ nivel: number }>('/auth/me').then(me => setNivel(me.nivel)).catch(() => {})
+  }, [])
 
   function logout() {
     localStorage.removeItem('token')
@@ -66,6 +72,16 @@ export default function Layout() {
                 )
               })}
             </nav>
+            {nivel === 1 && (
+              <Link
+                to="/admin-clientes"
+                onClick={() => setMobileOpen(false)}
+                className={navClass(location.pathname.startsWith('/admin-clientes'))}
+              >
+                <ShieldCheck size={16} />
+                Admin clientes
+              </Link>
+            )}
             <Link
               to="/configuracion"
               onClick={() => setMobileOpen(false)}
@@ -122,6 +138,16 @@ export default function Layout() {
             )
           })}
         </nav>
+        {nivel === 1 && (
+          <Link
+            to="/admin-clientes"
+            title={collapsed ? 'Admin clientes' : undefined}
+            className={navClass(location.pathname.startsWith('/admin-clientes'), collapsed)}
+          >
+            <ShieldCheck size={16} />
+            {!collapsed && 'Admin clientes'}
+          </Link>
+        )}
         <Link
           to="/configuracion"
           title={collapsed ? 'Configuración' : undefined}

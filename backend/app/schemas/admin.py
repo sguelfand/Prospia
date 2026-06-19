@@ -206,3 +206,41 @@ class EventoOut(BaseModel):
     prospect_nombre: str
     detalle: str | None
     fuente: str = "plataforma"
+
+
+# ── Admin clientes: ver/editar la config esencial de un cliente (nivel 1) ──
+class ClienteConfigOut(BaseModel):
+    """Config esencial de un cliente para el editor de Admin clientes."""
+    tenant_id: int
+    nombre: str               # nombre del cliente (tenant)
+    slug: str
+    user_id: int | None       # usuario de login del cliente (si tiene)
+    usuario: str | None       # su login
+    user_nombre: str | None
+    # Negocio / contacto (TenantConfig)
+    negocio_nombre: str | None
+    negocio_que_vende: str | None
+    negocio_propuesta_valor: str | None
+    negocio_zona: str | None
+    pais: str | None
+    sitio_web: str | None
+    deriva_nombre: str | None
+    deriva_whatsapp: str | None
+
+
+class ClienteConfigUpdate(BaseModel):
+    nombre: str | None = None
+    usuario: str | None = None
+    user_nombre: str | None = None
+    negocio_nombre: str | None = None
+    negocio_que_vende: str | None = None
+    negocio_propuesta_valor: str | None = None
+    negocio_zona: str | None = None
+    pais: str | None = None
+    sitio_web: str | None = None
+    deriva_nombre: str | None = None
+    deriva_whatsapp: str | None = None
+
+
+class ResetPasswordOut(BaseModel):
+    password: str             # la pass a la que se reseteó (default)

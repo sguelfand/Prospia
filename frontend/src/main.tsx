@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard'
 import Prospects from './pages/Prospects'
 import Terminos from './pages/Terminos'
 import Configuracion from './pages/Configuracion'
+import AdminClientes from './pages/AdminClientes'
 import Layout from './components/Layout'
 import { ThemeProvider } from './theme'
 import './index.css'
@@ -26,6 +27,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="prospects" element={<Prospects />} />
           <Route path="terminos" element={<Terminos />} />
           <Route path="configuracion" element={<Configuracion />} />
+          <Route path="admin-clientes" element={<AdminClientes />} />
         </Route>
       </Routes>
     </BrowserRouter>

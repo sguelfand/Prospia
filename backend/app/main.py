@@ -87,6 +87,13 @@ def run_migrations():
         for col in tenant_config_cols:
             conn.execute(text(f"ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS {col}"))
 
+        # ── users.nivel: 1 = superadmin, 2 = cliente normal ──
+        conn.execute(text(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS nivel INTEGER NOT NULL DEFAULT 2"
+        ))
+        # superadmin ⇔ nivel 1 (idempotente)
+        conn.execute(text("UPDATE users SET nivel = 1 WHERE role = 'superadmin'"))
+
 
 Base.metadata.create_all(bind=engine)
 run_migrations()

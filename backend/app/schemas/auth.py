@@ -18,6 +18,7 @@ class UserMe(BaseModel):
     email: str
     nombre: str | None
     role: str
+    nivel: int
 
     model_config = {"from_attributes": True}
 
