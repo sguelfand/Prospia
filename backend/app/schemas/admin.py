@@ -137,6 +137,15 @@ class AgentErrorIn(BaseModel):
     patron: str | None = None
 
 
+class AvisoIn(BaseModel):
+    """Aviso genérico para push a la app (reemplaza mails de notificación).
+    Lo postean el webhook y OpenClaw/Camila. categoria: primer_contacto |
+    consulta | forward | smoke | apify | otro."""
+    title: str
+    body: str
+    categoria: str | None = None
+
+
 class AgentErrorOut(BaseModel):
     id: int                  # el "#número"
     fuente: str

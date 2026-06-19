@@ -13,7 +13,7 @@ from app.core.config import settings
 from app.database import get_db
 from app.models.agent_error import AgentError
 from app.models.etiguel_mirror import EtiguelMirror, EtiguelMirrorMensaje
-from app.schemas.admin import AgentErrorIn, EtiguelMirrorIn
+from app.schemas.admin import AgentErrorIn, AvisoIn, EtiguelMirrorIn
 from app.services import push
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
@@ -79,6 +79,25 @@ def ingest_etiguel_mirror(
 
     db.commit()
     return {"ok": True, "tipo": mirror.tipo, "item_id": mirror.item_id, "mensaje_agregado": agregado}
+
+
+@router.post("/aviso")
+def ingest_aviso(
+    body: AvisoIn,
+    x_mirror_token: str | None = Header(None),
+):
+    """Aviso genérico → push a todos los devices. Reemplaza los mails de
+    notificación (primer contacto, consulta de Camila, alertas técnicas).
+    Best-effort: el que llama no debe romperse si esto falla."""
+    _check_token(x_mirror_token)
+    data = {"tipo": "aviso"}
+    if body.categoria:
+        data["categoria"] = body.categoria
+    try:
+        push.notificar_aviso_async(body.title[:120], body.body[:300], data)
+    except Exception:
+        pass
+    return {"ok": True}
 
 
 @router.post("/agent-error")

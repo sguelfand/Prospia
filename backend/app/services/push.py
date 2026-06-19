@@ -113,6 +113,27 @@ def notificar_error_async(error_id: int, fuente: str, contenido: str) -> None:
     threading.Thread(target=_notificar_error, args=(error_id, fuente, contenido), daemon=True).start()
 
 
+def _notificar_aviso(title: str, body: str, data: dict) -> None:
+    from app.database import SessionLocal
+    from app.models.device import Device
+
+    db = SessionLocal()
+    try:
+        # Aviso al dueño (primer contacto, consulta de Camila, alertas técnicas):
+        # va a TODOS los devices, sin filtro de silencio por cliente.
+        tokens = [d.expo_token for d in db.query(Device).all()]
+        _enviar(tokens, title, body, data)
+    except Exception as e:
+        print(f"[PUSH] error armando aviso: {type(e).__name__}: {e}")
+    finally:
+        db.close()
+
+
+def notificar_aviso_async(title: str, body: str, data: dict | None = None) -> None:
+    """Push genérico de aviso (reemplaza los mails de notificación). Background."""
+    threading.Thread(target=_notificar_aviso, args=(title, body, data or {}), daemon=True).start()
+
+
 def enviar_prueba() -> int:
     """Manda una notificación de prueba a todos los devices registrados.
     Devuelve a cuántos se envió. Útil para verificar el circuito de push."""
