@@ -36,9 +36,11 @@ export default function Login() {
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-ink-soft mb-1">Email</label>
+            <label className="block text-sm font-medium text-ink-soft mb-1">Usuario</label>
             <input
-              type="email"
+              type="text"
+              autoCapitalize="none"
+              autoCorrect="off"
               value={email}
               onChange={e => setEmail(e.target.value)}
               required

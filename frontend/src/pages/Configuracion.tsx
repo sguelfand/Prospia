@@ -94,9 +94,11 @@ export default function Configuracion() {
           <input value={nombre} onChange={(e) => setNombre(e.target.value)} className={inputCls} />
         </div>
         <div>
-          <label className={labelCls}>Email</label>
+          <label className={labelCls}>Usuario</label>
           <input
-            type="email"
+            type="text"
+            autoCapitalize="none"
+            autoCorrect="off"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
