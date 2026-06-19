@@ -37,6 +37,7 @@ export default function PendientesScreen(_props: PendientesProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<Pendiente | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -83,12 +84,20 @@ export default function PendientesScreen(_props: PendientesProps) {
     ]);
   };
 
-  const agregar = async (texto: string, prioridad: Prioridad, area: Area) => {
+  const guardar = async (texto: string, prioridad: Prioridad, area: Area) => {
     if (!token) return;
-    const nuevo = await crearPendiente(token, texto, prioridad, area);
-    setItems((prev) => [nuevo, ...prev]);
-    setFiltro("pendientes");
+    if (editing) {
+      const upd = await editarPendiente(token, editing.id, { texto, prioridad, area });
+      setItems((prev) => prev.map((p) => (p.id === upd.id ? upd : p)));
+    } else {
+      const nuevo = await crearPendiente(token, texto, prioridad, area);
+      setItems((prev) => [nuevo, ...prev]);
+      setFiltro("pendientes");
+    }
   };
+
+  const abrirNuevo = () => { setEditing(null); setFormOpen(true); };
+  const abrirEditar = (p: Pendiente) => { setEditing(p); setFormOpen(true); };
 
   if (loading) return <Loader />;
 
@@ -103,7 +112,7 @@ export default function PendientesScreen(_props: PendientesProps) {
         <Tab label={`Realizados (${nReal})`} active={filtro === "realizados"} onPress={() => setFiltro("realizados")} />
       </View>
 
-      <TouchableOpacity style={styles.addBtn} onPress={() => setFormOpen(true)}>
+      <TouchableOpacity style={styles.addBtn} onPress={abrirNuevo}>
         <Icon name="plus" size={18} color="#fff" />
         <Text style={styles.addBtnText}>Nuevo pendiente</Text>
       </TouchableOpacity>
@@ -128,12 +137,12 @@ export default function PendientesScreen(_props: PendientesProps) {
             }
             right={{ icon: "x", color: colors.red, onTrigger: () => confirmarBorrar(item) }}
           >
-            <PendienteCard item={item} />
+            <PendienteCard item={item} onPress={() => abrirEditar(item)} />
           </SwipeRow>
         )}
       />
 
-      <FormModal visible={formOpen} onClose={() => setFormOpen(false)} onSubmit={agregar} />
+      <FormModal visible={formOpen} initial={editing} onClose={() => setFormOpen(false)} onSubmit={guardar} />
     </View>
   );
 }
@@ -146,9 +155,9 @@ function Tab({ label, active, onPress }: { label: string; active: boolean; onPre
   );
 }
 
-function PendienteCard({ item }: { item: Pendiente }) {
+function PendienteCard({ item, onPress }: { item: Pendiente; onPress: () => void }) {
   return (
-    <View style={styles.card}>
+    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.cardBody}>
         <Text style={styles.texto}>{item.texto}</Text>
         <View style={styles.badges}>
@@ -160,16 +169,18 @@ function PendienteCard({ item }: { item: Pendiente }) {
           </Text>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
 function FormModal({
   visible,
+  initial,
   onClose,
   onSubmit,
 }: {
   visible: boolean;
+  initial?: Pendiente | null;
   onClose: () => void;
   onSubmit: (texto: string, prioridad: Prioridad, area: Area) => Promise<void>;
 }) {
@@ -180,8 +191,12 @@ function FormModal({
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
-    if (visible) { setTexto(""); setPrioridad("media"); setArea("app"); }
-  }, [visible]);
+    if (visible) {
+      setTexto(initial?.texto ?? "");
+      setPrioridad(initial?.prioridad ?? "media");
+      setArea(initial?.area ?? "app");
+    }
+  }, [visible, initial]);
 
   const guardar = async () => {
     if (!texto.trim() || saving) return;
@@ -201,7 +216,7 @@ function FormModal({
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <View style={[styles.sheet, { paddingBottom: insets.bottom + 18 }]}>
-          <Text style={styles.sheetTitle}>Nuevo pendiente</Text>
+          <Text style={styles.sheetTitle}>{initial ? "Editar pendiente" : "Nuevo pendiente"}</Text>
           <TextInput
             style={styles.input}
             placeholder="¿Qué hay que hacer?"
