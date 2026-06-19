@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import case, extract, func
 from sqlalchemy.orm import Session
 
-from app.core.auth import hash_password
+from app.core.auth import create_access_token, hash_password
 from app.core.deps import get_superadmin
 from app.database import get_db
 from app.models.agent_error import AgentError
@@ -41,6 +41,7 @@ from app.schemas.admin import (
     EtiguelMirrorMensajeOut,
     EventoOut,
     FiltrosCliente,
+    ImpersonateOut,
     OpcionFiltro,
     PendienteIn,
     PendienteOut,
@@ -368,6 +369,18 @@ def reset_cliente_password(tenant_id: int, db: Session = Depends(get_db)):
     user.password_hash = hash_password(DEFAULT_PASSWORD)
     db.commit()
     return ResetPasswordOut(password=DEFAULT_PASSWORD)
+
+
+@router.post("/clientes/{tenant_id}/impersonate", response_model=ImpersonateOut)
+def impersonate_cliente(tenant_id: int, db: Session = Depends(get_db)):
+    """'Ver como cliente': emite un token de la sesión del usuario nivel 2 de ese
+    cliente, para que el superadmin vea la web tal cual la ve el cliente."""
+    tenant = _tenant_prospia(db, tenant_id)
+    user = _user_principal(db, tenant_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El cliente no tiene usuario")
+    token = create_access_token({"sub": str(user.id), "tenant_id": user.tenant_id})
+    return ImpersonateOut(access_token=token, cliente=tenant.nombre)
 
 
 @router.get("/etiguel/leads", response_model=list[EtiguelLead])

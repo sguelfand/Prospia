@@ -245,3 +245,9 @@ class ClienteConfigUpdate(BaseModel):
 
 class ResetPasswordOut(BaseModel):
     password: str             # la pass a la que se reseteó (default)
+
+
+class ImpersonateOut(BaseModel):
+    """Token para 'ver como cliente': sesión del usuario nivel 2 de ese tenant."""
+    access_token: str
+    cliente: str              # nombre del cliente que se está viendo

@@ -1,4 +1,4 @@
-import { BarChart2, ChevronLeft, ChevronRight, LogOut, Menu, Search, Settings, ShieldCheck, Users, X } from 'lucide-react'
+import { BarChart2, ChevronLeft, ChevronRight, Eye, LogOut, Menu, Search, Settings, ShieldCheck, Users, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
@@ -10,6 +10,8 @@ const nav = [
   { to: '/prospects', label: 'Prospects', icon: Users },
   { to: '/terminos',  label: 'Términos',  icon: Search },
 ]
+
+type ClienteOpt = { tenant_id: number; nombre: string; fuente: string }
 
 /* Clases del item de navegación (sidebar siempre navy) */
 function navClass(active: boolean, collapsed = false) {
@@ -28,15 +30,68 @@ export default function Layout() {
   const [collapsed, setCollapsed]   = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [nivel, setNivel]           = useState<number | null>(null)
+  const [clientes, setClientes]     = useState<ClienteOpt[]>([])
+
+  // Estado de impersonación ("ver como cliente"). Se persiste en localStorage;
+  // como al entrar/salir hacemos reload completo, leerlo en render alcanza.
+  const adminToken  = localStorage.getItem('admin_token')
+  const viewingAs   = localStorage.getItem('viewing_as')
+  const impersonating = !!adminToken
 
   useEffect(() => {
     api.get<{ nivel: number }>('/auth/me').then(me => setNivel(me.nivel)).catch(() => {})
   }, [])
 
+  useEffect(() => {
+    if (nivel === 1 && !impersonating) {
+      api.get<ClienteOpt[]>('/admin/clientes')
+        .then(cs => setClientes(cs.filter(c => c.fuente === 'plataforma')))
+        .catch(() => {})
+    }
+  }, [nivel, impersonating])
+
   function logout() {
     localStorage.removeItem('token')
+    localStorage.removeItem('admin_token')
+    localStorage.removeItem('viewing_as')
     navigate('/login')
   }
+
+  async function verComo(tenantId: number) {
+    try {
+      const r = await api.post<{ access_token: string; cliente: string }>(`/admin/clientes/${tenantId}/impersonate`)
+      localStorage.setItem('admin_token', localStorage.getItem('token') || '')
+      localStorage.setItem('token', r.access_token)
+      localStorage.setItem('viewing_as', r.cliente)
+      window.location.href = '/dashboard'
+    } catch {
+      alert('No se pudo ver como ese cliente (¿tiene usuario?).')
+    }
+  }
+
+  function volverAdmin() {
+    const t = localStorage.getItem('admin_token')
+    if (t) localStorage.setItem('token', t)
+    localStorage.removeItem('admin_token')
+    localStorage.removeItem('viewing_as')
+    window.location.href = '/dashboard'
+  }
+
+  /* Desplegable "Ver como un cliente" (solo nivel 1, fuera de impersonación) */
+  const verComoSelect = (
+    <div className="px-3 pb-2">
+      <select
+        value=""
+        onChange={e => { if (e.target.value) verComo(Number(e.target.value)) }}
+        className="w-full bg-white/[0.06] text-fog text-sm rounded-lg px-2 py-2 border border-white/10 focus:outline-none focus:ring-2 focus:ring-amber/50"
+      >
+        <option value="">Ver como un cliente…</option>
+        {clientes.map(c => (
+          <option key={c.tenant_id} value={c.tenant_id} className="text-ink">{c.nombre}</option>
+        ))}
+      </select>
+    </div>
+  )
 
   return (
     <div className="flex h-screen bg-app text-ink">
@@ -62,6 +117,7 @@ export default function Layout() {
               </button>
             </div>
             <nav className="flex-1 py-4">
+              {nivel === 1 && !impersonating && verComoSelect}
               {nav.map(({ to, label, icon: Icon }) => {
                 const active = location.pathname.startsWith(to)
                 return (
@@ -128,6 +184,7 @@ export default function Layout() {
           </button>
         )}
         <nav className="flex-1 py-4">
+          {nivel === 1 && !impersonating && !collapsed && verComoSelect}
           {nav.map(({ to, label, icon: Icon }) => {
             const active = location.pathname.startsWith(to)
             return (
@@ -175,6 +232,17 @@ export default function Layout() {
           <ThemeToggle />
         </div>
         <main className="flex-1 overflow-auto p-4 md:p-6 pt-16 md:pt-6">
+          {impersonating && (
+            <div className="mb-4 rounded-xl border border-amber/40 bg-amber/10 px-4 py-2.5 text-sm flex items-center justify-between gap-3">
+              <span className="flex items-center gap-2 text-ink">
+                <Eye size={16} className="text-amber" />
+                Viendo como <strong>{viewingAs}</strong>
+              </span>
+              <button onClick={volverAdmin} className="text-amber font-medium hover:underline shrink-0">
+                Volver a admin
+              </button>
+            </div>
+          )}
           <Outlet />
         </main>
       </div>
