@@ -222,6 +222,14 @@ export class ApiError extends Error {
   }
 }
 
+// Handler que se dispara cuando un request AUTENTICADO recibe 401 (token vencido
+// o inválido). Lo registra AuthProvider para cerrar sesión y mandar al login,
+// en vez de dejar a la app trabada reintentando con un token muerto.
+let onAuthError: (() => void) | null = null;
+export function setAuthErrorHandler(fn: (() => void) | null) {
+  onAuthError = fn;
+}
+
 async function request<T>(path: string, opts: RequestInit = {}, token?: string): Promise<T> {
   let res: Response;
   try {
@@ -245,6 +253,9 @@ async function request<T>(path: string, opts: RequestInit = {}, token?: string):
     } catch {
       // sin body json
     }
+    // Sesión vencida/inválida en un request autenticado → avisar para cerrar sesión.
+    // (No aplica al login, que no manda token y maneja su propio 401.)
+    if (res.status === 401 && token) onAuthError?.();
     throw new ApiError(res.status, detail);
   }
 

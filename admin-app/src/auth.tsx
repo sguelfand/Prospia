@@ -1,6 +1,6 @@
 import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { Alert } from "react-native";
 
 import * as api from "./api";
@@ -44,6 +44,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [locked, setLocked] = useState(false);
   const [biometricSupported, setBiometricSupported] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
+
+  // Espejo del token para que el handler de 401 sepa si ya cerramos sesión
+  // (evita disparar el aviso N veces cuando varios requests fallan a la vez).
+  const tokenRef = useRef<string | null>(null);
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
+
+  // Sesión vencida/inválida (401 en un request autenticado): cerrar sesión y
+  // avisar UNA vez. Mantiene la preferencia de biometría para el re-login.
+  useEffect(() => {
+    api.setAuthErrorHandler(() => {
+      if (tokenRef.current == null) return; // ya cerrada
+      tokenRef.current = null;
+      SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => {});
+      setToken(null);
+      setLocked(false);
+      Alert.alert("Sesión vencida", "Tu sesión expiró. Volvé a iniciar sesión.");
+    });
+    return () => api.setAuthErrorHandler(null);
+  }, []);
 
   useEffect(() => {
     (async () => {

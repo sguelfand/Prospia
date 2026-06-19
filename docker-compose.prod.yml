@@ -20,7 +20,7 @@ services:
       DATABASE_URL: postgresql://plataforma:${POSTGRES_PASSWORD}@db:5432/plataforma
       SECRET_KEY: ${SECRET_KEY}
       ALGORITHM: HS256
-      ACCESS_TOKEN_EXPIRE_MINUTES: 60
+      ACCESS_TOKEN_EXPIRE_MINUTES: 43200  # 30 días (app de admin personal; la seguridad real la da el desbloqueo del aparato)
       WEBHOOK_TOKEN: ${WEBHOOK_TOKEN}
       MONDAY_API_KEY: ${MONDAY_API_KEY:-}
     depends_on:
