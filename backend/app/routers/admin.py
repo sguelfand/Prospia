@@ -314,6 +314,15 @@ def get_cliente_config(tenant_id: int, db: Session = Depends(get_db)):
         sitio_web=cfg.sitio_web,
         deriva_nombre=cfg.deriva_nombre,
         deriva_whatsapp=cfg.deriva_whatsapp,
+        envio_auto_habilitado=cfg.envio_auto_habilitado,
+        envio_tope_diario=cfg.envio_tope_diario,
+        envio_delay_seg=cfg.envio_delay_seg,
+        envio_hora_inicio=cfg.envio_hora_inicio,
+        envio_hora_fin=cfg.envio_hora_fin,
+        wa_templates=list(cfg.wa_templates or []),
+        cadencia_dias=dict(cfg.cadencia_dias or {}),
+        cadencia_max_contactos=cfg.cadencia_max_contactos,
+        cadencia_dias_cancelar=cfg.cadencia_dias_cancelar,
     )
 
 
@@ -354,6 +363,22 @@ def update_cliente_config(
         if val is not None:
             v = val.strip()
             setattr(cfg, campo, v or None)
+
+    # Contacto/envío + cadencia (numéricos / bool)
+    for campo in (
+        "envio_auto_habilitado", "envio_tope_diario", "envio_delay_seg",
+        "envio_hora_inicio", "envio_hora_fin",
+        "cadencia_max_contactos", "cadencia_dias_cancelar",
+    ):
+        val = getattr(body, campo)
+        if val is not None:
+            setattr(cfg, campo, val)
+
+    if body.wa_templates is not None:
+        cfg.wa_templates = [t.strip() for t in body.wa_templates if t and t.strip()]
+
+    if body.cadencia_dias is not None:
+        cfg.cadencia_dias = {str(k): int(v) for k, v in body.cadencia_dias.items()}
 
     db.commit()
     return get_cliente_config(tenant_id, db)

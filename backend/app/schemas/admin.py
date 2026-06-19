@@ -226,6 +226,17 @@ class ClienteConfigOut(BaseModel):
     sitio_web: str | None
     deriva_nombre: str | None
     deriva_whatsapp: str | None
+    # Contacto y envío
+    envio_auto_habilitado: bool
+    envio_tope_diario: int
+    envio_delay_seg: int
+    envio_hora_inicio: int
+    envio_hora_fin: int
+    wa_templates: list[str]
+    # Cadencia de re-contacto
+    cadencia_dias: dict
+    cadencia_max_contactos: int
+    cadencia_dias_cancelar: int
 
 
 class ClienteConfigUpdate(BaseModel):
@@ -241,6 +252,17 @@ class ClienteConfigUpdate(BaseModel):
     sitio_web: str | None = None
     deriva_nombre: str | None = None
     deriva_whatsapp: str | None = None
+    # Contacto y envío
+    envio_auto_habilitado: bool | None = None
+    envio_tope_diario: int | None = None
+    envio_delay_seg: int | None = None
+    envio_hora_inicio: int | None = None
+    envio_hora_fin: int | None = None
+    wa_templates: list[str] | None = None
+    # Cadencia
+    cadencia_dias: dict | None = None
+    cadencia_max_contactos: int | None = None
+    cadencia_dias_cancelar: int | None = None
 
 
 class ResetPasswordOut(BaseModel):

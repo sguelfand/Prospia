@@ -1,4 +1,4 @@
-import { Eye, EyeOff, KeyRound } from 'lucide-react'
+import { Eye, EyeOff, KeyRound, Plus, Trash2 } from 'lucide-react'
 import { FormEvent, useEffect, useState } from 'react'
 import { api } from '../api/client'
 
@@ -19,6 +19,17 @@ type ClienteConfig = {
   sitio_web: string | null
   deriva_nombre: string | null
   deriva_whatsapp: string | null
+  // Contacto y envío
+  envio_auto_habilitado: boolean
+  envio_tope_diario: number
+  envio_delay_seg: number
+  envio_hora_inicio: number
+  envio_hora_fin: number
+  wa_templates: string[]
+  // Cadencia
+  cadencia_dias: Record<string, number>
+  cadencia_max_contactos: number
+  cadencia_dias_cancelar: number
 }
 
 const inputCls =
@@ -63,8 +74,22 @@ export default function AdminClientes() {
     }
   }
 
-  function field(k: keyof ClienteConfig, v: string) {
+  function field<K extends keyof ClienteConfig>(k: K, v: ClienteConfig[K]) {
     setCfg((c) => (c ? { ...c, [k]: v } : c))
+  }
+
+  // Helpers para la lista de mensajes rotativos
+  function setTemplate(i: number, v: string) {
+    if (cfg) field('wa_templates', cfg.wa_templates.map((t, j) => (j === i ? v : t)))
+  }
+  function addTemplate() {
+    if (cfg) field('wa_templates', [...cfg.wa_templates, ''])
+  }
+  function removeTemplate(i: number) {
+    if (cfg) field('wa_templates', cfg.wa_templates.filter((_, j) => j !== i))
+  }
+  function setCadencia(k: string, v: number) {
+    if (cfg) field('cadencia_dias', { ...cfg.cadencia_dias, [k]: v })
   }
 
   async function save(e: FormEvent) {
@@ -87,6 +112,15 @@ export default function AdminClientes() {
         sitio_web: cfg.sitio_web,
         deriva_nombre: cfg.deriva_nombre,
         deriva_whatsapp: cfg.deriva_whatsapp,
+        envio_auto_habilitado: cfg.envio_auto_habilitado,
+        envio_tope_diario: cfg.envio_tope_diario,
+        envio_delay_seg: cfg.envio_delay_seg,
+        envio_hora_inicio: cfg.envio_hora_inicio,
+        envio_hora_fin: cfg.envio_hora_fin,
+        wa_templates: cfg.wa_templates.map((t) => t.trim()).filter(Boolean),
+        cadencia_dias: cfg.cadencia_dias,
+        cadencia_max_contactos: cfg.cadencia_max_contactos,
+        cadencia_dias_cancelar: cfg.cadencia_dias_cancelar,
       })
       setCfg(updated)
       setClientes((cs) => cs.map((c) => (c.tenant_id === updated.tenant_id ? { ...c, nombre: updated.nombre } : c)))
@@ -273,6 +307,142 @@ export default function AdminClientes() {
                 <input
                   value={cfg.deriva_whatsapp ?? ''}
                   onChange={(e) => field('deriva_whatsapp', e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Contacto y envío */}
+          <div className="bg-card border border-line rounded-2xl p-6 space-y-4">
+            <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Contacto y envío</h2>
+            <label className="flex items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={cfg.envio_auto_habilitado}
+                onChange={(e) => field('envio_auto_habilitado', e.target.checked)}
+                className="h-4 w-4 accent-primary"
+              />
+              Envío automático activado
+            </label>
+            <div>
+              <label className={labelCls}>Máximo de contactos por día</label>
+              <input
+                type="number"
+                min={0}
+                value={cfg.envio_tope_diario}
+                onChange={(e) => field('envio_tope_diario', Number(e.target.value) || 0)}
+                className={inputCls}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>Hora desde</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={23}
+                  value={cfg.envio_hora_inicio}
+                  onChange={(e) => field('envio_hora_inicio', Number(e.target.value) || 0)}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Hora hasta</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={23}
+                  value={cfg.envio_hora_fin}
+                  onChange={(e) => field('envio_hora_fin', Number(e.target.value) || 0)}
+                  className={inputCls}
+                />
+              </div>
+            </div>
+            <div>
+              <label className={labelCls}>Delay entre envíos (segundos)</label>
+              <input
+                type="number"
+                min={0}
+                value={cfg.envio_delay_seg}
+                onChange={(e) => field('envio_delay_seg', Number(e.target.value) || 0)}
+                className={inputCls}
+              />
+            </div>
+          </div>
+
+          {/* Mensajes rotativos */}
+          <div className="bg-card border border-line rounded-2xl p-6 space-y-3">
+            <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Mensajes rotativos</h2>
+            <p className="text-xs text-muted">
+              El sistema elige uno al azar en cada contacto (rotación anti-ban). Podés usar{' '}
+              <code className="text-ink">{'{agente}'}</code> y <code className="text-ink">{'{empresa}'}</code>.
+              Si la lista queda vacía, se usan mensajes genéricos.
+            </p>
+            {cfg.wa_templates.map((t, i) => (
+              <div key={i} className="flex gap-2 items-start">
+                <textarea
+                  value={t}
+                  onChange={(e) => setTemplate(i, e.target.value)}
+                  rows={2}
+                  className={inputCls}
+                />
+                <button
+                  type="button"
+                  onClick={() => removeTemplate(i)}
+                  title="Quitar"
+                  className="text-muted hover:text-red-500 px-2 py-2 shrink-0"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={addTemplate}
+              className="inline-flex items-center gap-2 border border-line text-ink rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-app"
+            >
+              <Plus size={15} />
+              Agregar mensaje
+            </button>
+          </div>
+
+          {/* Cadencia de re-contacto */}
+          <div className="bg-card border border-line rounded-2xl p-6 space-y-4">
+            <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Cadencia de re-contacto</h2>
+            <div>
+              <label className={labelCls}>Días entre intentos (1° → 2° → 3°)</label>
+              <div className="grid grid-cols-3 gap-3">
+                {['1', '2', '3'].map((k) => (
+                  <input
+                    key={k}
+                    type="number"
+                    min={0}
+                    value={cfg.cadencia_dias[k] ?? 0}
+                    onChange={(e) => setCadencia(k, Number(e.target.value) || 0)}
+                    className={inputCls}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>Máx. de contactos</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={cfg.cadencia_max_contactos}
+                  onChange={(e) => field('cadencia_max_contactos', Number(e.target.value) || 0)}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Cancelar tras (días sin respuesta)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={cfg.cadencia_dias_cancelar}
+                  onChange={(e) => field('cadencia_dias_cancelar', Number(e.target.value) || 0)}
                   className={inputCls}
                 />
               </div>
