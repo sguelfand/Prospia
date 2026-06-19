@@ -191,7 +191,16 @@ export interface AgentError {
 export type Prioridad = "alta" | "media" | "baja";
 export type Area = "app" | "web" | "etiguel";
 
-export interface Pendiente {
+// Campos ricos (opcionales) — secciones del tracker. Texto multilínea.
+export interface PendienteRich {
+  contexto: string | null;
+  que_armar: string | null;
+  consideraciones: string | null;
+  depende: string | null;
+  alcance: string | null;
+}
+
+export interface Pendiente extends Partial<PendienteRich> {
   id: number;
   texto: string;
   prioridad: Prioridad;
@@ -316,16 +325,22 @@ export const deleteError = (token: string, id: number) =>
 export const getPendientes = (token: string, incluirHechos = false) =>
   request<Pendiente[]>(`/admin/pendientes?incluir_hechos=${incluirHechos}`, {}, token);
 
-export const crearPendiente = (token: string, texto: string, prioridad: Prioridad, area: Area) =>
+export const crearPendiente = (
+  token: string,
+  texto: string,
+  prioridad: Prioridad,
+  area: Area,
+  extra?: Partial<PendienteRich>,
+) =>
   request<Pendiente>("/admin/pendientes", {
     method: "POST",
-    body: JSON.stringify({ texto, prioridad, area }),
+    body: JSON.stringify({ texto, prioridad, area, ...(extra ?? {}) }),
   }, token);
 
 export const editarPendiente = (
   token: string,
   id: number,
-  cambios: Partial<{ texto: string; prioridad: Prioridad; area: Area; hecho: boolean }>,
+  cambios: Partial<{ texto: string; prioridad: Prioridad; area: Area; hecho: boolean } & PendienteRich>,
 ) =>
   request<Pendiente>(`/admin/pendientes/${id}`, {
     method: "PATCH",

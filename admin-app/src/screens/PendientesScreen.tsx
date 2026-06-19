@@ -6,6 +6,7 @@ import {
   Modal,
   Platform,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -14,7 +15,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Area, Pendiente, Prioridad, borrarPendiente, crearPendiente, editarPendiente, getPendientes } from "../api";
+import { Area, Pendiente, PendienteRich, Prioridad, borrarPendiente, crearPendiente, editarPendiente, getPendientes } from "../api";
 import { useAuth } from "../auth";
 import { Icon } from "../components/Icon";
 import { SwipeRow } from "../components/SwipeRow";
@@ -84,13 +85,13 @@ export default function PendientesScreen(_props: PendientesProps) {
     ]);
   };
 
-  const guardar = async (texto: string, prioridad: Prioridad, area: Area) => {
+  const guardar = async (texto: string, prioridad: Prioridad, area: Area, rich: Partial<PendienteRich>) => {
     if (!token) return;
     if (editing) {
-      const upd = await editarPendiente(token, editing.id, { texto, prioridad, area });
+      const upd = await editarPendiente(token, editing.id, { texto, prioridad, area, ...rich });
       setItems((prev) => prev.map((p) => (p.id === upd.id ? upd : p)));
     } else {
-      const nuevo = await crearPendiente(token, texto, prioridad, area);
+      const nuevo = await crearPendiente(token, texto, prioridad, area, rich);
       setItems((prev) => [nuevo, ...prev]);
       setFiltro("pendientes");
     }
@@ -155,10 +156,42 @@ function Tab({ label, active, onPress }: { label: string; active: boolean; onPre
   );
 }
 
-function PendienteCard({ item, onPress }: { item: Pendiente; onPress: () => void }) {
+const RICH_LABELS: Record<keyof PendienteRich, string> = {
+  contexto: "Contexto / Por qué",
+  que_armar: "Qué hay que armar",
+  consideraciones: "Consideraciones / Riesgos",
+  depende: "Depende de",
+  alcance: "Alcance a futuro",
+};
+const RICH_ORDER: (keyof PendienteRich)[] = ["contexto", "que_armar", "consideraciones", "depende", "alcance"];
+const RICH_LISTS: (keyof PendienteRich)[] = ["que_armar", "consideraciones", "depende"];
+
+function RichSection({ campo, valor }: { campo: keyof PendienteRich; valor: string }) {
+  const lines = valor.split("\n").map((l) => l.trim()).filter(Boolean);
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.cardBody}>
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>{RICH_LABELS[campo]}</Text>
+      {RICH_LISTS.includes(campo) ? (
+        lines.map((l, i) => (
+          <View key={i} style={styles.bulletRow}>
+            <Text style={styles.bullet}>›</Text>
+            <Text style={styles.sectionText}>{l}</Text>
+          </View>
+        ))
+      ) : (
+        <Text style={styles.sectionText}>{valor}</Text>
+      )}
+    </View>
+  );
+}
+
+function PendienteCard({ item, onPress }: { item: Pendiente; onPress: () => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const richCampos = RICH_ORDER.filter((k) => item[k]);
+  const tieneDetalle = richCampos.length > 0;
+  return (
+    <View style={styles.card}>
+      <TouchableOpacity style={styles.cardBody} onPress={onPress} activeOpacity={0.7}>
         <Text style={styles.texto}>{item.texto}</Text>
         <View style={styles.badges}>
           <Text style={[styles.badge, { color: prioColor[item.prioridad], borderColor: prioColor[item.prioridad] }]}>
@@ -168,8 +201,22 @@ function PendienteCard({ item, onPress }: { item: Pendiente; onPress: () => void
             {item.area}
           </Text>
         </View>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+      {tieneDetalle && (
+        <>
+          <TouchableOpacity style={styles.detalleToggle} onPress={() => setExpanded((v) => !v)} activeOpacity={0.7}>
+            <Text style={styles.detalleToggleText}>{expanded ? "Ocultar detalle ▾" : "Ver detalle ▸"}</Text>
+          </TouchableOpacity>
+          {expanded && (
+            <View style={styles.detalle}>
+              {richCampos.map((k) => (
+                <RichSection key={k} campo={k} valor={item[k] as string} />
+              ))}
+            </View>
+          )}
+        </>
+      )}
+    </View>
   );
 }
 
@@ -182,11 +229,15 @@ function FormModal({
   visible: boolean;
   initial?: Pendiente | null;
   onClose: () => void;
-  onSubmit: (texto: string, prioridad: Prioridad, area: Area) => Promise<void>;
+  onSubmit: (texto: string, prioridad: Prioridad, area: Area, rich: Partial<PendienteRich>) => Promise<void>;
 }) {
   const [texto, setTexto] = useState("");
   const [prioridad, setPrioridad] = useState<Prioridad>("media");
   const [area, setArea] = useState<Area>("app");
+  const [rich, setRich] = useState<Record<keyof PendienteRich, string>>({
+    contexto: "", que_armar: "", consideraciones: "", depende: "", alcance: "",
+  });
+  const [mostrarDetalle, setMostrarDetalle] = useState(false);
   const [saving, setSaving] = useState(false);
   const insets = useSafeAreaInsets();
 
@@ -195,6 +246,13 @@ function FormModal({
       setTexto(initial?.texto ?? "");
       setPrioridad(initial?.prioridad ?? "media");
       setArea(initial?.area ?? "app");
+      const r = {
+        contexto: initial?.contexto ?? "", que_armar: initial?.que_armar ?? "",
+        consideraciones: initial?.consideraciones ?? "", depende: initial?.depende ?? "",
+        alcance: initial?.alcance ?? "",
+      };
+      setRich(r);
+      setMostrarDetalle(RICH_ORDER.some((k) => r[k]));
     }
   }, [visible, initial]);
 
@@ -202,7 +260,8 @@ function FormModal({
     if (!texto.trim() || saving) return;
     setSaving(true);
     try {
-      await onSubmit(texto.trim(), prioridad, area);
+      // mandamos los campos ricos siempre (vacío → el backend lo guarda como NULL)
+      await onSubmit(texto.trim(), prioridad, area, rich);
       onClose();
     } finally {
       setSaving(false);
@@ -216,39 +275,60 @@ function FormModal({
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <View style={[styles.sheet, { paddingBottom: insets.bottom + 18 }]}>
-          <Text style={styles.sheetTitle}>{initial ? "Editar pendiente" : "Nuevo pendiente"}</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="¿Qué hay que hacer?"
-            placeholderTextColor={colors.textDim}
-            value={texto}
-            onChangeText={setTexto}
-            multiline
-            autoFocus
-          />
+          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <Text style={styles.sheetTitle}>{initial ? "Editar pendiente" : "Nuevo pendiente"}</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="¿Qué hay que hacer?"
+              placeholderTextColor={colors.textDim}
+              value={texto}
+              onChangeText={setTexto}
+              multiline
+              autoFocus
+            />
 
-          <Text style={styles.label}>Prioridad</Text>
-          <View style={styles.chips}>
-            {PRIORIDADES.map((p) => (
-              <Chip key={p} label={p} active={prioridad === p} color={prioColor[p]} onPress={() => setPrioridad(p)} />
-            ))}
-          </View>
+            <Text style={styles.label}>Prioridad</Text>
+            <View style={styles.chips}>
+              {PRIORIDADES.map((p) => (
+                <Chip key={p} label={p} active={prioridad === p} color={prioColor[p]} onPress={() => setPrioridad(p)} />
+              ))}
+            </View>
 
-          <Text style={styles.label}>Área</Text>
-          <View style={styles.chips}>
-            {AREAS.map((a) => (
-              <Chip key={a} label={a} active={area === a} color={areaColor[a]} onPress={() => setArea(a)} />
-            ))}
-          </View>
+            <Text style={styles.label}>Área</Text>
+            <View style={styles.chips}>
+              {AREAS.map((a) => (
+                <Chip key={a} label={a} active={area === a} color={areaColor[a]} onPress={() => setArea(a)} />
+              ))}
+            </View>
 
-          <View style={styles.actions}>
-            <TouchableOpacity style={styles.btnCancel} onPress={onClose}>
-              <Text style={styles.btnCancelText}>Cancelar</Text>
+            <TouchableOpacity style={styles.detalleToggle} onPress={() => setMostrarDetalle((v) => !v)} activeOpacity={0.7}>
+              <Text style={styles.detalleToggleText}>{mostrarDetalle ? "Ocultar detalle ▾" : "Agregar detalle (contexto, pasos…) ▸"}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.btnSave, !texto.trim() ? styles.btnSaveOff : null]} onPress={guardar} disabled={!texto.trim() || saving}>
-              <Text style={styles.btnSaveText}>{saving ? "Guardando…" : "Guardar"}</Text>
-            </TouchableOpacity>
-          </View>
+
+            {mostrarDetalle &&
+              RICH_ORDER.map((campo) => (
+                <View key={campo}>
+                  <Text style={styles.label}>{RICH_LABELS[campo]}{RICH_LISTS.includes(campo) ? " (una línea por punto)" : ""}</Text>
+                  <TextInput
+                    style={[styles.input, styles.inputRich]}
+                    placeholder="Opcional"
+                    placeholderTextColor={colors.textDim}
+                    value={rich[campo]}
+                    onChangeText={(t) => setRich((prev) => ({ ...prev, [campo]: t }))}
+                    multiline
+                  />
+                </View>
+              ))}
+
+            <View style={styles.actions}>
+              <TouchableOpacity style={styles.btnCancel} onPress={onClose}>
+                <Text style={styles.btnCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.btnSave, !texto.trim() ? styles.btnSaveOff : null]} onPress={guardar} disabled={!texto.trim() || saving}>
+                <Text style={styles.btnSaveText}>{saving ? "Guardando…" : "Guardar"}</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -280,15 +360,24 @@ const styles = StyleSheet.create({
   addBtn: { backgroundColor: colors.primary, margin: 12, marginBottom: 4, borderRadius: 10, paddingVertical: 12, flexDirection: "row", alignItems: "center", justifyContent: "center" },
   addBtnText: { color: "#fff", fontSize: 15, fontWeight: "700", marginLeft: 6 },
 
-  card: { backgroundColor: colors.card, borderRadius: 12, padding: 14, marginBottom: 10, flexDirection: "row", alignItems: "center" },
-  cardBody: { flex: 1 },
+  card: { backgroundColor: colors.card, borderRadius: 12, padding: 14, marginBottom: 10 },
+  cardBody: {},
   texto: { color: colors.text, fontSize: 14 },
   badges: { flexDirection: "row", gap: 8, marginTop: 8 },
   badge: { fontSize: 11, fontWeight: "700", borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, overflow: "hidden", textTransform: "capitalize" },
 
+  detalleToggle: { marginTop: 12, paddingVertical: 4 },
+  detalleToggleText: { color: colors.primary, fontSize: 12, fontWeight: "700" },
+  detalle: { marginTop: 8, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 12 },
+  section: { marginBottom: 12 },
+  sectionTitle: { color: colors.textDim, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 5 },
+  sectionText: { color: colors.text, fontSize: 13, lineHeight: 19, flex: 1 },
+  bulletRow: { flexDirection: "row", marginBottom: 4 },
+  bullet: { color: colors.primary, fontSize: 13, fontWeight: "700", width: 16 },
 
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
-  sheet: { backgroundColor: colors.bg, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 18 },
+  sheet: { backgroundColor: colors.bg, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 18, maxHeight: "90%" },
+  inputRich: { minHeight: 44 },
   sheetTitle: { color: colors.text, fontSize: 17, fontWeight: "800", marginBottom: 12 },
   input: { backgroundColor: colors.card, borderRadius: 10, padding: 12, color: colors.text, fontSize: 15, minHeight: 60, textAlignVertical: "top" },
   label: { color: colors.textDim, fontSize: 12, fontWeight: "700", textTransform: "uppercase", marginTop: 16, marginBottom: 8 },
