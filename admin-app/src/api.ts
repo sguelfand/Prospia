@@ -188,6 +188,18 @@ export interface AgentError {
   fecha: string;
 }
 
+export type Prioridad = "alta" | "media" | "baja";
+export type Area = "app" | "web" | "etiguel";
+
+export interface Pendiente {
+  id: number;
+  texto: string;
+  prioridad: Prioridad;
+  area: Area;
+  hecho: boolean;
+  fecha: string;
+}
+
 // tenant_id sentinela de Etiguel (coincide con el backend)
 export const ETIGUEL_TENANT_ID = -1;
 
@@ -299,6 +311,29 @@ export const resolverError = (token: string, id: number, resuelto: boolean) =>
 
 export const deleteError = (token: string, id: number) =>
   request<void>(`/admin/errores/${id}`, { method: "DELETE" }, token);
+
+// ── Pendientes ───────────────────────────────────────────────────────────────
+export const getPendientes = (token: string, incluirHechos = false) =>
+  request<Pendiente[]>(`/admin/pendientes?incluir_hechos=${incluirHechos}`, {}, token);
+
+export const crearPendiente = (token: string, texto: string, prioridad: Prioridad, area: Area) =>
+  request<Pendiente>("/admin/pendientes", {
+    method: "POST",
+    body: JSON.stringify({ texto, prioridad, area }),
+  }, token);
+
+export const editarPendiente = (
+  token: string,
+  id: number,
+  cambios: Partial<{ texto: string; prioridad: Prioridad; area: Area; hecho: boolean }>,
+) =>
+  request<Pendiente>(`/admin/pendientes/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(cambios),
+  }, token);
+
+export const borrarPendiente = (token: string, id: number) =>
+  request<void>(`/admin/pendientes/${id}`, { method: "DELETE" }, token);
 
 export const getPushPref = (token: string, tenantId: number, expoToken: string) =>
   request<{ enabled: boolean }>(

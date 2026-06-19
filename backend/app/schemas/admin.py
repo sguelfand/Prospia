@@ -154,6 +154,32 @@ class AgentErrorResolve(BaseModel):
     resuelto: bool
 
 
+class PendienteIn(BaseModel):
+    """Alta de un pendiente desde la app."""
+    texto: str
+    prioridad: str = "media"   # alta | media | baja
+    area: str = "app"          # app | web | etiguel
+
+
+class PendienteUpdate(BaseModel):
+    """Edición parcial de un pendiente (cualquier campo opcional)."""
+    texto: str | None = None
+    prioridad: str | None = None
+    area: str | None = None
+    hecho: bool | None = None
+
+
+class PendienteOut(BaseModel):
+    id: int
+    texto: str
+    prioridad: str
+    area: str
+    hecho: bool
+    fecha: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class EventoOut(BaseModel):
     """Un evento del feed de Avisos: primera respuesta o interesado."""
     id: int

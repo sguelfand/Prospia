@@ -9,5 +9,6 @@ from app.models.device import Device
 from app.models.push_mute import PushMute
 from app.models.etiguel_mirror import EtiguelMirror, EtiguelMirrorMensaje
 from app.models.agent_error import AgentError
+from app.models.pendiente import Pendiente
 
-__all__ = ["Tenant", "TenantConfig", "User", "Rubro", "Termino", "Prospect", "ProspectHistorial", "ProspectMensaje", "Device", "PushMute", "EtiguelMirror", "EtiguelMirrorMensaje", "AgentError"]
+__all__ = ["Tenant", "TenantConfig", "User", "Rubro", "Termino", "Prospect", "ProspectHistorial", "ProspectMensaje", "Device", "PushMute", "EtiguelMirror", "EtiguelMirrorMensaje", "AgentError", "Pendiente"]

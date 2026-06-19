@@ -7,7 +7,7 @@ como una "fuente" más en la Fase 4 vía un adapter."""
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import extract, func
+from sqlalchemy import case, extract, func
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_superadmin
@@ -17,6 +17,7 @@ from app.models.device import Device
 from app.models.etiguel_mirror import EtiguelMirror, EtiguelMirrorMensaje
 from app.models.historial import ProspectHistorial
 from app.models.mensaje import ProspectMensaje
+from app.models.pendiente import Pendiente
 from app.models.prospect import ESTADOS, Prospect
 from app.models.push_mute import PushMute
 from app.models.rubro import Rubro
@@ -38,6 +39,9 @@ from app.schemas.admin import (
     EventoOut,
     FiltrosCliente,
     OpcionFiltro,
+    PendienteIn,
+    PendienteOut,
+    PendienteUpdate,
     PushPrefIn,
     PushPrefOut,
 )
@@ -339,6 +343,70 @@ def borrar_error(error_id: int, db: Session = Depends(get_db)):
     err = db.get(AgentError, error_id)
     if err:
         db.delete(err)
+        db.commit()
+
+
+# ── Pendientes (tracker cross-proyecto desde la app) ─────────────────────────
+@router.get("/pendientes", response_model=list[PendienteOut])
+def listar_pendientes(
+    incluir_hechos: bool = Query(False),
+    area: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Lista de pendientes. Por defecto solo los NO hechos. Orden: prioridad
+    (alta→baja) y luego más reciente arriba."""
+    q = db.query(Pendiente)
+    if not incluir_hechos:
+        q = q.filter(Pendiente.hecho.is_(False))
+    if area:
+        q = q.filter(Pendiente.area == area)
+    orden = case(
+        (Pendiente.prioridad == "alta", 0),
+        (Pendiente.prioridad == "media", 1),
+        (Pendiente.prioridad == "baja", 2),
+        else_=3,
+    )
+    return q.order_by(orden, Pendiente.fecha.desc()).all()
+
+
+@router.post("/pendientes", response_model=PendienteOut, status_code=status.HTTP_201_CREATED)
+def crear_pendiente(body: PendienteIn, db: Session = Depends(get_db)):
+    """Alta manual de un pendiente desde la app (texto + prioridad + área)."""
+    p = Pendiente(
+        texto=body.texto.strip(),
+        prioridad=body.prioridad if body.prioridad in ("alta", "media", "baja") else "media",
+        area=body.area if body.area in ("app", "web", "etiguel") else "app",
+    )
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    return p
+
+
+@router.patch("/pendientes/{pendiente_id}", response_model=PendienteOut)
+def editar_pendiente(pendiente_id: int, body: PendienteUpdate, db: Session = Depends(get_db)):
+    """Edita un pendiente (texto/prioridad/área) o lo marca hecho."""
+    p = db.get(Pendiente, pendiente_id)
+    if not p:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No existe ese pendiente")
+    if body.texto is not None:
+        p.texto = body.texto.strip()
+    if body.prioridad in ("alta", "media", "baja"):
+        p.prioridad = body.prioridad
+    if body.area in ("app", "web", "etiguel"):
+        p.area = body.area
+    if body.hecho is not None:
+        p.hecho = body.hecho
+    db.commit()
+    db.refresh(p)
+    return p
+
+
+@router.delete("/pendientes/{pendiente_id}", status_code=status.HTTP_204_NO_CONTENT)
+def borrar_pendiente(pendiente_id: int, db: Session = Depends(get_db)):
+    p = db.get(Pendiente, pendiente_id)
+    if p:
+        db.delete(p)
         db.commit()
 
 

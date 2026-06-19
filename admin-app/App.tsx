@@ -25,6 +25,7 @@ import ErroresScreen from "./src/screens/ErroresScreen";
 import EtiguelMirrorDetailScreen from "./src/screens/EtiguelMirrorDetailScreen";
 import LockScreen from "./src/screens/LockScreen";
 import LoginScreen from "./src/screens/LoginScreen";
+import PendientesScreen from "./src/screens/PendientesScreen";
 import ProspectDetailScreen from "./src/screens/ProspectDetailScreen";
 import { colors } from "./src/theme";
 
@@ -68,6 +69,7 @@ function AppDrawer() {
       <Drawer.Screen name="ProspectDetail" component={ProspectDetailScreen} options={{ title: "" }} />
       <Drawer.Screen name="EtiguelMirrorDetail" component={EtiguelMirrorDetailScreen} options={{ title: "" }} />
       <Drawer.Screen name="Errores" component={ErroresScreen} options={{ title: "Errores" }} />
+      <Drawer.Screen name="Pendientes" component={PendientesScreen} options={{ title: "Pendientes" }} />
       <Drawer.Screen name="Avisos" component={AvisosScreen} options={{ title: "Avisos" }} />
     </Drawer.Navigator>
   );
