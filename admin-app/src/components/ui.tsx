@@ -3,13 +3,21 @@ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "rea
 
 import { colors } from "../theme";
 
-export function KpiCard({ label, value, accent }: { label: string; value: string | number; accent?: string }) {
-  return (
-    <View style={styles.kpi}>
+export function KpiCard({ label, value, accent, onPress }: { label: string; value: string | number; accent?: string; onPress?: () => void }) {
+  const inner = (
+    <>
       <Text style={[styles.kpiValue, accent ? { color: accent } : null]}>{value}</Text>
       <Text style={styles.kpiLabel}>{label}</Text>
-    </View>
+    </>
   );
+  if (onPress) {
+    return (
+      <TouchableOpacity style={styles.kpi} onPress={onPress} activeOpacity={0.6}>
+        {inner}
+      </TouchableOpacity>
+    );
+  }
+  return <View style={styles.kpi}>{inner}</View>;
 }
 
 /** Barra horizontal proporcional (para distribuciones por estado / término).

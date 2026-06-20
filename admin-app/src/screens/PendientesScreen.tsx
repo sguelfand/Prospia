@@ -52,6 +52,8 @@ export default function PendientesScreen(_props: PendientesProps) {
   const [error, setError] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Pendiente | null>(null);
+  // Cuando rechazo un procesado: al guardar el modal vuelve a cola_estado='pendiente'.
+  const [requeueId, setRequeueId] = useState<number | null>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [procesando, setProcesando] = useState(false);
@@ -115,8 +117,14 @@ export default function PendientesScreen(_props: PendientesProps) {
   const guardar = async (texto: string, prioridad: Prioridad, area: Area, rich: Partial<PendienteRich>) => {
     if (!token) return;
     if (editing) {
-      const upd = await editarPendiente(token, editing.id, { texto, prioridad, area, ...rich });
+      // Si lo estoy rechazando, además lo devuelvo a la cola como 'pendiente'.
+      const reencolar = requeueId === editing.id;
+      const upd = await editarPendiente(token, editing.id, {
+        texto, prioridad, area, ...rich,
+        ...(reencolar ? { cola_estado: "pendiente" as const } : {}),
+      });
       setItems((prev) => prev.map((p) => (p.id === upd.id ? upd : p)));
+      setRequeueId(null);
     } else {
       const nuevo = await crearPendiente(token, texto, prioridad, area, rich);
       setItems((prev) => [nuevo, ...prev]);
@@ -124,8 +132,10 @@ export default function PendientesScreen(_props: PendientesProps) {
     }
   };
 
-  const abrirNuevo = () => { setEditing(null); setFormOpen(true); };
-  const abrirEditar = (p: Pendiente) => { setEditing(p); setFormOpen(true); };
+  const abrirNuevo = () => { setEditing(null); setRequeueId(null); setFormOpen(true); };
+  const abrirEditar = (p: Pendiente) => { setEditing(p); setRequeueId(null); setFormOpen(true); };
+  // Rechazar un procesado: abre el modal para que escriba qué ve; al guardar vuelve a 'pendiente'.
+  const rechazar = (p: Pendiente) => { setEditing(p); setRequeueId(p.id); setFormOpen(true); };
 
   const salirSeleccion = () => { setSelectMode(false); setSelected(new Set()); };
   const toggleSelect = (id: number) =>
@@ -225,10 +235,16 @@ export default function PendientesScreen(_props: PendientesProps) {
             renderRow(q)
           )}
           {colaSettled && q.cola_estado === "procesado" && (
-            <TouchableOpacity style={styles.colaConfirmBtn} onPress={() => setHecho(q, true)} activeOpacity={0.8}>
-              <Icon name="check" size={15} color={colors.green} />
-              <Text style={styles.colaConfirmText}>Confirmar realizado</Text>
-            </TouchableOpacity>
+            <View style={styles.colaActions}>
+              <TouchableOpacity style={[styles.colaConfirmBtn, styles.colaActionFlex]} onPress={() => setHecho(q, true)} activeOpacity={0.8}>
+                <Icon name="check" size={15} color={colors.green} />
+                <Text style={styles.colaConfirmText}>Confirmar realizado</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.colaRejectBtn, styles.colaActionFlex]} onPress={() => rechazar(q)} activeOpacity={0.8}>
+                <Icon name="undo" size={15} color={colors.red} />
+                <Text style={styles.colaRejectText}>Rechazar</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
       ))}
@@ -310,7 +326,7 @@ export default function PendientesScreen(_props: PendientesProps) {
         </View>
       )}
 
-      <FormModal visible={formOpen} initial={editing} onClose={() => setFormOpen(false)} onSubmit={guardar} />
+      <FormModal visible={formOpen} initial={editing} onClose={() => { setFormOpen(false); setRequeueId(null); }} onSubmit={guardar} rejecting={requeueId != null} />
     </View>
   );
 }
@@ -435,11 +451,13 @@ function FormModal({
   initial,
   onClose,
   onSubmit,
+  rejecting = false,
 }: {
   visible: boolean;
   initial?: Pendiente | null;
   onClose: () => void;
   onSubmit: (texto: string, prioridad: Prioridad, area: Area, rich: Partial<PendienteRich>) => Promise<void>;
+  rejecting?: boolean;
 }) {
   const [texto, setTexto] = useState("");
   const [prioridad, setPrioridad] = useState<Prioridad>("media");
@@ -486,7 +504,10 @@ function FormModal({
       >
         <View style={[styles.sheet, { paddingBottom: insets.bottom + 18 }]}>
           <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            <Text style={styles.sheetTitle}>{initial ? "Editar pendiente" : "Nuevo pendiente"}</Text>
+            <Text style={styles.sheetTitle}>{rejecting ? "Rechazar y reabrir" : initial ? "Editar pendiente" : "Nuevo pendiente"}</Text>
+            {rejecting ? (
+              <Text style={styles.rejectHint}>Escribí qué viste / qué falta. Al guardar vuelve a la cola como pendiente.</Text>
+            ) : null}
             <TextInput
               style={styles.input}
               placeholder="¿Qué hay que hacer?"
@@ -535,7 +556,7 @@ function FormModal({
                 <Text style={styles.btnCancelText}>Cancelar</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.btnSave, !texto.trim() ? styles.btnSaveOff : null]} onPress={guardar} disabled={!texto.trim() || saving}>
-                <Text style={styles.btnSaveText}>{saving ? "Guardando…" : "Guardar"}</Text>
+                <Text style={styles.btnSaveText}>{saving ? "Guardando…" : rejecting ? "Rechazar" : "Guardar"}</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -600,8 +621,13 @@ const styles = StyleSheet.create({
   colaBoxBarWaiting: { backgroundColor: "rgba(235,201,68,0.18)" },
   colaBoxBarFillWaiting: { backgroundColor: YELLOW },
   colaBoxHint: { color: colors.textDim, fontSize: 12, marginTop: -4, marginBottom: 10, paddingHorizontal: 4 },
+  colaActions: { flexDirection: "row", gap: 8, marginTop: -2, marginBottom: 10 },
+  colaActionFlex: { flex: 1, marginTop: 0, marginBottom: 0 },
   colaConfirmBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderWidth: 1, borderColor: colors.green, borderRadius: 9, paddingVertical: 9, marginTop: -2, marginBottom: 10 },
   colaConfirmText: { color: colors.green, fontSize: 13, fontWeight: "700" },
+  colaRejectBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderWidth: 1, borderColor: colors.red, borderRadius: 9, paddingVertical: 9 },
+  colaRejectText: { color: colors.red, fontSize: 13, fontWeight: "700" },
+  rejectHint: { color: colors.textDim, fontSize: 12, marginBottom: 10, marginTop: -6 },
   colaDot: { width: 19, height: 19, borderRadius: 10, borderWidth: 2, alignItems: "center", justifyContent: "center", marginTop: 1 },
   colaDotSpin: { width: 19, height: 19, marginTop: 1 },
   colaDotDone: { borderColor: colors.amber, backgroundColor: colors.amber },
