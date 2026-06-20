@@ -43,9 +43,13 @@ export default function DashboardScreen({ navigation }: DashboardProps) {
   // Para tasas comparo solo clientes con datos reales (Etiguel viene en 0).
   const conTasa = clientes.filter((c) => c.contactados > 0);
 
-  // Toda barra de stats por-cliente navega al detalle de ese cliente.
-  const irACliente = (c: DashboardComparativa["clientes"][number]) =>
-    navigation.navigate("ClienteView", { tenantId: c.tenant_id, nombre: c.nombre, fuente: c.fuente });
+  // Toda barra de stats por-cliente navega al detalle de ese cliente, con el
+  // filtro de la sección ya aplicado (ej: "Interesados por cliente" → interesado).
+  const irACliente = (
+    c: DashboardComparativa["clientes"][number],
+    filtroInicial?: { estado?: string },
+  ) =>
+    navigation.navigate("ClienteView", { tenantId: c.tenant_id, nombre: c.nombre, fuente: c.fuente, filtroInicial });
 
   return (
     <ScrollView
@@ -75,7 +79,7 @@ export default function DashboardScreen({ navigation }: DashboardProps) {
 
       <Section title="Interesados por cliente">
         {clientes.map((c) => (
-          <Bar key={`i-${c.fuente}-${c.tenant_id}`} label={c.nombre} value={c.interesados} max={maxInteresados} color={colors.green} onPress={() => irACliente(c)} />
+          <Bar key={`i-${c.fuente}-${c.tenant_id}`} label={c.nombre} value={c.interesados} max={maxInteresados} color={colors.green} onPress={() => irACliente(c, { estado: "interesado" })} />
         ))}
       </Section>
 

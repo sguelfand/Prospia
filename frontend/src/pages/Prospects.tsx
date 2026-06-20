@@ -569,12 +569,12 @@ function ConversacionPanel({ prospect, onClose }: { prospect: Prospect; onClose:
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative w-[420px] bg-card h-full shadow-2xl flex flex-col">
+      <div className="relative w-[420px] bg-white h-full shadow-2xl flex flex-col">
 
         {/* Header estilo WhatsApp */}
         <div className="flex items-center justify-between px-5 py-3 border-b bg-[#008069] text-white">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="h-9 w-9 rounded-full bg-card/20 flex items-center justify-center shrink-0">
+            <div className="h-9 w-9 rounded-full bg-white/20 flex items-center justify-center shrink-0">
               <MessageCircle size={18} />
             </div>
             <div className="min-w-0">
@@ -589,9 +589,9 @@ function ConversacionPanel({ prospect, onClose }: { prospect: Prospect; onClose:
 
         {/* Hilo de mensajes */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-1 bg-[#efeae2]">
-          {mensajes === null && <p className="text-center text-muted py-8 text-sm">Cargando...</p>}
+          {mensajes === null && <p className="text-center text-[#54656f] py-8 text-sm">Cargando...</p>}
           {mensajes?.length === 0 && (
-            <p className="text-center text-muted py-8 text-sm">Todavía no hay mensajes en esta conversación</p>
+            <p className="text-center text-[#54656f] py-8 text-sm">Todavía no hay mensajes en esta conversación</p>
           )}
           {mensajes?.map(m => {
             const sep = fechaSeparador(m.fecha)
@@ -602,19 +602,17 @@ function ConversacionPanel({ prospect, onClose }: { prospect: Prospect; onClose:
               <React.Fragment key={m.id}>
                 {mostrarSep && (
                   <div className="flex justify-center my-3">
-                    <span className="text-[11px] text-muted bg-card/80 rounded-md px-2 py-0.5 shadow-sm">{sep}</span>
+                    <span className="text-[11px] text-[#54656f] bg-white/90 rounded-md px-2 py-0.5 shadow-sm">{sep}</span>
                   </div>
                 )}
                 <div className={`flex ${out ? 'justify-end' : 'justify-start'}`}>
                   <div
-                    className={`max-w-[78%] rounded-lg px-2.5 py-1.5 shadow-sm text-sm whitespace-pre-wrap break-words ${
-                      out
-                        ? 'bg-[#d9fdd3] text-[#0C1730] dark:bg-[#005c4b] dark:text-white'
-                        : 'bg-card text-ink'
+                    className={`max-w-[78%] rounded-lg px-2.5 py-1.5 shadow-sm text-sm whitespace-pre-wrap break-words text-[#111b21] ${
+                      out ? 'bg-[#d9fdd3]' : 'bg-white'
                     }`}
                   >
                     <span>{m.texto}</span>
-                    <span className={`text-[10px] ml-2 float-right mt-1.5 ${out ? 'opacity-60' : 'text-muted'}`}>{horaMsg(m.fecha)}</span>
+                    <span className="text-[10px] ml-2 float-right mt-1.5 text-[#667781]">{horaMsg(m.fecha)}</span>
                   </div>
                 </div>
               </React.Fragment>
@@ -623,8 +621,8 @@ function ConversacionPanel({ prospect, onClose }: { prospect: Prospect; onClose:
         </div>
 
         {/* Footer informativo: el chat es de solo lectura (lo maneja Camila) */}
-        <div className="border-t bg-app px-5 py-2.5 text-center">
-          <p className="text-[11px] text-faint">Conversación gestionada por Camila — solo lectura</p>
+        <div className="border-t bg-[#f0f2f5] px-5 py-2.5 text-center">
+          <p className="text-[11px] text-[#667781]">Conversación gestionada por Camila — solo lectura</p>
         </div>
       </div>
     </div>

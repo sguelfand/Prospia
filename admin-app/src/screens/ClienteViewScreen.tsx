@@ -35,7 +35,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 const PAGE_SIZE = 50;
 
 export default function ClienteViewScreen({ route, navigation }: ClienteViewProps) {
-  const { tenantId, nombre } = route.params;
+  const { tenantId, nombre, filtroInicial } = route.params;
   const insets = useSafeAreaInsets();
   const esEtiguel = tenantId === ETIGUEL_TENANT_ID;
   const { token } = useAuth();
@@ -45,7 +45,7 @@ export default function ClienteViewScreen({ route, navigation }: ClienteViewProp
   const [expandLeads, setExpandLeads] = useState(true);
   const [expandProspects, setExpandProspects] = useState(true);
   const [filtrosOpts, setFiltrosOpts] = useState<FiltrosCliente | null>(null);
-  const [filtro, setFiltro] = useState<ProspectsFiltro>({});
+  const [filtro, setFiltro] = useState<ProspectsFiltro>(filtroInicial ?? {});
   const [prospects, setProspects] = useState<ProspectRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -145,12 +145,12 @@ export default function ClienteViewScreen({ route, navigation }: ClienteViewProp
       {/* ── Interruptor de push de este cliente (APP.4) ──────────── */}
       <PushToggle tenantId={tenantId} />
 
-      {/* ── Estadística actual del cliente ───────────────────────── */}
+      {/* ── Estadística actual del cliente (tocar → filtra la lista) ── */}
       <Section title="Este mes">
         <View style={styles.kpiGrid}>
-          <KpiCard label="Prospects" value={stats.mes_actual.prospects} />
-          <KpiCard label="En conversación" value={stats.mes_actual.en_conversacion} accent={colors.primary} />
-          <KpiCard label="Interesados" value={stats.mes_actual.interesados} accent={colors.green} />
+          <KpiCard label="Prospects" value={stats.mes_actual.prospects} onPress={esEtiguel ? undefined : () => aplicarFiltro({})} />
+          <KpiCard label="En conversación" value={stats.mes_actual.en_conversacion} accent={colors.primary} onPress={esEtiguel ? undefined : () => aplicarFiltro({ estado: "en_conversacion" })} />
+          <KpiCard label="Interesados" value={stats.mes_actual.interesados} accent={colors.green} onPress={esEtiguel ? undefined : () => aplicarFiltro({ estado: "interesado" })} />
         </View>
         <View style={styles.kpiGrid}>
           <KpiCard label="Tasa respuesta" value={`${stats.mes_actual.tasa_respuesta}%`} accent={colors.primary} />
@@ -170,6 +170,7 @@ export default function ClienteViewScreen({ route, navigation }: ClienteViewProp
               value={e.count}
               max={maxEstado}
               color={estadoColor[e.estado] ?? colors.textDim}
+              onPress={esEtiguel ? undefined : () => aplicarFiltro({ estado: e.estado })}
             />
           ))}
       </Section>
