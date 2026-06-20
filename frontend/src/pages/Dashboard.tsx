@@ -26,7 +26,8 @@ function HistTooltip({ active, payload, navigate }: any) {
   }
   return (
     <div style={{
-      background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8,
+      background: 'rgb(var(--c-card))', border: '1px solid rgb(var(--c-line))',
+      color: 'rgb(var(--c-ink))', borderRadius: 8,
       padding: '5px 6px', boxShadow: '0 2px 10px rgba(0,0,0,.14)',
       fontSize: 11, pointerEvents: 'auto',
     }}>
@@ -40,7 +41,7 @@ function HistTooltip({ active, payload, navigate }: any) {
             textAlign: 'left', padding: '3px 6px', borderRadius: 4,
             cursor: 'pointer', background: 'transparent', border: 'none', fontSize: 11,
           }}
-          onMouseEnter={e => (e.currentTarget.style.background = '#f3f4f6')}
+          onMouseEnter={e => (e.currentTarget.style.background = 'rgb(var(--c-subtle))')}
           onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
         >
           <span style={{ width: 8, height: 8, borderRadius: 9999, background: item.color, flexShrink: 0 }} />
@@ -159,7 +160,8 @@ function TerminoChart({ data, navigate }: { data: TerminoRow[]; navigate: Return
             onMouseLeave={() => setHover(null)}
           >
             <div style={{
-              background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8,
+              background: 'rgb(var(--c-card))', border: '1px solid rgb(var(--c-line))',
+              color: 'rgb(var(--c-ink))', borderRadius: 8,
               padding: '5px 6px', boxShadow: '0 2px 10px rgba(0,0,0,.14)', fontSize: 11,
             }}>
               <p className="truncate" style={{ fontWeight: 600, margin: '0 0 3px', padding: '0 2px' }}>{hover.row.termino}</p>
@@ -172,7 +174,7 @@ function TerminoChart({ data, navigate }: { data: TerminoRow[]; navigate: Return
                     textAlign: 'left', padding: '3px 6px', borderRadius: 4,
                     cursor: 'pointer', background: 'transparent', border: 'none', fontSize: 11,
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#f3f4f6')}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgb(var(--c-subtle))')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                 >
                   <span style={{ width: 8, height: 8, borderRadius: 9999, background: s.color, flexShrink: 0 }} />

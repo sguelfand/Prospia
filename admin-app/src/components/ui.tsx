@@ -12,23 +12,26 @@ export function KpiCard({ label, value, accent }: { label: string; value: string
   );
 }
 
-/** Barra horizontal proporcional (para distribuciones por estado / término). */
+/** Barra horizontal proporcional (para distribuciones por estado / término).
+ *  Si recibe `onPress`, toda la fila es tocable (navega al detalle). */
 export function Bar({
   label,
   value,
   max,
   color,
   right,
+  onPress,
 }: {
   label: string;
   value: number;
   max: number;
   color: string;
   right?: string;
+  onPress?: () => void;
 }) {
   const pct = max > 0 ? Math.max(0.02, value / max) : 0;
-  return (
-    <View style={styles.barRow}>
+  const inner = (
+    <>
       <View style={styles.barHeader}>
         <Text style={styles.barLabel} numberOfLines={1}>
           {label}
@@ -38,8 +41,16 @@ export function Bar({
       <View style={styles.barTrack}>
         <View style={[styles.barFill, { width: `${pct * 100}%`, backgroundColor: color }]} />
       </View>
-    </View>
+    </>
   );
+  if (onPress) {
+    return (
+      <TouchableOpacity style={styles.barRow} onPress={onPress} activeOpacity={0.6}>
+        {inner}
+      </TouchableOpacity>
+    );
+  }
+  return <View style={styles.barRow}>{inner}</View>;
 }
 
 export function Section({ title, children }: { title: string; children: React.ReactNode }) {
