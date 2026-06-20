@@ -392,3 +392,25 @@ export const registerDevice = (token: string, expoToken: string, platform: strin
     { method: "POST", body: JSON.stringify({ expo_token: expoToken, platform }) },
     token,
   );
+
+// ── Notificaciones por evento, por dispositivo (#38) ──────────────────────────
+export interface NotifEvento {
+  evento: string;
+  label: string;
+  enabled: boolean;
+}
+export interface NotifPrefs {
+  expo_token: string;
+  platform: string | null;
+  eventos: NotifEvento[];
+}
+
+export const getNotifPrefs = (token: string, expoToken: string) =>
+  request<NotifPrefs>(`/admin/notif-prefs?expo_token=${encodeURIComponent(expoToken)}`, {}, token);
+
+export const setNotifPref = (token: string, expoToken: string, evento: string, enabled: boolean) =>
+  request<NotifPrefs>(
+    "/admin/notif-prefs",
+    { method: "PUT", body: JSON.stringify({ expo_token: expoToken, evento, enabled }) },
+    token,
+  );

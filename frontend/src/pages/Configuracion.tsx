@@ -165,6 +165,87 @@ export default function Configuracion() {
           </button>
         </div>
       </form>
+
+      {/* ── Notificaciones push (#38) ── */}
+      <NotificacionesPush />
+    </div>
+  )
+}
+
+// ── Notificaciones push por dispositivo (#38) ────────────────────────────────
+type NotifEvento = { evento: string; label: string; enabled: boolean }
+type NotifPrefs = { expo_token: string; platform: string | null; eventos: NotifEvento[] }
+type Device = { expo_token: string; platform: string | null }
+
+function NotificacionesPush() {
+  const [devices, setDevices] = useState<Device[] | null>(null)
+  const [prefs, setPrefs] = useState<Record<string, NotifEvento[]>>({})
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    api
+      .get<Device[]>('/admin/devices')
+      .then(async (devs) => {
+        setDevices(devs)
+        const entries = await Promise.all(
+          devs.map(async (d) => {
+            const p = await api.get<NotifPrefs>(`/admin/notif-prefs?expo_token=${encodeURIComponent(d.expo_token)}`)
+            return [d.expo_token, p.eventos] as const
+          }),
+        )
+        setPrefs(Object.fromEntries(entries))
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : 'Error al cargar dispositivos'))
+  }, [])
+
+  async function toggle(expoToken: string, evento: string, enabled: boolean) {
+    setPrefs((prev) => ({
+      ...prev,
+      [expoToken]: (prev[expoToken] ?? []).map((e) => (e.evento === evento ? { ...e, enabled } : e)),
+    }))
+    try {
+      await api.put<NotifPrefs>('/admin/notif-prefs', { expo_token: expoToken, evento, enabled })
+    } catch {
+      setPrefs((prev) => ({
+        ...prev,
+        [expoToken]: (prev[expoToken] ?? []).map((e) => (e.evento === evento ? { ...e, enabled: !enabled } : e)),
+      }))
+    }
+  }
+
+  function nombreDevice(d: Device, i: number) {
+    const plat = d.platform === 'android' ? 'Android' : d.platform === 'ios' ? 'iOS' : 'Dispositivo'
+    return `${plat} ${devices && devices.length > 1 ? `#${i + 1}` : ''}`.trim()
+  }
+
+  return (
+    <div className="bg-card border border-line rounded-2xl p-6 space-y-4">
+      <div>
+        <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Notificaciones push</h2>
+        <p className="text-xs text-muted mt-1">Qué avisos recibe cada dispositivo con la app instalada.</p>
+      </div>
+      {error && <p className="text-sm text-red-500">{error}</p>}
+      {devices && devices.length === 0 && (
+        <p className="text-sm text-muted">No hay dispositivos registrados. Iniciá sesión en la app para registrar uno.</p>
+      )}
+      {devices?.map((d, i) => (
+        <div key={d.expo_token} className="border border-line rounded-xl p-4">
+          <p className="text-sm font-medium text-ink mb-2">{nombreDevice(d, i)}</p>
+          <div className="space-y-2">
+            {(prefs[d.expo_token] ?? []).map((e) => (
+              <label key={e.evento} className="flex items-center justify-between gap-3 cursor-pointer">
+                <span className="text-sm text-ink-soft">{e.label}</span>
+                <input
+                  type="checkbox"
+                  checked={e.enabled}
+                  onChange={(ev) => toggle(d.expo_token, e.evento, ev.target.checked)}
+                  className="h-4 w-4 accent-primary cursor-pointer"
+                />
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

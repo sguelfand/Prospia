@@ -21,6 +21,7 @@ from app.models.mensaje import ProspectMensaje
 from app.models.pendiente import Pendiente
 from app.models.prospect import ESTADOS, Prospect
 from app.models.push_mute import PushMute
+from app.models.push_event_mute import PushEventMute
 from app.models.rubro import Rubro
 from app.models.tenant import Tenant, TenantConfig
 from app.models.termino import Termino
@@ -44,6 +45,11 @@ from app.schemas.admin import (
     ImpersonateOut,
     OpcionFiltro,
     ColaIn,
+    DeviceOut,
+    NotifEvento,
+    NotifPrefUpdate,
+    NotifPrefsOut,
+    NotifyIn,
     PendienteIn,
     PendienteOut,
     PendienteUpdate,
@@ -813,6 +819,63 @@ def test_push():
     """Manda una notificación de prueba a todos los devices registrados.
     Sirve para verificar el circuito de push de punta a punta."""
     n = push.enviar_prueba()
+    return {"enviado_a_devices": n}
+
+
+# ── Notificaciones por evento, por dispositivo (#38) ──────────────────────────
+@router.get("/devices", response_model=list[DeviceOut])
+def listar_devices(db: Session = Depends(get_db)):
+    """Dispositivos registrados para push. Lo usa la web para configurar los
+    toggles de cada uno (la web no es un device de push)."""
+    return [DeviceOut(expo_token=d.expo_token, platform=d.platform) for d in db.query(Device).all()]
+
+
+@router.get("/notif-prefs", response_model=NotifPrefsOut)
+def get_notif_prefs(expo_token: str = Query(...), db: Session = Depends(get_db)):
+    """Estado de cada evento de push para un device. Sin fila de mute = activado."""
+    muteados = {
+        e for (e,) in db.query(PushEventMute.evento)
+        .filter(PushEventMute.expo_token == expo_token)
+        .all()
+    }
+    device = db.query(Device).filter(Device.expo_token == expo_token).first()
+    eventos = [
+        NotifEvento(evento=k, label=label, enabled=k not in muteados)
+        for k, label in push.EVENTOS_PUSH
+    ]
+    return NotifPrefsOut(expo_token=expo_token, platform=device.platform if device else None, eventos=eventos)
+
+
+@router.put("/notif-prefs", response_model=NotifPrefsOut)
+def set_notif_pref(body: NotifPrefUpdate, db: Session = Depends(get_db)):
+    """Activa/desactiva un evento de push para un device. enabled=false crea el
+    mute; enabled=true lo borra. Idempotente."""
+    if body.evento not in push.EVENTOS_PUSH_KEYS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Evento desconocido")
+    existente = (
+        db.query(PushEventMute)
+        .filter(PushEventMute.expo_token == body.expo_token, PushEventMute.evento == body.evento)
+        .first()
+    )
+    if body.enabled:
+        if existente:
+            db.delete(existente)
+            db.commit()
+    else:
+        if not existente:
+            db.add(PushEventMute(expo_token=body.expo_token, evento=body.evento))
+            db.commit()
+    return get_notif_prefs(expo_token=body.expo_token, db=db)
+
+
+@router.post("/notify")
+def notify(body: NotifyIn):
+    """Dispara un push de evento global (standby / cola_terminada /
+    necesita_autorizacion), respetando los toggles por dispositivo. Lo usa Claude
+    al procesar la cola de pendientes."""
+    if body.evento not in push.EVENTOS_PUSH_KEYS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Evento desconocido")
+    n = push.notificar_global(body.evento, body.title[:120], body.body[:300])
     return {"enviado_a_devices": n}
 
 
