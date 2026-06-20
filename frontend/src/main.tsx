@@ -7,6 +7,7 @@ import Prospects from './pages/Prospects'
 import Terminos from './pages/Terminos'
 import Configuracion from './pages/Configuracion'
 import AdminClientes from './pages/AdminClientes'
+import Pendientes from './pages/Pendientes'
 import Layout from './components/Layout'
 import { ThemeProvider } from './theme'
 import './index.css'
@@ -28,6 +29,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="terminos" element={<Terminos />} />
           <Route path="configuracion" element={<Configuracion />} />
           <Route path="admin-clientes" element={<AdminClientes />} />
+          <Route path="pendientes" element={<Pendientes />} />
         </Route>
       </Routes>
     </BrowserRouter>

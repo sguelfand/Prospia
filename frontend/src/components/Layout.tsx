@@ -1,4 +1,4 @@
-import { BarChart2, ChevronLeft, ChevronRight, Eye, LogOut, Menu, Search, Settings, ShieldCheck, Users, X } from 'lucide-react'
+import { BarChart2, ChevronLeft, ChevronRight, Eye, ListTodo, LogOut, Menu, Search, Settings, ShieldCheck, Users, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
@@ -130,6 +130,16 @@ export default function Layout() {
             </nav>
             {nivel === 1 && (
               <Link
+                to="/pendientes"
+                onClick={() => setMobileOpen(false)}
+                className={navClass(location.pathname.startsWith('/pendientes'))}
+              >
+                <ListTodo size={16} />
+                Pendientes
+              </Link>
+            )}
+            {nivel === 1 && (
+              <Link
                 to="/admin-clientes"
                 onClick={() => setMobileOpen(false)}
                 className={navClass(location.pathname.startsWith('/admin-clientes'))}
@@ -195,6 +205,16 @@ export default function Layout() {
             )
           })}
         </nav>
+        {nivel === 1 && (
+          <Link
+            to="/pendientes"
+            title={collapsed ? 'Pendientes' : undefined}
+            className={navClass(location.pathname.startsWith('/pendientes'), collapsed)}
+          >
+            <ListTodo size={16} />
+            {!collapsed && 'Pendientes'}
+          </Link>
+        )}
         {nivel === 1 && (
           <Link
             to="/admin-clientes"
