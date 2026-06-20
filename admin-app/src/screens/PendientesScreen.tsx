@@ -96,6 +96,18 @@ export default function PendientesScreen(_props: PendientesProps) {
     }
   };
 
+  // Reactivar un standby: vuelve a 'pendiente' al instante (Sebi ya pasó la info).
+  const reactivar = async (p: Pendiente) => {
+    if (!token) return;
+    setItems((prev) => prev.map((x) => (x.id === p.id ? { ...x, cola_estado: "pendiente" } : x)));
+    try {
+      const upd = await editarPendiente(token, p.id, { cola_estado: "pendiente" });
+      setItems((prev) => prev.map((x) => (x.id === upd.id ? upd : x)));
+    } catch {
+      load();
+    }
+  };
+
   const borrar = async (p: Pendiente) => {
     if (!token) return;
     const snap = items;
@@ -247,6 +259,12 @@ export default function PendientesScreen(_props: PendientesProps) {
                 <Text style={styles.colaRejectText}>Rechazar</Text>
               </TouchableOpacity>
             </View>
+          )}
+          {colaSettled && q.cola_estado === "standby" && (
+            <TouchableOpacity style={styles.colaReactivarBtn} onPress={() => reactivar(q)} activeOpacity={0.8}>
+              <Icon name="undo" size={15} color={colors.blue} />
+              <Text style={styles.colaReactivarText}>Ya te pasé la info — volver a la cola</Text>
+            </TouchableOpacity>
           )}
         </View>
       ))}
@@ -414,7 +432,7 @@ function PendienteCard({
         )}
         {!selectMode && cola && <ColaDot estado={cola} />}
         <View style={styles.cardBody}>
-          <Text style={styles.texto}>{item.texto}</Text>
+          <Text style={styles.texto}><Text style={styles.idTag}>#{item.id}</Text>  {item.texto}</Text>
           <View style={styles.badges}>
             <Text style={[styles.badge, { color: prioColor[item.prioridad], borderColor: prioColor[item.prioridad] }]}>
               {item.prioridad}
@@ -628,6 +646,8 @@ const styles = StyleSheet.create({
   colaConfirmBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderWidth: 1, borderColor: colors.green, borderRadius: 9, paddingVertical: 9, marginTop: -2, marginBottom: 10 },
   colaConfirmText: { color: colors.green, fontSize: 13, fontWeight: "700" },
   colaRejectBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderWidth: 1, borderColor: colors.red, borderRadius: 9, paddingVertical: 9 },
+  colaReactivarBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderWidth: 1, borderColor: colors.blue, borderRadius: 9, paddingVertical: 9, marginTop: -2, marginBottom: 10 },
+  colaReactivarText: { color: colors.blue, fontSize: 13, fontWeight: "700" },
   colaRejectText: { color: colors.red, fontSize: 13, fontWeight: "700" },
   rejectHint: { color: colors.textDim, fontSize: 12, marginBottom: 10, marginTop: -6 },
   colaDot: { width: 19, height: 19, borderRadius: 10, borderWidth: 2, alignItems: "center", justifyContent: "center", marginTop: 1 },
@@ -643,6 +663,7 @@ const styles = StyleSheet.create({
   selBox: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: colors.border, alignItems: "center", justifyContent: "center", marginTop: 1 },
   selBoxOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   texto: { color: colors.text, fontSize: 14 },
+  idTag: { color: colors.textDim, fontSize: 12, fontWeight: "700", fontVariant: ["tabular-nums"] },
   badges: { flexDirection: "row", gap: 8, marginTop: 8 },
   badge: { fontSize: 11, fontWeight: "700", borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, overflow: "hidden", textTransform: "capitalize" },
 
