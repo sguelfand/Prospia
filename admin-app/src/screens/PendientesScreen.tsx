@@ -323,11 +323,8 @@ function ColaDot({ estado }: { estado: NonNullable<ColaEstado> }) {
     );
   }
   if (estado === "standby") return <View style={[styles.colaDot, styles.colaDotStandby]} />;
-  return (
-    <View style={[styles.colaDot, styles.colaDotPend]}>
-      <View style={styles.colaDotPendInner} />
-    </View>
-  );
+  // pendiente = spinner girando (procesándose), no un círculo vacío
+  return <ActivityIndicator size="small" color={colors.blue} style={styles.colaDotSpin} />;
 }
 
 function PendienteCard({
@@ -549,8 +546,7 @@ const styles = StyleSheet.create({
   colaBoxBar: { flex: 1, height: 5, borderRadius: 3, backgroundColor: "rgba(110,150,230,0.16)", overflow: "hidden", marginLeft: 4 },
   colaBoxBarFill: { height: "100%", borderRadius: 3, backgroundColor: colors.blue },
   colaDot: { width: 19, height: 19, borderRadius: 10, borderWidth: 2, alignItems: "center", justifyContent: "center", marginTop: 1 },
-  colaDotPend: { borderColor: colors.blue },
-  colaDotPendInner: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.blue },
+  colaDotSpin: { width: 19, height: 19, marginTop: 1 },
   colaDotDone: { borderColor: colors.amber, backgroundColor: colors.amber },
   colaDotStandby: { borderColor: colors.textDim, borderStyle: "dashed" },
 

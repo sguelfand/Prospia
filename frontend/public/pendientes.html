@@ -138,8 +138,8 @@
 
     /* Círculo de progreso por ítem (vacío → lleno) */
     .cola-dot { width: 19px; height: 19px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 2px solid; box-sizing: border-box; }
-    .cola-dot.pendiente { border-color: #7FA6F0; }
-    .cola-dot.pendiente::after { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #7FA6F0; animation: cola-pulse 1.3s ease-in-out infinite; }
+    /* Pendiente = anillo girando (procesándose), no un círculo vacío */
+    .cola-dot.pendiente { border-color: rgba(110,150,230,0.28); border-top-color: #7FA6F0; animation: cola-spin 0.8s linear infinite; }
     .cola-dot.procesado { border-color: var(--accent); background: var(--accent); }
     .cola-dot.procesado svg { width: 11px; height: 11px; color: var(--bg); }
     .cola-dot.standby { border-color: var(--prio-baja); border-style: dashed; }
