@@ -69,6 +69,41 @@ class PushPrefOut(BaseModel):
     enabled: bool
 
 
+# ── Notificaciones por evento, por dispositivo (#38) ──────────────────────────
+class DeviceOut(BaseModel):
+    """Un dispositivo registrado para push (lo lista la web para configurarlo)."""
+    expo_token: str
+    platform: str | None = None
+
+
+class NotifEvento(BaseModel):
+    """Un evento de push con su estado (on/off) para un device."""
+    evento: str
+    label: str
+    enabled: bool
+
+
+class NotifPrefsOut(BaseModel):
+    """Preferencias de notificación de un device: lista de eventos con su estado."""
+    expo_token: str
+    platform: str | None = None
+    eventos: list[NotifEvento]
+
+
+class NotifPrefUpdate(BaseModel):
+    """Activa/desactiva un evento de push para un device."""
+    expo_token: str
+    evento: str
+    enabled: bool
+
+
+class NotifyIn(BaseModel):
+    """Dispara un push de evento global (lo usa Claude / un proceso interno)."""
+    evento: str
+    title: str
+    body: str
+
+
 class ClienteComparativa(BaseModel):
     """Métricas comparables de un cliente para el dashboard (APP.6)."""
     tenant_id: int
