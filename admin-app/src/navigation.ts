@@ -19,6 +19,8 @@ export type DrawerParamList = {
   Pendientes: undefined;
   Avisos: undefined;
   Configuracion: undefined;
+  Perfil: undefined;
+  Notificaciones: undefined;
 };
 
 // ── Área no autenticada ──────────────────────────────────────────────────────
@@ -34,4 +36,6 @@ export type ErroresProps = DrawerScreenProps<DrawerParamList, "Errores">;
 export type PendientesProps = DrawerScreenProps<DrawerParamList, "Pendientes">;
 export type AvisosProps = DrawerScreenProps<DrawerParamList, "Avisos">;
 export type ConfiguracionProps = DrawerScreenProps<DrawerParamList, "Configuracion">;
+export type PerfilProps = DrawerScreenProps<DrawerParamList, "Perfil">;
+export type NotificacionesProps = DrawerScreenProps<DrawerParamList, "Notificaciones">;
 export type LoginProps = NativeStackScreenProps<AuthStackParamList, "Login">;
