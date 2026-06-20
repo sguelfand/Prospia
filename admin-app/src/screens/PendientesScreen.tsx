@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 
 import { Area, ColaEstado, Pendiente, PendienteRich, Prioridad, borrarPendiente, crearPendiente, editarPendiente, encolarPendientes, getPendientes } from "../api";
 import { useAuth } from "../auth";
@@ -75,16 +76,26 @@ export default function PendientesScreen(_props: PendientesProps) {
     load();
   }, [load]);
 
-  // Mientras haya algo `pendiente` en la cola (y no estoy seleccionando), refresca solo
-  // cada 10s para que los círculos se vayan llenando a medida que se marcan `procesado`.
-  const hayPendiente = items.some((p) => p.cola_estado === "pendiente" && !p.hecho);
+  // Al volver a la pantalla, recargar (así no se ve estado viejo al navegar).
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
+
+  // Refresca solo cada 10s mientras haya algo ACTIVO en la cola — pendiente
+  // (procesándose) o standby (puede reactivarse) — así se ve el cambio en vivo
+  // mientras Claude trabaja, incluso cuando reactiva un standby. Frena al
+  // seleccionar o cuando ya no queda nada activo.
+  const hayActivo = items.some((p) => (p.cola_estado === "pendiente" || p.cola_estado === "standby") && !p.hecho);
+  const isFocused = useIsFocused();
   useEffect(() => {
-    if (!hayPendiente || selectMode || !token) return;
+    if (!hayActivo || selectMode || !token || !isFocused) return;
     const t = setInterval(() => {
       getPendientes(token, true).then(setItems).catch(() => {});
     }, 10000);
     return () => clearInterval(t);
-  }, [hayPendiente, selectMode, token]);
+  }, [hayActivo, selectMode, token, isFocused]);
 
   const setHecho = async (p: Pendiente, hecho: boolean) => {
     if (!token) return;
