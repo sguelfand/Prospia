@@ -166,10 +166,10 @@ export default function Configuracion() {
           </button>
         </div>
       </form>
-      </div>
 
       {/* ── Notificaciones push (#38) ── */}
       <NotificacionesPush />
+      </div>
     </div>
   )
 }
