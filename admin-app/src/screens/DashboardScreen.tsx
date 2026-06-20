@@ -111,10 +111,10 @@ export default function DashboardScreen({ navigation }: DashboardProps) {
               {c.fuente === "etiguel" ? <Text style={styles.tag}>Etiguel</Text> : null}
             </View>
             <View style={styles.cardStats}>
-              <Stat label="Prospects" value={c.total_prospects} />
-              <Stat label="En conv." value={c.en_conversacion} color={colors.primary} />
-              <Stat label="Interes." value={c.interesados} color={colors.green} />
-              <Stat label="Int./mes" value={c.interesados_mes} color={colors.green} />
+              <Stat label="Prospects" value={c.total_prospects} onPress={() => irACliente(c)} />
+              <Stat label="En conv." value={c.en_conversacion} color={colors.primary} onPress={() => irACliente(c, { estado: "en_conversacion" })} />
+              <Stat label="Interes." value={c.interesados} color={colors.green} onPress={() => irACliente(c, { estado: "interesado" })} />
+              <Stat label="Int./mes" value={c.interesados_mes} color={colors.green} onPress={() => irACliente(c, { estado: "interesado" })} />
             </View>
           </TouchableOpacity>
         ))}
@@ -123,11 +123,23 @@ export default function DashboardScreen({ navigation }: DashboardProps) {
   );
 }
 
-function Stat({ label, value, color }: { label: string; value: number; color?: string }) {
-  return (
-    <View style={styles.stat}>
+function Stat({ label, value, color, onPress }: { label: string; value: number; color?: string; onPress?: () => void }) {
+  const inner = (
+    <>
       <Text style={[styles.statValue, color ? { color } : null]}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
+    </>
+  );
+  if (onPress) {
+    return (
+      <TouchableOpacity style={styles.stat} onPress={onPress} activeOpacity={0.6}>
+        {inner}
+      </TouchableOpacity>
+    );
+  }
+  return (
+    <View style={styles.stat}>
+      {inner}
     </View>
   );
 }

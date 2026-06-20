@@ -117,11 +117,13 @@ export default function PendientesScreen(_props: PendientesProps) {
   const guardar = async (texto: string, prioridad: Prioridad, area: Area, rich: Partial<PendienteRich>) => {
     if (!token) return;
     if (editing) {
-      // Si lo estoy rechazando, además lo devuelvo a la cola como 'pendiente'.
-      const reencolar = requeueId === editing.id;
+      // Si lo estoy rechazando, lo SACO de la cola (cola_estado vacío → nulo):
+      // vuelve a ser un pendiente normal abajo, como si nunca lo hubiera procesado,
+      // sin afectar a los demás del recuadro de confirmación.
+      const rechazando = requeueId === editing.id;
       const upd = await editarPendiente(token, editing.id, {
         texto, prioridad, area, ...rich,
-        ...(reencolar ? { cola_estado: "pendiente" as const } : {}),
+        ...(rechazando ? { cola_estado: "" as const } : {}),
       });
       setItems((prev) => prev.map((p) => (p.id === upd.id ? upd : p)));
       setRequeueId(null);
@@ -506,7 +508,7 @@ function FormModal({
           <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <Text style={styles.sheetTitle}>{rejecting ? "Rechazar y reabrir" : initial ? "Editar pendiente" : "Nuevo pendiente"}</Text>
             {rejecting ? (
-              <Text style={styles.rejectHint}>Escribí qué viste / qué falta. Al guardar vuelve a la cola como pendiente.</Text>
+              <Text style={styles.rejectHint}>Escribí qué viste / qué falta. Al guardar sale del recuadro y vuelve abajo como pendiente normal.</Text>
             ) : null}
             <TextInput
               style={styles.input}

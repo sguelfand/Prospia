@@ -355,7 +355,8 @@ export const crearPendiente = (
 export const editarPendiente = (
   token: string,
   id: number,
-  cambios: Partial<{ texto: string; prioridad: Prioridad; area: Area; hecho: boolean; cola_estado: ColaEstado } & PendienteRich>,
+  // cola_estado: "" saca de la cola (el backend lo interpreta como nulo).
+  cambios: Partial<{ texto: string; prioridad: Prioridad; area: Area; hecho: boolean; cola_estado: ColaEstado | "" } & PendienteRich>,
 ) =>
   request<Pendiente>(`/admin/pendientes/${id}`, {
     method: "PATCH",
