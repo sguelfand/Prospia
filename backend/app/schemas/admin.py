@@ -186,6 +186,13 @@ class PendienteUpdate(BaseModel):
     consideraciones: str | None = None
     depende: str | None = None
     alcance: str | None = None
+    # cola: NULL = sacar de cola | "pendiente" | "procesado" | "standby"
+    cola_estado: str | None = None
+
+
+class ColaIn(BaseModel):
+    """Tildar pendientes y mandarlos a la cola de procesamiento."""
+    ids: list[int]
 
 
 class PendienteOut(BaseModel):
@@ -200,6 +207,8 @@ class PendienteOut(BaseModel):
     consideraciones: str | None = None
     depende: str | None = None
     alcance: str | None = None
+    cola_estado: str | None = None
+    cola_orden: datetime | None = None
 
     model_config = {"from_attributes": True}
 

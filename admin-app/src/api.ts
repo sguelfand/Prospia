@@ -190,6 +190,8 @@ export interface AgentError {
 
 export type Prioridad = "alta" | "media" | "baja";
 export type Area = "app" | "web" | "etiguel";
+// Estado en la cola de procesamiento (tildar + Procesar). null = no encolado.
+export type ColaEstado = "pendiente" | "procesado" | "standby" | null;
 
 // Campos ricos (opcionales) — secciones del tracker. Texto multilínea.
 export interface PendienteRich {
@@ -207,6 +209,8 @@ export interface Pendiente extends Partial<PendienteRich> {
   area: Area;
   hecho: boolean;
   fecha: string;
+  cola_estado?: ColaEstado;
+  cola_orden?: string | null;
 }
 
 // tenant_id sentinela de Etiguel (coincide con el backend)
@@ -351,7 +355,7 @@ export const crearPendiente = (
 export const editarPendiente = (
   token: string,
   id: number,
-  cambios: Partial<{ texto: string; prioridad: Prioridad; area: Area; hecho: boolean } & PendienteRich>,
+  cambios: Partial<{ texto: string; prioridad: Prioridad; area: Area; hecho: boolean; cola_estado: ColaEstado } & PendienteRich>,
 ) =>
   request<Pendiente>(`/admin/pendientes/${id}`, {
     method: "PATCH",
@@ -360,6 +364,13 @@ export const editarPendiente = (
 
 export const borrarPendiente = (token: string, id: number) =>
   request<void>(`/admin/pendientes/${id}`, { method: "DELETE" }, token);
+
+// Tildar pendientes y mandarlos a la cola de procesamiento. Devuelve la cola.
+export const encolarPendientes = (token: string, ids: number[]) =>
+  request<Pendiente[]>("/admin/pendientes/cola", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  }, token);
 
 export const getPushPref = (token: string, tenantId: number, expoToken: string) =>
   request<{ enabled: boolean }>(

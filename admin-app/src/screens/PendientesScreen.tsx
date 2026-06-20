@@ -15,7 +15,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Area, Pendiente, PendienteRich, Prioridad, borrarPendiente, crearPendiente, editarPendiente, getPendientes } from "../api";
+import { Area, ColaEstado, Pendiente, PendienteRich, Prioridad, borrarPendiente, crearPendiente, editarPendiente, encolarPendientes, getPendientes } from "../api";
 import { useAuth } from "../auth";
 import { Icon } from "../components/Icon";
 import { SwipeRow } from "../components/SwipeRow";
@@ -29,6 +29,17 @@ const AREAS: Area[] = ["app", "web", "etiguel"];
 const prioColor: Record<Prioridad, string> = { alta: colors.red, media: colors.amber, baja: colors.textDim };
 const areaColor: Record<Area, string> = { app: colors.primary, web: colors.blue, etiguel: colors.amber };
 
+const COLA_LABEL: Record<NonNullable<ColaEstado>, string> = {
+  pendiente: "En cola",
+  procesado: "Realizado · sin confirmar",
+  standby: "En espera · falta info",
+};
+const colaColor: Record<NonNullable<ColaEstado>, string> = {
+  pendiente: colors.blue,
+  procesado: colors.amber,
+  standby: colors.textDim,
+};
+
 export default function PendientesScreen(_props: PendientesProps) {
   const { token } = useAuth();
   const insets = useSafeAreaInsets();
@@ -39,6 +50,9 @@ export default function PendientesScreen(_props: PendientesProps) {
   const [error, setError] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Pendiente | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [procesando, setProcesando] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -100,6 +114,31 @@ export default function PendientesScreen(_props: PendientesProps) {
   const abrirNuevo = () => { setEditing(null); setFormOpen(true); };
   const abrirEditar = (p: Pendiente) => { setEditing(p); setFormOpen(true); };
 
+  const salirSeleccion = () => { setSelectMode(false); setSelected(new Set()); };
+  const toggleSelect = (id: number) =>
+    setSelected((prev) => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+
+  const procesar = async () => {
+    if (!token || selected.size === 0 || procesando) return;
+    const ids = [...selected];
+    setProcesando(true);
+    try {
+      const cola = await encolarPendientes(token, ids);
+      const byId = new Map(cola.map((c) => [c.id, c]));
+      setItems((prev) => prev.map((p) => byId.get(p.id) ?? p));
+      salirSeleccion();
+      Alert.alert("A la cola", `${ids.length === 1 ? "1 pendiente" : ids.length + " pendientes"} en la cola de procesamiento.`);
+    } catch (e) {
+      Alert.alert("Error", e instanceof Error ? e.message : "No se pudo procesar.");
+    } finally {
+      setProcesando(false);
+    }
+  };
+
   if (loading) return <Loader />;
 
   const visibles = items.filter((p) => (filtro === "pendientes" ? !p.hecho : p.hecho));
@@ -113,10 +152,25 @@ export default function PendientesScreen(_props: PendientesProps) {
         <Tab label={`Realizados (${nReal})`} active={filtro === "realizados"} onPress={() => setFiltro("realizados")} />
       </View>
 
-      <TouchableOpacity style={styles.addBtn} onPress={abrirNuevo}>
-        <Icon name="plus" size={18} color="#fff" />
-        <Text style={styles.addBtnText}>Nuevo pendiente</Text>
-      </TouchableOpacity>
+      {selectMode ? (
+        <View style={styles.selHeader}>
+          <Text style={styles.selHeaderText}>Tildá los que querés procesar</Text>
+          <TouchableOpacity onPress={salirSeleccion}>
+            <Text style={styles.selHeaderCancel}>Cancelar</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={styles.topActions}>
+          <TouchableOpacity style={styles.addBtn} onPress={abrirNuevo}>
+            <Icon name="plus" size={18} color="#fff" />
+            <Text style={styles.addBtnText}>Nuevo pendiente</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.selBtn} onPress={() => setSelectMode(true)}>
+            <Icon name="check" size={16} color={colors.primary} />
+            <Text style={styles.selBtnText}>Seleccionar</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <FlatList
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
@@ -129,19 +183,46 @@ export default function PendientesScreen(_props: PendientesProps) {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />
         }
-        renderItem={({ item }) => (
-          <SwipeRow
-            left={
-              filtro === "pendientes"
-                ? { icon: "check", color: colors.green, onTrigger: () => setHecho(item, true) }
-                : { icon: "undo", color: colors.amber, onTrigger: () => setHecho(item, false) }
-            }
-            right={{ icon: "x", color: colors.red, onTrigger: () => confirmarBorrar(item) }}
-          >
-            <PendienteCard item={item} onPress={() => abrirEditar(item)} />
-          </SwipeRow>
-        )}
+        renderItem={({ item }) => {
+          if (selectMode) {
+            return (
+              <PendienteCard
+                item={item}
+                selectMode
+                selected={selected.has(item.id)}
+                onPress={() => toggleSelect(item.id)}
+              />
+            );
+          }
+          return (
+            <SwipeRow
+              left={
+                filtro === "pendientes"
+                  ? { icon: "check", color: colors.green, onTrigger: () => setHecho(item, true) }
+                  : { icon: "undo", color: colors.amber, onTrigger: () => setHecho(item, false) }
+              }
+              right={{ icon: "x", color: colors.red, onTrigger: () => confirmarBorrar(item) }}
+            >
+              <PendienteCard item={item} onPress={() => abrirEditar(item)} />
+            </SwipeRow>
+          );
+        }}
       />
+
+      {selectMode && (
+        <View style={[styles.procBar, { paddingBottom: insets.bottom + 12 }]}>
+          <Text style={styles.procCount}>
+            {selected.size === 1 ? "1 seleccionado" : `${selected.size} seleccionados`}
+          </Text>
+          <TouchableOpacity
+            style={[styles.procBtn, selected.size === 0 ? styles.procBtnOff : null]}
+            onPress={procesar}
+            disabled={selected.size === 0 || procesando}
+          >
+            <Text style={styles.procBtnText}>{procesando ? "Procesando…" : "Procesar"}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <FormModal visible={formOpen} initial={editing} onClose={() => setFormOpen(false)} onSubmit={guardar} />
     </View>
@@ -185,24 +266,47 @@ function RichSection({ campo, valor }: { campo: keyof PendienteRich; valor: stri
   );
 }
 
-function PendienteCard({ item, onPress }: { item: Pendiente; onPress: () => void }) {
+function PendienteCard({
+  item,
+  onPress,
+  selectMode = false,
+  selected = false,
+}: {
+  item: Pendiente;
+  onPress: () => void;
+  selectMode?: boolean;
+  selected?: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
   const richCampos = RICH_ORDER.filter((k) => item[k]);
   const tieneDetalle = richCampos.length > 0;
+  const cola = item.cola_estado;
   return (
-    <View style={styles.card}>
-      <TouchableOpacity style={styles.cardBody} onPress={onPress} activeOpacity={0.7}>
-        <Text style={styles.texto}>{item.texto}</Text>
-        <View style={styles.badges}>
-          <Text style={[styles.badge, { color: prioColor[item.prioridad], borderColor: prioColor[item.prioridad] }]}>
-            {item.prioridad}
-          </Text>
-          <Text style={[styles.badge, { color: areaColor[item.area], borderColor: areaColor[item.area] }]}>
-            {item.area}
-          </Text>
+    <View style={[styles.card, selected ? styles.cardSelected : null]}>
+      <TouchableOpacity style={styles.cardBodyRow} onPress={onPress} activeOpacity={0.7}>
+        {selectMode && (
+          <View style={[styles.selBox, selected ? styles.selBoxOn : null]}>
+            {selected && <Icon name="check" size={13} color="#fff" />}
+          </View>
+        )}
+        <View style={styles.cardBody}>
+          <Text style={styles.texto}>{item.texto}</Text>
+          <View style={styles.badges}>
+            <Text style={[styles.badge, { color: prioColor[item.prioridad], borderColor: prioColor[item.prioridad] }]}>
+              {item.prioridad}
+            </Text>
+            <Text style={[styles.badge, { color: areaColor[item.area], borderColor: areaColor[item.area] }]}>
+              {item.area}
+            </Text>
+            {cola && (
+              <Text style={[styles.badge, { color: colaColor[cola], borderColor: colaColor[cola] }]}>
+                {COLA_LABEL[cola]}
+              </Text>
+            )}
+          </View>
         </View>
       </TouchableOpacity>
-      {tieneDetalle && (
+      {!selectMode && tieneDetalle && (
         <>
           <TouchableOpacity style={styles.detalleToggle} onPress={() => setExpanded((v) => !v)} activeOpacity={0.7}>
             <Text style={styles.detalleToggleText}>{expanded ? "Ocultar detalle ▾" : "Ver detalle ▸"}</Text>
@@ -357,11 +461,28 @@ const styles = StyleSheet.create({
   tabText: { color: colors.textDim, fontSize: 13, fontWeight: "700" },
   tabTextActive: { color: colors.text },
 
-  addBtn: { backgroundColor: colors.primary, margin: 12, marginBottom: 4, borderRadius: 10, paddingVertical: 12, flexDirection: "row", alignItems: "center", justifyContent: "center" },
+  topActions: { flexDirection: "row", alignItems: "center", gap: 8, margin: 12, marginBottom: 4 },
+  addBtn: { flex: 1, backgroundColor: colors.primary, borderRadius: 10, paddingVertical: 12, flexDirection: "row", alignItems: "center", justifyContent: "center" },
   addBtnText: { color: "#fff", fontSize: 15, fontWeight: "700", marginLeft: 6 },
+  selBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 14 },
+  selBtnText: { color: colors.primary, fontSize: 13, fontWeight: "700" },
+
+  selHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginHorizontal: 12, marginTop: 12, marginBottom: 4 },
+  selHeaderText: { color: colors.textDim, fontSize: 13, fontWeight: "600" },
+  selHeaderCancel: { color: colors.primary, fontSize: 13, fontWeight: "700" },
+
+  procBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 12, backgroundColor: colors.cardAlt, borderTopWidth: 1, borderTopColor: colors.border },
+  procCount: { color: colors.text, fontSize: 14, fontWeight: "700" },
+  procBtn: { backgroundColor: colors.primary, borderRadius: 10, paddingVertical: 11, paddingHorizontal: 22 },
+  procBtnOff: { opacity: 0.5 },
+  procBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
 
   card: { backgroundColor: colors.card, borderRadius: 12, padding: 14, marginBottom: 10 },
-  cardBody: {},
+  cardSelected: { borderWidth: 1, borderColor: colors.primary },
+  cardBodyRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  cardBody: { flex: 1 },
+  selBox: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: colors.border, alignItems: "center", justifyContent: "center", marginTop: 1 },
+  selBoxOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   texto: { color: colors.text, fontSize: 14 },
   badges: { flexDirection: "row", gap: 8, marginTop: 8 },
   badge: { fontSize: 11, fontWeight: "700", borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, overflow: "hidden", textTransform: "capitalize" },
