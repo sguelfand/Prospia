@@ -69,14 +69,15 @@ export default function Pendientes() {
 
   useEffect(() => { load() }, [load])
 
-  // Auto-refresh cada 10s mientras haya algo en 'pendiente': los círculos se
-  // llenan solos a medida que Claude marca 'procesado'.
-  const hayPendiente = items.some((i) => i.cola_estado === 'pendiente' && !i.hecho)
+  // Auto-refresh cada 10s mientras haya algo ACTIVO en la cola (pendiente o
+  // standby): los círculos se llenan solos y se ve el cambio en vivo cuando
+  // Claude procesa o reactiva un standby.
+  const hayActivo = items.some((i) => (i.cola_estado === 'pendiente' || i.cola_estado === 'standby') && !i.hecho)
   useEffect(() => {
-    if (!hayPendiente) return
+    if (!hayActivo) return
     const t = setInterval(() => { if (!document.hidden) load() }, 10000)
     return () => clearInterval(t)
-  }, [hayPendiente, load])
+  }, [hayActivo, load])
 
   // ── Acciones ──
   const patch = async (id: number, body: Omit<Partial<Pendiente>, 'cola_estado'> & { cola_estado?: ColaEstado | '' }) => {
