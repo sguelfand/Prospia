@@ -415,3 +415,25 @@ export const setNotifPref = (token: string, expoToken: string, evento: string, e
     { method: "PUT", body: JSON.stringify({ expo_token: expoToken, evento, enabled }) },
     token,
   );
+
+// ── Perfil / cuenta ───────────────────────────────────────────────────────────
+export interface Me {
+  id: number;
+  tenant_id: number;
+  email: string;
+  nombre: string | null;
+  role: string;
+  nivel: number;
+}
+
+export const getMe = (token: string) => request<Me>("/auth/me", {}, token);
+
+export const updateProfile = (token: string, nombre: string | null, email: string) =>
+  request<Me>("/auth/me", { method: "PATCH", body: JSON.stringify({ nombre, email }) }, token);
+
+export const changePassword = (token: string, current_password: string, new_password: string) =>
+  request<void>(
+    "/auth/change-password",
+    { method: "POST", body: JSON.stringify({ current_password, new_password }) },
+    token,
+  );

@@ -20,12 +20,12 @@ import { AuthStackParamList, DrawerParamList } from "./src/navigation";
 import { registerForPush } from "./src/push";
 import AvisosScreen from "./src/screens/AvisosScreen";
 import ClienteViewScreen from "./src/screens/ClienteViewScreen";
+import ConfiguracionScreen from "./src/screens/ConfiguracionScreen";
 import DashboardScreen from "./src/screens/DashboardScreen";
 import ErroresScreen from "./src/screens/ErroresScreen";
 import EtiguelMirrorDetailScreen from "./src/screens/EtiguelMirrorDetailScreen";
 import LockScreen from "./src/screens/LockScreen";
 import LoginScreen from "./src/screens/LoginScreen";
-import NotificacionesScreen from "./src/screens/NotificacionesScreen";
 import PendientesScreen from "./src/screens/PendientesScreen";
 import ProspectDetailScreen from "./src/screens/ProspectDetailScreen";
 import { colors } from "./src/theme";
@@ -75,7 +75,7 @@ function AppDrawer() {
       <Drawer.Screen name="Errores" component={ErroresScreen} options={{ title: "Errores" }} />
       <Drawer.Screen name="Pendientes" component={PendientesScreen} options={{ title: "Pendientes" }} />
       <Drawer.Screen name="Avisos" component={AvisosScreen} options={{ title: "Avisos" }} />
-      <Drawer.Screen name="Notificaciones" component={NotificacionesScreen} options={{ title: "Notificaciones" }} />
+      <Drawer.Screen name="Configuracion" component={ConfiguracionScreen} options={{ title: "Configuración" }} />
     </Drawer.Navigator>
   );
 }

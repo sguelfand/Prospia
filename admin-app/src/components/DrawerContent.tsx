@@ -77,12 +77,6 @@ export default function DrawerContent({ navigation, state }: DrawerContentCompon
           active={activeRoute === "Pendientes"}
           onPress={() => navigation.navigate("Pendientes")}
         />
-        <NavItem
-          icon="bell"
-          label="Notificaciones"
-          active={activeRoute === "Notificaciones"}
-          onPress={() => navigation.navigate("Notificaciones")}
-        />
 
         <Text style={styles.section}>Clientes</Text>
         {loading ? (
@@ -109,9 +103,17 @@ export default function DrawerContent({ navigation, state }: DrawerContentCompon
         ) : null}
       </ScrollView>
 
-      <TouchableOpacity style={[styles.logout, { paddingBottom: insets.bottom + 12 }]} onPress={signOut}>
-        <Text style={styles.logoutText}>Salir</Text>
-      </TouchableOpacity>
+      <View style={styles.footer}>
+        <NavItem
+          icon="settings"
+          label="Configuración"
+          active={activeRoute === "Configuracion"}
+          onPress={() => navigation.navigate("Configuracion")}
+        />
+        <TouchableOpacity style={[styles.logout, { paddingBottom: insets.bottom + 12 }]} onPress={signOut}>
+          <Text style={styles.logoutText}>Salir</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -175,6 +177,7 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   empty: { color: colors.textDim, marginLeft: 12, marginTop: 8 },
-  logout: { borderTopColor: colors.border, borderTopWidth: 1, paddingTop: 14, paddingHorizontal: 16 },
+  footer: { borderTopColor: colors.border, borderTopWidth: 1, paddingHorizontal: 8, paddingTop: 6 },
+  logout: { borderTopColor: colors.border, borderTopWidth: 1, paddingTop: 14, paddingHorizontal: 16, marginTop: 4 },
   logoutText: { color: colors.primary, fontSize: 15, fontWeight: "700" },
 });
