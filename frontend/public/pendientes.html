@@ -119,6 +119,28 @@
 
     .empty { text-align: center; padding: 70px 20px; color: var(--text-muted); font-size: 14px; }
 
+    /* Estado de cola (badge en la cabecera del ítem) */
+    .cola-badge { font-family: var(--mono); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 3px 7px; border-radius: 5px; flex-shrink: 0; }
+    .cola-badge.pendiente { background: rgba(110,150,230,0.18); color: #7FA6F0; }
+    .cola-badge.procesado { background: var(--prio-media-soft); color: var(--accent); }
+    .cola-badge.standby { background: var(--prio-baja-soft); color: var(--prio-baja); }
+    .item-actions button.confirm:hover { border-color: var(--green); color: var(--green); }
+
+    /* Modo selección (tildar para procesar) */
+    .sel-check { width: 22px; height: 22px; border: 2px solid var(--border-strong); border-radius: 50%; display: none; align-items: center; justify-content: center; flex-shrink: 0; background: var(--bg); pointer-events: none; }
+    body.select-mode .sel-check { display: flex; }
+    body.select-mode .checkbox { display: none; }
+    .test.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+    .test.selected .sel-check { background: var(--accent); border-color: var(--accent); }
+    .sel-check svg { width: 13px; height: 13px; color: var(--bg); opacity: 0; transition: opacity 0.12s; }
+    .test.selected .sel-check svg { opacity: 1; }
+
+    /* Barra inferior de procesamiento */
+    .cola-bar { position: fixed; bottom: 0; left: 0; right: 0; z-index: 25; background: var(--bg-2); border-top: 1px solid var(--border-strong); padding: 14px 24px; display: none; align-items: center; justify-content: space-between; gap: 12px; box-shadow: 0 -6px 20px rgba(0,0,0,0.35); }
+    .cola-bar.show { display: flex; }
+    .cola-bar .count { font-size: 14px; font-weight: 600; }
+    .cola-bar .acts { display: flex; gap: 8px; }
+
     /* Floating add button */
     .fab { position: fixed; bottom: 28px; right: 28px; z-index: 20; width: 56px; height: 56px; border-radius: 50%; background: var(--accent); color: var(--bg); border: none; font-size: 28px; line-height: 1; cursor: pointer; box-shadow: var(--shadow-amber, 0 8px 24px rgba(245,178,61,0.28)); transition: transform 0.15s; }
     .fab:hover { transform: scale(1.06); }
@@ -216,12 +238,24 @@
         <button class="filter-btn area-btn" data-area="app">App</button>
         <button class="filter-btn area-btn" data-area="web">Web</button>
         <button class="filter-btn area-btn" data-area="etiguel">Etiguel</button>
+        <span class="sep"></span>
+        <button class="filter-btn" id="select-toggle">Seleccionar</button>
       </div>
       <div id="blocks"></div>
     </main>
   </div>
 
   <button class="fab hidden" id="fab" title="Nuevo pendiente">+</button>
+
+  <!-- Barra de procesamiento (modo selección) -->
+  <div class="cola-bar" id="cola-bar">
+    <span class="count" id="cola-count">0 seleccionados</span>
+    <div class="acts">
+      <button class="btn" id="cola-cancel">Cancelar</button>
+      <button class="btn primary" id="cola-process">Procesar</button>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <!-- MODAL -->
@@ -259,6 +293,8 @@
     let areaFilter = '';
     let openIds = {};
     let editingId = null;
+    let selectMode = false;
+    let selected = new Set();
 
     const AREA_LABELS = { app: 'App (Prospia Admin)', web: 'Web / Plataforma', etiguel: 'Etiguel / Scraper' };
     const AREA_ORDER = ['app', 'web', 'etiguel'];
@@ -267,6 +303,7 @@
     const SECTION_ORDER = ['contexto', 'que_armar', 'consideraciones', 'depende', 'alcance'];
     const PRIO_LABELS = { alta: 'Alta', media: 'Media', baja: 'Baja' };
     const PRIO_RANK = { alta: 0, media: 1, baja: 2 };
+    const COLA_LABELS = { pendiente: 'En cola', procesado: 'Realizado · sin confirmar', standby: 'En espera · falta info' };
 
     function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function withCode(s) { return esc(s).replace(/`([^`]+)`/g, '<code>$1</code>'); }
@@ -339,20 +376,28 @@
       const sections = SECTION_ORDER.map(k => renderSection(k, it[k])).join('');
       const prio = it.prioridad || 'media';
       const fecha = it.fecha ? new Date(it.fecha).toLocaleDateString('es-AR') : '';
+      const cola = it.cola_estado;
+      const isSel = selected.has(it.id);
       return `
-        <div class="test ${it.hecho ? 'done' : ''} ${open ? 'open' : ''}" data-id="${it.id}">
-          <div class="test-head" onclick="toggleOpen(${it.id})">
+        <div class="test ${it.hecho ? 'done' : ''} ${open ? 'open' : ''} ${isSel ? 'selected' : ''}" data-id="${it.id}">
+          <div class="test-head" onclick="headClick(${it.id})">
             <div class="checkbox" onclick="toggleDone(${it.id}, event)">
+              <svg viewBox="0 0 14 14" fill="none"><path d="M2 7L5.5 10.5L12 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="sel-check">
               <svg viewBox="0 0 14 14" fill="none"><path d="M2 7L5.5 10.5L12 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </div>
             ${badge ? `<span class="test-id">${esc(badge)}</span>` : ''}
             <span class="test-title">${esc(title)}</span>
+            ${cola ? `<span class="cola-badge ${cola}">${COLA_LABELS[cola] || cola}</span>` : ''}
             <span class="prio ${prio}">${PRIO_LABELS[prio] || prio}</span>
             <span class="test-toggle">▼</span>
           </div>
           <div class="test-body"><div class="test-body-inner">
             ${sections || '<div class="test-section-content" style="color:var(--text-muted);font-size:13px">Sin detalle. Tocá «Editar» para agregar contexto.</div>'}
             <div class="item-actions">
+              ${cola === 'procesado' ? `<button class="confirm" onclick="confirmHecho(${it.id}, event)">Confirmar hecho</button>` : ''}
+              ${cola ? `<button onclick="dequeue(${it.id}, event)">Sacar de cola</button>` : ''}
               <button onclick="copyItem(${it.id}, event)">Copiar</button>
               <button onclick="openEdit(${it.id}, event)">Editar</button>
               <button class="danger" onclick="del(${it.id}, event)">Borrar</button>
@@ -374,10 +419,59 @@
         html += `<div class="block"><div class="block-header"><div class="block-title">${esc(AREA_LABELS[area])}</div></div>${group.map(renderItem).join('')}</div>`;
       }
       document.getElementById('blocks').innerHTML = html || '<div class="empty">Nada que mostrar en este filtro</div>';
+      updateColaBar();
     }
 
     // ---- Actions ----
     window.toggleOpen = (id) => { openIds[id] = !openIds[id]; render(); };
+    // En modo selección, tocar la fila la tilda; si no, despliega el detalle.
+    window.headClick = (id) => { if (selectMode) toggleSelect(id); else toggleOpen(id); };
+    window.toggleSelect = (id) => {
+      if (selected.has(id)) selected.delete(id); else selected.add(id);
+      render();
+    };
+
+    function setSelectMode(on) {
+      selectMode = on;
+      if (!on) selected.clear();
+      document.body.classList.toggle('select-mode', on);
+      document.getElementById('select-toggle').classList.toggle('active', on);
+      document.getElementById('select-toggle').textContent = on ? 'Cancelar' : 'Seleccionar';
+      document.getElementById('fab').classList.toggle('hidden', on);
+      render();
+    }
+    function updateColaBar() {
+      const bar = document.getElementById('cola-bar');
+      const n = selected.size;
+      bar.classList.toggle('show', selectMode && n > 0);
+      document.getElementById('cola-count').textContent = n === 1 ? '1 seleccionado' : `${n} seleccionados`;
+    }
+    async function processSelected() {
+      const ids = [...selected];
+      if (!ids.length) return;
+      const btn = document.getElementById('cola-process'); btn.disabled = true; btn.textContent = 'Procesando…';
+      try {
+        const cola = await api('/admin/pendientes/cola', { method: 'POST', body: JSON.stringify({ ids }) });
+        // Refresca los estados de cola en la lista local.
+        const byId = Object.fromEntries(cola.map(c => [c.id, c]));
+        items.forEach(i => { if (byId[i.id]) Object.assign(i, byId[i.id]); });
+        setSelectMode(false);
+        showToast(`${ids.length === 1 ? '1 pendiente enviado' : ids.length + ' pendientes enviados'} a la cola`);
+      } catch (e) { alert('No se pudo procesar: ' + e.message); }
+      finally { btn.disabled = false; btn.textContent = 'Procesar'; }
+    }
+    window.confirmHecho = async (id, ev) => {
+      ev.stopPropagation();
+      const it = items.find(i => i.id === id); if (!it) return;
+      try { const u = await api('/admin/pendientes/' + id, { method: 'PATCH', body: JSON.stringify({ hecho: true }) }); Object.assign(it, u); render(); showToast('Confirmado como hecho'); }
+      catch (e) { alert('No se pudo confirmar: ' + e.message); }
+    };
+    window.dequeue = async (id, ev) => {
+      ev.stopPropagation();
+      const it = items.find(i => i.id === id); if (!it) return;
+      try { const u = await api('/admin/pendientes/' + id, { method: 'PATCH', body: JSON.stringify({ cola_estado: '' }) }); Object.assign(it, u); render(); }
+      catch (e) { alert('No se pudo sacar de la cola: ' + e.message); }
+    };
     window.toggleDone = async (id, ev) => {
       ev.stopPropagation();
       const it = items.find(i => i.id === id); if (!it) return;
@@ -478,6 +572,9 @@
     document.getElementById('login-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
     document.getElementById('logout-btn').addEventListener('click', logout);
     document.getElementById('fab').addEventListener('click', () => openModal(null));
+    document.getElementById('select-toggle').addEventListener('click', () => setSelectMode(!selectMode));
+    document.getElementById('cola-cancel').addEventListener('click', () => setSelectMode(false));
+    document.getElementById('cola-process').addEventListener('click', processSelected);
     document.getElementById('modal-cancel').addEventListener('click', closeModal);
     document.getElementById('modal-save').addEventListener('click', saveModal);
     document.getElementById('overlay').addEventListener('click', e => { if (e.target.id === 'overlay') closeModal(); });

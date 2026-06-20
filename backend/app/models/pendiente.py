@@ -28,3 +28,11 @@ class Pendiente(Base):
     consideraciones: Mapped[str | None] = mapped_column(Text, nullable=True)
     depende: Mapped[str | None] = mapped_column(Text, nullable=True)
     alcance: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Cola de procesamiento: Sebi tilda pendientes y los manda a procesar.
+    # cola_estado: NULL = no encolado | "pendiente" = en cola esperando |
+    # "procesado" = Claude lo resolvió pero falta que Sebi lo confirme (→ hecho) |
+    # "standby" = Claude lo frenó por falta de info; Sebi tiene que destrabarlo.
+    cola_estado: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    cola_orden: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )  # momento de encolado → FIFO

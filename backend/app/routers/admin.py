@@ -4,7 +4,7 @@ Alimenta la app Android de administración: ver todos los clientes (tenants)
 de Prospia con sus KPIs, el detalle de stats de cualquiera, y los
 totales agregados. Etiguel (que vive en Monday, no en esta base) se suma
 como una "fuente" más en la Fase 4 vía un adapter."""
-from datetime import date
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import case, extract, func
@@ -43,6 +43,7 @@ from app.schemas.admin import (
     FiltrosCliente,
     ImpersonateOut,
     OpcionFiltro,
+    ColaIn,
     PendienteIn,
     PendienteOut,
     PendienteUpdate,
@@ -552,6 +553,18 @@ def editar_pendiente(pendiente_id: int, body: PendienteUpdate, db: Session = Dep
         p.area = body.area
     if body.hecho is not None:
         p.hecho = body.hecho
+        # Confirmar un "procesado" → sale de la cola al darse por hecho.
+        if body.hecho:
+            p.cola_estado = None
+    # cola_estado: "" o null → sacar de cola | otro valor → setear estado.
+    if body.cola_estado is not None:
+        nuevo = body.cola_estado.strip() or None
+        if nuevo in (None, "pendiente", "procesado", "standby"):
+            p.cola_estado = nuevo
+            if nuevo and p.cola_orden is None:
+                p.cola_orden = datetime.now(timezone.utc)
+            elif nuevo is None:
+                p.cola_orden = None
     # Campos ricos: si vienen en el body (no None), se actualizan; "" → NULL.
     for campo in ("contexto", "que_armar", "consideraciones", "depende", "alcance"):
         val = getattr(body, campo)
@@ -560,6 +573,48 @@ def editar_pendiente(pendiente_id: int, body: PendienteUpdate, db: Session = Dep
     db.commit()
     db.refresh(p)
     return p
+
+
+@router.post("/pendientes/cola", response_model=list[PendienteOut])
+def encolar_pendientes(body: ColaIn, db: Session = Depends(get_db)):
+    """Tildar pendientes y mandarlos a la cola de procesamiento. Marca cada uno
+    (que no esté hecho ni ya encolado) como cola_estado='pendiente' con su
+    cola_orden = ahora → la cola se procesa FIFO (el más viejo primero)."""
+    if not body.ids:
+        return []
+    items = db.query(Pendiente).filter(Pendiente.id.in_(body.ids)).all()
+    ahora = datetime.now(timezone.utc)
+    for p in items:
+        if p.hecho or p.cola_estado is not None:
+            continue
+        p.cola_estado = "pendiente"
+        p.cola_orden = ahora
+    db.commit()
+    return _cola_items(db)
+
+
+@router.get("/cola", response_model=list[PendienteOut])
+def listar_cola(db: Session = Depends(get_db)):
+    """La cola de procesamiento, FIFO (más viejo primero). Incluye los que
+    esperan ('pendiente'), los ya resueltos sin confirmar ('procesado') y los
+    frenados por falta de info ('standby'). Lo lee Claude para avanzar la cola."""
+    return _cola_items(db)
+
+
+def _cola_items(db: Session):
+    estados = ("pendiente", "procesado", "standby")
+    orden_estado = case(
+        (Pendiente.cola_estado == "pendiente", 0),
+        (Pendiente.cola_estado == "standby", 1),
+        (Pendiente.cola_estado == "procesado", 2),
+        else_=3,
+    )
+    return (
+        db.query(Pendiente)
+        .filter(Pendiente.cola_estado.in_(estados))
+        .order_by(orden_estado, Pendiente.cola_orden.asc())
+        .all()
+    )
 
 
 @router.delete("/pendientes/{pendiente_id}", status_code=status.HTTP_204_NO_CONTENT)

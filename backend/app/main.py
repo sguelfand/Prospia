@@ -94,6 +94,14 @@ def run_migrations():
         # superadmin ⇔ nivel 1 (idempotente)
         conn.execute(text("UPDATE users SET nivel = 1 WHERE role = 'superadmin'"))
 
+        # ── pendientes: cola de procesamiento (tildar + Procesar) ──
+        conn.execute(text(
+            "ALTER TABLE pendientes ADD COLUMN IF NOT EXISTS cola_estado VARCHAR(20)"
+        ))
+        conn.execute(text(
+            "ALTER TABLE pendientes ADD COLUMN IF NOT EXISTS cola_orden TIMESTAMPTZ"
+        ))
+
 
 Base.metadata.create_all(bind=engine)
 run_migrations()
