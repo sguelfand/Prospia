@@ -133,6 +133,15 @@
     .cola-box-count { font-family: var(--mono); font-size: 12px; font-weight: 700; color: #7FA6F0; }
     .cola-box-bar { flex: 1; height: 5px; background: rgba(110,150,230,0.16); border-radius: 3px; overflow: hidden; max-width: 240px; }
     .cola-box-bar > i { display: block; height: 100%; background: #7FA6F0; border-radius: 3px; transition: width 0.45s ease; }
+    /* Cola terminada: todo `procesado`, falta confirmar → recuadro verde */
+    .cola-box.done { background: linear-gradient(180deg, var(--green-soft), rgba(70,177,123,0.04)); border-color: rgba(70,177,123,0.5); }
+    .cola-box.done .cola-box-count { color: var(--green); }
+    .cola-box.done .cola-box-bar { background: rgba(70,177,123,0.18); }
+    .cola-box.done .cola-box-bar > i { background: var(--green); }
+    .cola-check-head { width: 18px; height: 18px; border-radius: 50%; background: var(--green); color: var(--bg); font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .cola-box-hint { font-size: 12px; color: var(--text-muted); margin: -6px 4px 12px; }
+    .cola-confirm-head { background: var(--green-soft); border: 1px solid var(--green); color: var(--green); font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 6px; cursor: pointer; flex-shrink: 0; }
+    .cola-confirm-head:hover { background: var(--green); color: var(--bg); }
     .cola-spinner { width: 14px; height: 14px; border: 2px solid rgba(110,150,230,0.30); border-top-color: #7FA6F0; border-radius: 50%; animation: cola-spin 0.8s linear infinite; flex-shrink: 0; }
     @keyframes cola-spin { to { transform: rotate(360deg); } }
 
@@ -316,6 +325,7 @@
     let selectMode = false;
     let selected = new Set();
     let pollTimer = null;
+    let colaAllDone = false; // true cuando todos los de la cola están `procesado`
 
     const AREA_LABELS = { app: 'App (Prospia Admin)', web: 'Web / Plataforma', etiguel: 'Etiguel / Scraper' };
     const AREA_ORDER = ['app', 'web', 'etiguel'];
@@ -416,13 +426,14 @@
             ${badge ? `<span class="test-id">${esc(badge)}</span>` : ''}
             <span class="test-title">${esc(title)}</span>
             ${cola ? `<span class="cola-badge ${cola}">${COLA_LABELS[cola] || cola}</span>` : ''}
+            ${cola === 'procesado' && colaAllDone && !it.hecho ? `<button class="cola-confirm-head" onclick="confirmHecho(${it.id}, event)">✓ Confirmar</button>` : ''}
             <span class="prio ${prio}">${PRIO_LABELS[prio] || prio}</span>
             <span class="test-toggle">▼</span>
           </div>
           <div class="test-body"><div class="test-body-inner">
             ${sections || '<div class="test-section-content" style="color:var(--text-muted);font-size:13px">Sin detalle. Tocá «Editar» para agregar contexto.</div>'}
             <div class="item-actions">
-              ${cola === 'procesado' ? `<button class="confirm" onclick="confirmHecho(${it.id}, event)">Confirmar hecho</button>` : ''}
+              ${cola === 'procesado' && colaAllDone && !it.hecho ? `<button class="confirm" onclick="confirmHecho(${it.id}, event)">Confirmar hecho</button>` : ''}
               ${cola ? `<button onclick="dequeue(${it.id}, event)">Sacar de cola</button>` : ''}
               <button onclick="copyItem(${it.id}, event)">Copiar</button>
               <button onclick="openEdit(${it.id}, event)">Editar</button>
@@ -449,15 +460,22 @@
         const doneN = q.filter(i => i.cola_estado === 'procesado').length;
         const pendN = q.filter(i => i.cola_estado === 'pendiente').length;
         const pct = q.length ? Math.round(doneN / q.length * 100) : 0;
-        html += `<div class="cola-box">
+        colaAllDone = q.every(i => i.cola_estado === 'procesado');
+        const titulo = colaAllDone
+          ? (q.length === 1 ? 'Listo, terminé 1' : `Listo, terminé los ${q.length}`)
+          : 'Procesando';
+        html += `<div class="cola-box ${colaAllDone ? 'done' : ''}">
           <div class="cola-box-head">
-            ${pendN ? '<span class="cola-spinner"></span>' : ''}
-            <span class="cola-box-title">Procesando</span>
+            ${colaAllDone ? '<span class="cola-check-head">✓</span>' : (pendN ? '<span class="cola-spinner"></span>' : '')}
+            <span class="cola-box-title">${titulo}</span>
             <span class="cola-box-count">${doneN}/${q.length}</span>
             <span class="cola-box-bar"><i style="width:${pct}%"></i></span>
           </div>
+          ${colaAllDone ? '<p class="cola-box-hint">Revisá y confirmá cada uno para pasarlo a Realizados.</p>' : ''}
           ${q.map(renderItem).join('')}
         </div>`;
+      } else {
+        colaAllDone = false;
       }
 
       for (const area of AREA_ORDER) {

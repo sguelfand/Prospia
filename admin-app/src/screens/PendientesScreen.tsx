@@ -175,6 +175,7 @@ export default function PendientesScreen(_props: PendientesProps) {
   const colaDone = queued.filter((p) => p.cola_estado === "procesado").length;
   const colaPend = queued.filter((p) => p.cola_estado === "pendiente").length;
   const colaPct = queued.length ? Math.round((colaDone / queued.length) * 100) : 0;
+  const colaAllDone = queued.length > 0 && queued.every((p) => p.cola_estado === "procesado");
   const mostrarCola = !selectMode && filtro === "pendientes" && queued.length > 0;
 
   const visibles = items.filter((p) => (filtro === "pendientes" ? !p.hecho : p.hecho) && !enCola(p));
@@ -182,17 +183,38 @@ export default function PendientesScreen(_props: PendientesProps) {
   const nReal = items.length - nPend;
 
   const colaHeader = mostrarCola ? (
-    <View style={styles.colaBox}>
+    <View style={[styles.colaBox, colaAllDone && styles.colaBoxDone]}>
       <View style={styles.colaBoxHead}>
-        {colaPend > 0 && <ActivityIndicator size="small" color={colors.blue} />}
-        <Text style={styles.colaBoxTitle}>Procesando</Text>
-        <Text style={styles.colaBoxCount}>{colaDone}/{queued.length}</Text>
-        <View style={styles.colaBoxBar}>
-          <View style={[styles.colaBoxBarFill, { width: `${colaPct}%` }]} />
+        {colaAllDone ? (
+          <View style={styles.colaCheckHead}>
+            <Icon name="check" size={11} color={colors.bg} />
+          </View>
+        ) : colaPend > 0 ? (
+          <ActivityIndicator size="small" color={colors.blue} />
+        ) : null}
+        <Text style={styles.colaBoxTitle}>
+          {colaAllDone ? (queued.length === 1 ? "Listo, terminé 1" : `Listo, terminé los ${queued.length}`) : "Procesando"}
+        </Text>
+        <Text style={[styles.colaBoxCount, colaAllDone && styles.colaBoxCountDone]}>{colaDone}/{queued.length}</Text>
+        <View style={[styles.colaBoxBar, colaAllDone && styles.colaBoxBarDone]}>
+          <View style={[styles.colaBoxBarFill, colaAllDone && styles.colaBoxBarFillDone, { width: `${colaPct}%` }]} />
         </View>
       </View>
+      {colaAllDone && <Text style={styles.colaBoxHint}>Revisá y confirmá cada uno para pasarlo a Realizados.</Text>}
       {queued.map((q) => (
-        <View key={q.id}>{renderRow(q)}</View>
+        <View key={q.id}>
+          {colaAllDone ? (
+            <PendienteCard item={q} onPress={() => abrirEditar(q)} />
+          ) : (
+            renderRow(q)
+          )}
+          {colaAllDone && (
+            <TouchableOpacity style={styles.colaConfirmBtn} onPress={() => setHecho(q, true)} activeOpacity={0.8}>
+              <Icon name="check" size={15} color={colors.green} />
+              <Text style={styles.colaConfirmText}>Confirmar realizado</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       ))}
     </View>
   ) : null;
@@ -545,6 +567,14 @@ const styles = StyleSheet.create({
   colaBoxCount: { color: colors.blue, fontSize: 12, fontWeight: "700" },
   colaBoxBar: { flex: 1, height: 5, borderRadius: 3, backgroundColor: "rgba(110,150,230,0.16)", overflow: "hidden", marginLeft: 4 },
   colaBoxBarFill: { height: "100%", borderRadius: 3, backgroundColor: colors.blue },
+  colaBoxDone: { backgroundColor: "rgba(34,197,94,0.10)", borderColor: "rgba(34,197,94,0.5)" },
+  colaCheckHead: { width: 18, height: 18, borderRadius: 9, backgroundColor: colors.green, alignItems: "center", justifyContent: "center" },
+  colaBoxCountDone: { color: colors.green },
+  colaBoxBarDone: { backgroundColor: "rgba(34,197,94,0.18)" },
+  colaBoxBarFillDone: { backgroundColor: colors.green },
+  colaBoxHint: { color: colors.textDim, fontSize: 12, marginTop: -4, marginBottom: 10, paddingHorizontal: 4 },
+  colaConfirmBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderWidth: 1, borderColor: colors.green, borderRadius: 9, paddingVertical: 9, marginTop: -2, marginBottom: 10 },
+  colaConfirmText: { color: colors.green, fontSize: 13, fontWeight: "700" },
   colaDot: { width: 19, height: 19, borderRadius: 10, borderWidth: 2, alignItems: "center", justifyContent: "center", marginTop: 1 },
   colaDotSpin: { width: 19, height: 19, marginTop: 1 },
   colaDotDone: { borderColor: colors.amber, backgroundColor: colors.amber },
