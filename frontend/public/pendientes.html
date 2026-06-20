@@ -126,6 +126,26 @@
     .cola-badge.standby { background: var(--prio-baja-soft); color: var(--prio-baja); }
     .item-actions button.confirm:hover { border-color: var(--green); color: var(--green); }
 
+    /* Recuadro "Procesando" (tray arriba de todo) */
+    .cola-box { background: linear-gradient(180deg, rgba(110,150,230,0.10), rgba(110,150,230,0.03)); border: 1px solid rgba(110,150,230,0.38); border-radius: 14px; padding: 14px 14px 6px; margin-bottom: 24px; }
+    .cola-box-head { display: flex; align-items: center; gap: 10px; margin: 2px 4px 12px; }
+    .cola-box-title { font-weight: 700; font-size: 14px; color: var(--text); }
+    .cola-box-count { font-family: var(--mono); font-size: 12px; font-weight: 700; color: #7FA6F0; }
+    .cola-box-bar { flex: 1; height: 5px; background: rgba(110,150,230,0.16); border-radius: 3px; overflow: hidden; max-width: 240px; }
+    .cola-box-bar > i { display: block; height: 100%; background: #7FA6F0; border-radius: 3px; transition: width 0.45s ease; }
+    .cola-spinner { width: 14px; height: 14px; border: 2px solid rgba(110,150,230,0.30); border-top-color: #7FA6F0; border-radius: 50%; animation: cola-spin 0.8s linear infinite; flex-shrink: 0; }
+    @keyframes cola-spin { to { transform: rotate(360deg); } }
+
+    /* Círculo de progreso por ítem (vacío → lleno) */
+    .cola-dot { width: 19px; height: 19px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 2px solid; box-sizing: border-box; }
+    .cola-dot.pendiente { border-color: #7FA6F0; }
+    .cola-dot.pendiente::after { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #7FA6F0; animation: cola-pulse 1.3s ease-in-out infinite; }
+    .cola-dot.procesado { border-color: var(--accent); background: var(--accent); }
+    .cola-dot.procesado svg { width: 11px; height: 11px; color: var(--bg); }
+    .cola-dot.standby { border-color: var(--prio-baja); border-style: dashed; }
+    .cola-dot.standby::after { content: ''; width: 6px; height: 2px; border-radius: 1px; background: var(--prio-baja); }
+    @keyframes cola-pulse { 0%,100% { opacity: 0.3; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1); } }
+
     /* Modo selección (tildar para procesar) */
     .sel-check { width: 22px; height: 22px; border: 2px solid var(--border-strong); border-radius: 50%; display: none; align-items: center; justify-content: center; flex-shrink: 0; background: var(--bg); pointer-events: none; }
     body.select-mode .sel-check { display: flex; }
@@ -295,6 +315,7 @@
     let editingId = null;
     let selectMode = false;
     let selected = new Set();
+    let pollTimer = null;
 
     const AREA_LABELS = { app: 'App (Prospia Admin)', web: 'Web / Plataforma', etiguel: 'Etiguel / Scraper' };
     const AREA_ORDER = ['app', 'web', 'etiguel'];
@@ -370,6 +391,10 @@
       } else { body = `<p>${withCode(content)}</p>`; }
       return `<div class="test-section ${key}"><div class="test-section-title">${SECTION_LABELS[key]}</div><div class="test-section-content">${body}</div></div>`;
     }
+    const CHECK_SVG = '<svg viewBox="0 0 14 14" fill="none"><path d="M2 7L5.5 10.5L12 4" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    function colaDot(estado) {
+      return `<span class="cola-dot ${estado}" title="${COLA_LABELS[estado] || estado}">${estado === 'procesado' ? CHECK_SVG : ''}</span>`;
+    }
     function renderItem(it) {
       const { badge, title } = splitBadge(it.texto);
       const open = !!openIds[it.id];
@@ -387,6 +412,7 @@
             <div class="sel-check">
               <svg viewBox="0 0 14 14" fill="none"><path d="M2 7L5.5 10.5L12 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </div>
+            ${cola ? colaDot(cola) : ''}
             ${badge ? `<span class="test-id">${esc(badge)}</span>` : ''}
             <span class="test-title">${esc(title)}</span>
             ${cola ? `<span class="cola-badge ${cola}">${COLA_LABELS[cola] || cola}</span>` : ''}
@@ -413,13 +439,48 @@
       document.getElementById('progress-text').textContent = `${done} / ${total}`;
       const vis = items.filter(visible);
       let html = '';
+
+      // Recuadro "Procesando": tray global con la cola activa (no se duplica abajo).
+      const enCola = (i) => i.cola_estado && !i.hecho;
+      const queued = items.filter(enCola);
+      if (filter !== 'done' && queued.length) {
+        const ORDER = { pendiente: 0, standby: 1, procesado: 2 };
+        const q = [...queued].sort((a, b) => (ORDER[a.cola_estado] ?? 9) - (ORDER[b.cola_estado] ?? 9) || b.id - a.id);
+        const doneN = q.filter(i => i.cola_estado === 'procesado').length;
+        const pendN = q.filter(i => i.cola_estado === 'pendiente').length;
+        const pct = q.length ? Math.round(doneN / q.length * 100) : 0;
+        html += `<div class="cola-box">
+          <div class="cola-box-head">
+            ${pendN ? '<span class="cola-spinner"></span>' : ''}
+            <span class="cola-box-title">Procesando</span>
+            <span class="cola-box-count">${doneN}/${q.length}</span>
+            <span class="cola-box-bar"><i style="width:${pct}%"></i></span>
+          </div>
+          ${q.map(renderItem).join('')}
+        </div>`;
+      }
+
       for (const area of AREA_ORDER) {
-        const group = vis.filter(i => i.area === area).sort((a, b) => (PRIO_RANK[a.prioridad] ?? 3) - (PRIO_RANK[b.prioridad] ?? 3) || b.id - a.id);
+        const group = vis.filter(i => i.area === area && !enCola(i)).sort((a, b) => (PRIO_RANK[a.prioridad] ?? 3) - (PRIO_RANK[b.prioridad] ?? 3) || b.id - a.id);
         if (!group.length) continue;
         html += `<div class="block"><div class="block-header"><div class="block-title">${esc(AREA_LABELS[area])}</div></div>${group.map(renderItem).join('')}</div>`;
       }
       document.getElementById('blocks').innerHTML = html || '<div class="empty">Nada que mostrar en este filtro</div>';
       updateColaBar();
+      syncPolling();
+    }
+
+    // Mientras haya algo en estado `pendiente` (y no estoy seleccionando), refresca solo
+    // para que los círculos se vayan llenando a medida que Claude marca `procesado`.
+    function syncPolling() {
+      const active = !selectMode && items.some(i => i.cola_estado === 'pendiente' && !i.hecho);
+      if (active && !pollTimer) pollTimer = setInterval(pollTick, 10000);
+      else if (!active && pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    }
+    async function pollTick() {
+      if (document.hidden || selectMode) return;
+      try { const fresh = await api('/admin/pendientes?incluir_hechos=true'); items = fresh; render(); }
+      catch {}
     }
 
     // ---- Actions ----

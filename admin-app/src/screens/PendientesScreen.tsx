@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   KeyboardAvoidingView,
@@ -71,6 +72,17 @@ export default function PendientesScreen(_props: PendientesProps) {
     load();
   }, [load]);
 
+  // Mientras haya algo `pendiente` en la cola (y no estoy seleccionando), refresca solo
+  // cada 10s para que los círculos se vayan llenando a medida que se marcan `procesado`.
+  const hayPendiente = items.some((p) => p.cola_estado === "pendiente" && !p.hecho);
+  useEffect(() => {
+    if (!hayPendiente || selectMode || !token) return;
+    const t = setInterval(() => {
+      getPendientes(token, true).then(setItems).catch(() => {});
+    }, 10000);
+    return () => clearInterval(t);
+  }, [hayPendiente, selectMode, token]);
+
   const setHecho = async (p: Pendiente, hecho: boolean) => {
     if (!token) return;
     setItems((prev) => prev.map((x) => (x.id === p.id ? { ...x, hecho } : x)));
@@ -139,11 +151,51 @@ export default function PendientesScreen(_props: PendientesProps) {
     }
   };
 
+  const renderRow = (item: Pendiente) => (
+    <SwipeRow
+      left={
+        item.hecho
+          ? { icon: "undo", color: colors.amber, onTrigger: () => setHecho(item, false) }
+          : { icon: "check", color: colors.green, onTrigger: () => setHecho(item, true) }
+      }
+      right={{ icon: "x", color: colors.red, onTrigger: () => confirmarBorrar(item) }}
+    >
+      <PendienteCard item={item} onPress={() => abrirEditar(item)} />
+    </SwipeRow>
+  );
+
   if (loading) return <Loader />;
 
-  const visibles = items.filter((p) => (filtro === "pendientes" ? !p.hecho : p.hecho));
+  // En cola activa = encolado y todavía no confirmado como hecho. Va al tray de arriba.
+  const enCola = (p: Pendiente) => !!p.cola_estado && !p.hecho;
+  const COLA_ORDER: Record<NonNullable<ColaEstado>, number> = { pendiente: 0, standby: 1, procesado: 2 };
+  const queued = items
+    .filter(enCola)
+    .sort((a, b) => (COLA_ORDER[a.cola_estado!] ?? 9) - (COLA_ORDER[b.cola_estado!] ?? 9) || b.id - a.id);
+  const colaDone = queued.filter((p) => p.cola_estado === "procesado").length;
+  const colaPend = queued.filter((p) => p.cola_estado === "pendiente").length;
+  const colaPct = queued.length ? Math.round((colaDone / queued.length) * 100) : 0;
+  const mostrarCola = !selectMode && filtro === "pendientes" && queued.length > 0;
+
+  const visibles = items.filter((p) => (filtro === "pendientes" ? !p.hecho : p.hecho) && !enCola(p));
   const nPend = items.filter((p) => !p.hecho).length;
   const nReal = items.length - nPend;
+
+  const colaHeader = mostrarCola ? (
+    <View style={styles.colaBox}>
+      <View style={styles.colaBoxHead}>
+        {colaPend > 0 && <ActivityIndicator size="small" color={colors.blue} />}
+        <Text style={styles.colaBoxTitle}>Procesando</Text>
+        <Text style={styles.colaBoxCount}>{colaDone}/{queued.length}</Text>
+        <View style={styles.colaBoxBar}>
+          <View style={[styles.colaBoxBarFill, { width: `${colaPct}%` }]} />
+        </View>
+      </View>
+      {queued.map((q) => (
+        <View key={q.id}>{renderRow(q)}</View>
+      ))}
+    </View>
+  ) : null;
 
   return (
     <View style={styles.container}>
@@ -176,9 +228,16 @@ export default function PendientesScreen(_props: PendientesProps) {
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
         data={visibles}
         keyExtractor={(p) => String(p.id)}
-        ListHeaderComponent={error ? <ErrorBox message={error} onRetry={load} /> : null}
+        ListHeaderComponent={
+          <>
+            {error ? <ErrorBox message={error} onRetry={load} /> : null}
+            {colaHeader}
+          </>
+        }
         ListEmptyComponent={
-          <Text style={styles.empty}>{filtro === "pendientes" ? "Sin pendientes 🎉" : "Nada realizado todavía."}</Text>
+          mostrarCola ? null : (
+            <Text style={styles.empty}>{filtro === "pendientes" ? "Sin pendientes 🎉" : "Nada realizado todavía."}</Text>
+          )
         }
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />
@@ -194,18 +253,7 @@ export default function PendientesScreen(_props: PendientesProps) {
               />
             );
           }
-          return (
-            <SwipeRow
-              left={
-                filtro === "pendientes"
-                  ? { icon: "check", color: colors.green, onTrigger: () => setHecho(item, true) }
-                  : { icon: "undo", color: colors.amber, onTrigger: () => setHecho(item, false) }
-              }
-              right={{ icon: "x", color: colors.red, onTrigger: () => confirmarBorrar(item) }}
-            >
-              <PendienteCard item={item} onPress={() => abrirEditar(item)} />
-            </SwipeRow>
-          );
+          return renderRow(item);
         }}
       />
 
@@ -266,6 +314,22 @@ function RichSection({ campo, valor }: { campo: keyof PendienteRich; valor: stri
   );
 }
 
+function ColaDot({ estado }: { estado: NonNullable<ColaEstado> }) {
+  if (estado === "procesado") {
+    return (
+      <View style={[styles.colaDot, styles.colaDotDone]}>
+        <Icon name="check" size={11} color={colors.bg} />
+      </View>
+    );
+  }
+  if (estado === "standby") return <View style={[styles.colaDot, styles.colaDotStandby]} />;
+  return (
+    <View style={[styles.colaDot, styles.colaDotPend]}>
+      <View style={styles.colaDotPendInner} />
+    </View>
+  );
+}
+
 function PendienteCard({
   item,
   onPress,
@@ -289,6 +353,7 @@ function PendienteCard({
             {selected && <Icon name="check" size={13} color="#fff" />}
           </View>
         )}
+        {!selectMode && cola && <ColaDot estado={cola} />}
         <View style={styles.cardBody}>
           <Text style={styles.texto}>{item.texto}</Text>
           <View style={styles.badges}>
@@ -476,6 +541,18 @@ const styles = StyleSheet.create({
   procBtn: { backgroundColor: colors.primary, borderRadius: 10, paddingVertical: 11, paddingHorizontal: 22 },
   procBtnOff: { opacity: 0.5 },
   procBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+
+  colaBox: { backgroundColor: "rgba(110,150,230,0.08)", borderWidth: 1, borderColor: "rgba(110,150,230,0.38)", borderRadius: 14, padding: 10, paddingBottom: 2, marginBottom: 16 },
+  colaBoxHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10, paddingHorizontal: 4, paddingTop: 2 },
+  colaBoxTitle: { color: colors.text, fontSize: 14, fontWeight: "700" },
+  colaBoxCount: { color: colors.blue, fontSize: 12, fontWeight: "700" },
+  colaBoxBar: { flex: 1, height: 5, borderRadius: 3, backgroundColor: "rgba(110,150,230,0.16)", overflow: "hidden", marginLeft: 4 },
+  colaBoxBarFill: { height: "100%", borderRadius: 3, backgroundColor: colors.blue },
+  colaDot: { width: 19, height: 19, borderRadius: 10, borderWidth: 2, alignItems: "center", justifyContent: "center", marginTop: 1 },
+  colaDotPend: { borderColor: colors.blue },
+  colaDotPendInner: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.blue },
+  colaDotDone: { borderColor: colors.amber, backgroundColor: colors.amber },
+  colaDotStandby: { borderColor: colors.textDim, borderStyle: "dashed" },
 
   card: { backgroundColor: colors.card, borderRadius: 12, padding: 14, marginBottom: 10 },
   cardSelected: { borderWidth: 1, borderColor: colors.primary },
