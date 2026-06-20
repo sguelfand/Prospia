@@ -1,4 +1,4 @@
-import { Check, Copy, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Check, Copy, Pencil, RotateCcw, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 
@@ -46,7 +46,6 @@ export default function Pendientes() {
   const [filter, setFilter] = useState<'pending' | 'done' | 'all'>('pending')
   const [areaFilter, setAreaFilter] = useState<Area | ''>('')
   const [openIds, setOpenIds] = useState<Record<number, boolean>>({})
-  const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [modal, setModal] = useState<{ editing: Pendiente | null; rejecting: boolean } | null>(null)
   const [toast, setToast] = useState('')
@@ -70,14 +69,14 @@ export default function Pendientes() {
 
   useEffect(() => { load() }, [load])
 
-  // Auto-refresh cada 10s mientras haya algo en 'pendiente' (y no esté seleccionando):
-  // los círculos se llenan solos a medida que Claude marca 'procesado'.
+  // Auto-refresh cada 10s mientras haya algo en 'pendiente': los círculos se
+  // llenan solos a medida que Claude marca 'procesado'.
   const hayPendiente = items.some((i) => i.cola_estado === 'pendiente' && !i.hecho)
   useEffect(() => {
-    if (!hayPendiente || selectMode) return
+    if (!hayPendiente) return
     const t = setInterval(() => { if (!document.hidden) load() }, 10000)
     return () => clearInterval(t)
-  }, [hayPendiente, selectMode, load])
+  }, [hayPendiente, load])
 
   // ── Acciones ──
   const patch = async (id: number, body: Omit<Partial<Pendiente>, 'cola_estado'> & { cola_estado?: ColaEstado | '' }) => {
@@ -85,8 +84,8 @@ export default function Pendientes() {
     setItems((prev) => prev.map((p) => (p.id === id ? upd : p)))
     return upd
   }
-  const toggleDone = (it: Pendiente) => patch(it.id, { hecho: !it.hecho }).catch((e) => showToast(e.message))
-  const confirmHecho = (it: Pendiente) => patch(it.id, { hecho: true }).then(() => showToast('Confirmado como hecho')).catch((e) => showToast(e.message))
+  const marcarRealizado = (it: Pendiente) => patch(it.id, { hecho: true }).then(() => showToast('Marcado como realizado')).catch((e) => showToast(e.message))
+  const reabrir = (it: Pendiente) => patch(it.id, { hecho: false }).catch((e) => showToast(e.message))
   const dequeue = (it: Pendiente) => patch(it.id, { cola_estado: '' }).catch((e) => showToast(e.message))
   const rechazar = (it: Pendiente) => setModal({ editing: it, rejecting: true })
 
@@ -96,6 +95,7 @@ export default function Pendientes() {
     try {
       await api.delete(`/admin/pendientes/${it.id}`)
       setItems((prev) => prev.filter((p) => p.id !== it.id))
+      setSelected((prev) => { const n = new Set(prev); n.delete(it.id); return n })
     } catch (e) { if (e instanceof Error) showToast(e.message) }
   }
 
@@ -106,8 +106,6 @@ export default function Pendientes() {
       return n
     })
 
-  const exitSelect = () => { setSelectMode(false); setSelected(new Set()) }
-
   const processSelected = async () => {
     const ids = [...selected]
     if (!ids.length) return
@@ -115,7 +113,7 @@ export default function Pendientes() {
       const cola = await api.post<Pendiente[]>('/admin/pendientes/cola', { ids })
       const byId = new Map(cola.map((c) => [c.id, c]))
       setItems((prev) => prev.map((p) => byId.get(p.id) ?? p))
-      exitSelect()
+      setSelected(new Set())
       showToast(`${ids.length === 1 ? '1 pendiente enviado' : ids.length + ' pendientes enviados'} a la cola`)
     } catch (e) { if (e instanceof Error) showToast(e.message) }
   }
@@ -164,7 +162,7 @@ export default function Pendientes() {
 
   if (loading) return <p className="text-muted text-sm">Cargando…</p>
 
-  const itemCtx = { openIds, setOpenIds, selectMode, selected, toggleSelect, colaSettled, toggleDone, confirmHecho, rechazar, dequeue, copyItem, del, openEdit: (it: Pendiente) => setModal({ editing: it, rejecting: false }) }
+  const itemCtx: ItemCtx = { openIds, setOpenIds, selected, toggleSelect, colaSettled, marcarRealizado, reabrir, rechazar, dequeue, copyItem, del, openEdit: (it: Pendiente) => setModal({ editing: it, rejecting: false }) }
 
   return (
     <div className="max-w-4xl mx-auto pb-24">
@@ -172,10 +170,10 @@ export default function Pendientes() {
       <div className="flex items-center justify-between gap-3 mb-1">
         <h1 className="text-xl font-semibold text-ink">Pendientes</h1>
         <button onClick={() => setModal({ editing: null, rejecting: false })} className="flex items-center gap-1.5 bg-primary text-on-primary rounded-lg px-3 py-2 text-sm font-medium hover:bg-primary-dark">
-          <Plus size={16} /> Nuevo
+          Nuevo
         </button>
       </div>
-      <p className="text-xs text-muted mb-3">Cosas que decidimos armar y todavía no construimos.</p>
+      <p className="text-xs text-muted mb-3">Tildá a la izquierda para elegir cuáles procesar; usá «Realizado» para darlos por hechos.</p>
 
       {/* Progreso */}
       <div className="flex items-center gap-3 mb-4">
@@ -194,10 +192,6 @@ export default function Pendientes() {
         {([['', 'Todas las áreas'], ['app', 'App'], ['web', 'Web'], ['etiguel', 'Etiguel']] as const).map(([k, l]) => (
           <Chip key={k || 'all'} active={areaFilter === k} onClick={() => setAreaFilter(k as Area | '')}>{l}</Chip>
         ))}
-        <span className="w-px bg-line mx-1.5 my-0.5" />
-        <Chip active={selectMode} onClick={() => (selectMode ? exitSelect() : setSelectMode(true))}>
-          {selectMode ? 'Cancelar' : 'Seleccionar'}
-        </Chip>
       </div>
 
       {/* Recuadro "Procesando" */}
@@ -213,8 +207,8 @@ export default function Pendientes() {
               <span className="block h-full bg-primary transition-all" style={{ width: `${colaPct}%` }} />
             </span>
           </div>
-          {colaAllDone && <p className="text-xs text-muted mt-2">Revisá y confirmá cada uno para pasarlo a Realizados.</p>}
-          {colaWaiting && <p className="text-xs text-muted mt-2">{standbyN === 1 ? '1 espera' : `${standbyN} esperan`} tu info para seguir. Confirmá los que ya están listos.</p>}
+          {colaAllDone && <p className="text-xs text-muted mt-2">Revisá y dale «Realizado» a cada uno para pasarlo a Realizados.</p>}
+          {colaWaiting && <p className="text-xs text-muted mt-2">{standbyN === 1 ? '1 espera' : `${standbyN} esperan`} tu info para seguir. Dale «Realizado» a los que ya están listos.</p>}
           <div className="mt-3 space-y-2">
             {q.map((it) => <ItemCard key={it.id} it={it} ctx={itemCtx} />)}
           </div>
@@ -237,12 +231,12 @@ export default function Pendientes() {
         <p className="text-center text-muted text-sm py-16">Nada que mostrar en este filtro</p>
       )}
 
-      {/* Barra de procesamiento */}
-      {selectMode && selected.size > 0 && (
+      {/* Barra de procesamiento: aparece al tildar uno o más */}
+      {selected.size > 0 && (
         <div className="fixed bottom-0 left-0 right-0 z-30 bg-card border-t border-line px-4 md:px-6 py-3 flex items-center justify-between gap-3">
           <span className="text-sm font-medium text-ink">{selected.size === 1 ? '1 seleccionado' : `${selected.size} seleccionados`}</span>
           <div className="flex gap-2">
-            <button onClick={exitSelect} className="px-4 py-2 rounded-lg border border-line text-sm text-ink">Cancelar</button>
+            <button onClick={() => setSelected(new Set())} className="px-4 py-2 rounded-lg border border-line text-sm text-ink">Cancelar</button>
             <button onClick={processSelected} className="px-5 py-2 rounded-lg bg-primary text-on-primary text-sm font-semibold">Procesar</button>
           </div>
         </div>
@@ -286,12 +280,11 @@ function ColaDot({ estado }: { estado: string }) {
 type ItemCtx = {
   openIds: Record<number, boolean>
   setOpenIds: React.Dispatch<React.SetStateAction<Record<number, boolean>>>
-  selectMode: boolean
   selected: Set<number>
   toggleSelect: (id: number) => void
   colaSettled: boolean
-  toggleDone: (it: Pendiente) => void
-  confirmHecho: (it: Pendiente) => void
+  marcarRealizado: (it: Pendiente) => void
+  reabrir: (it: Pendiente) => void
   rechazar: (it: Pendiente) => void
   dequeue: (it: Pendiente) => void
   copyItem: (it: Pendiente) => void
@@ -307,32 +300,51 @@ function ItemCard({ it, ctx }: { it: Pendiente; ctx: ItemCtx }) {
   const fecha = it.fecha ? new Date(it.fecha).toLocaleDateString('es-AR') : ''
   const sections = SECTION_ORDER.filter((k) => it[k])
 
-  const onHead = () => (ctx.selectMode ? ctx.toggleSelect(it.id) : ctx.setOpenIds((p) => ({ ...p, [it.id]: !p[it.id] })))
+  // El checkbox de la izquierda = seleccionar para procesar. Solo para pendientes
+  // normales sin encolar. Los que están en la cola muestran su círculo de estado.
+  const seleccionable = !it.hecho && !cola
+  // El botón "Realizado" aparece para lo no hecho (salvo lo que se está procesando ahora).
+  const mostrarRealizado = !it.hecho && cola !== 'pendiente'
+  const toggleOpen = () => ctx.setOpenIds((p) => ({ ...p, [it.id]: !p[it.id] }))
 
   return (
     <div className={`rounded-xl border bg-card overflow-hidden transition-colors ${isSel ? 'border-primary ring-1 ring-primary' : 'border-line'} ${it.hecho ? 'opacity-60' : ''}`}>
-      <div className="flex items-center gap-2.5 px-4 py-3 cursor-pointer select-none" onClick={onHead}>
-        {ctx.selectMode ? (
-          <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${isSel ? 'bg-primary border-primary' : 'border-line'}`}>
-            {isSel && <Check size={12} className="text-on-primary" />}
-          </span>
-        ) : (
+      <div className="flex items-center gap-2.5 px-4 py-3">
+        {seleccionable ? (
           <button
-            onClick={(e) => { e.stopPropagation(); ctx.toggleDone(it) }}
-            className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 ${it.hecho ? 'bg-emerald-500 border-emerald-500' : 'border-line hover:border-primary'}`}
+            onClick={() => ctx.toggleSelect(it.id)}
+            title="Seleccionar para procesar"
+            className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-colors ${isSel ? 'bg-primary border-primary' : 'border-line hover:border-primary'}`}
           >
-            {it.hecho && <Check size={12} className="text-white" />}
+            {isSel && <Check size={12} className="text-on-primary" />}
+          </button>
+        ) : cola ? (
+          <ColaDot estado={cola} />
+        ) : (
+          <span className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 bg-emerald-500"><Check size={12} className="text-white" /></span>
+        )}
+
+        <div className="flex-1 flex items-center gap-2 cursor-pointer min-w-0" onClick={toggleOpen}>
+          {badge && <span className="font-mono text-[11px] bg-primary-soft text-accent px-1.5 py-0.5 rounded shrink-0">{badge}</span>}
+          <span className={`flex-1 text-sm text-ink truncate ${it.hecho ? 'line-through' : ''}`}>{title}</span>
+        </div>
+
+        {cola && <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded shrink-0" style={{ color: COLA_COLOR[cola], background: COLA_COLOR[cola] + '22' }}>{COLA_LABELS[cola] ?? cola}</span>}
+        {mostrarRealizado && (
+          <button
+            onClick={() => ctx.marcarRealizado(it)}
+            className="flex items-center gap-1 text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-md px-2.5 py-1 shrink-0"
+          >
+            <Check size={13} /> Realizado
           </button>
         )}
-        {cola && <ColaDot estado={cola} />}
-        {badge && <span className="font-mono text-[11px] bg-primary-soft text-accent px-1.5 py-0.5 rounded shrink-0">{badge}</span>}
-        <span className={`flex-1 text-sm text-ink ${it.hecho ? 'line-through' : ''}`}>{title}</span>
-        {cola && <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded shrink-0" style={{ color: COLA_COLOR[cola], background: COLA_COLOR[cola] + '22' }}>{COLA_LABELS[cola] ?? cola}</span>}
-        {cola === 'procesado' && ctx.colaSettled && !it.hecho && (
-          <button onClick={(e) => { e.stopPropagation(); ctx.confirmHecho(it) }} className="text-[11px] font-bold text-emerald-500 border border-emerald-500/50 rounded px-2 py-0.5 shrink-0">✓ Confirmar</button>
+        {it.hecho && (
+          <button onClick={() => ctx.reabrir(it)} title="Reabrir" className="flex items-center gap-1 text-[11px] font-semibold text-muted border border-line rounded-md px-2 py-1 shrink-0 hover:text-ink">
+            <RotateCcw size={12} /> Reabrir
+          </button>
         )}
-        <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded shrink-0" style={{ color: PRIO_COLOR[it.prioridad], background: PRIO_COLOR[it.prioridad] + '22' }}>{PRIO_LABELS[it.prioridad]}</span>
-        <span className={`text-muted text-[11px] transition-transform ${open ? 'rotate-180' : ''}`}>▼</span>
+        <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded shrink-0 hidden sm:inline" style={{ color: PRIO_COLOR[it.prioridad], background: PRIO_COLOR[it.prioridad] + '22' }}>{PRIO_LABELS[it.prioridad]}</span>
+        <button onClick={toggleOpen} className={`text-muted text-[11px] transition-transform shrink-0 ${open ? 'rotate-180' : ''}`}>▼</button>
       </div>
       {open && (
         <div className="px-4 pb-4 pt-3 border-t border-line">
@@ -351,9 +363,6 @@ function ItemCard({ it, ctx }: { it: Pendiente; ctx: ItemCtx }) {
             </div>
           )) : <p className="text-xs text-muted">Sin detalle. Tocá «Editar» para agregar contexto.</p>}
           <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-dashed border-line">
-            {cola === 'procesado' && ctx.colaSettled && !it.hecho && (
-              <ActBtn onClick={() => ctx.confirmHecho(it)} className="border-emerald-500/50 text-emerald-500"><Check size={12} /> Confirmar hecho</ActBtn>
-            )}
             {cola === 'procesado' && ctx.colaSettled && !it.hecho && (
               <ActBtn onClick={() => ctx.rechazar(it)} className="border-red-500/50 text-red-500"><X size={12} /> Rechazar</ActBtn>
             )}
