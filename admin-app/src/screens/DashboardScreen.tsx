@@ -43,6 +43,10 @@ export default function DashboardScreen({ navigation }: DashboardProps) {
   // Para tasas comparo solo clientes con datos reales (Etiguel viene en 0).
   const conTasa = clientes.filter((c) => c.contactados > 0);
 
+  // Toda barra de stats por-cliente navega al detalle de ese cliente.
+  const irACliente = (c: DashboardComparativa["clientes"][number]) =>
+    navigation.navigate("ClienteView", { tenantId: c.tenant_id, nombre: c.nombre, fuente: c.fuente });
+
   return (
     <ScrollView
       style={styles.container}
@@ -65,20 +69,20 @@ export default function DashboardScreen({ navigation }: DashboardProps) {
 
       <Section title="Prospects por cliente">
         {clientes.map((c) => (
-          <Bar key={`p-${c.fuente}-${c.tenant_id}`} label={c.nombre} value={c.total_prospects} max={maxProspects} color={colors.blue} />
+          <Bar key={`p-${c.fuente}-${c.tenant_id}`} label={c.nombre} value={c.total_prospects} max={maxProspects} color={colors.blue} onPress={() => irACliente(c)} />
         ))}
       </Section>
 
       <Section title="Interesados por cliente">
         {clientes.map((c) => (
-          <Bar key={`i-${c.fuente}-${c.tenant_id}`} label={c.nombre} value={c.interesados} max={maxInteresados} color={colors.green} />
+          <Bar key={`i-${c.fuente}-${c.tenant_id}`} label={c.nombre} value={c.interesados} max={maxInteresados} color={colors.green} onPress={() => irACliente(c)} />
         ))}
       </Section>
 
       {conTasa.length > 0 ? (
         <Section title="Tasa de respuesta por cliente">
           {conTasa.map((c) => (
-            <Bar key={`tr-${c.tenant_id}`} label={c.nombre} value={c.tasa_respuesta} max={100} color={colors.primary} right={`${c.tasa_respuesta}%`} />
+            <Bar key={`tr-${c.tenant_id}`} label={c.nombre} value={c.tasa_respuesta} max={100} color={colors.primary} right={`${c.tasa_respuesta}%`} onPress={() => irACliente(c)} />
           ))}
         </Section>
       ) : null}
@@ -86,7 +90,7 @@ export default function DashboardScreen({ navigation }: DashboardProps) {
       {conTasa.length > 0 ? (
         <Section title="Tasa de conversión por cliente">
           {conTasa.map((c) => (
-            <Bar key={`tc-${c.tenant_id}`} label={c.nombre} value={c.tasa_conversion} max={100} color={colors.amber} right={`${c.tasa_conversion}%`} />
+            <Bar key={`tc-${c.tenant_id}`} label={c.nombre} value={c.tasa_conversion} max={100} color={colors.amber} right={`${c.tasa_conversion}%`} onPress={() => irACliente(c)} />
           ))}
         </Section>
       ) : null}

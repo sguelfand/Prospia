@@ -93,7 +93,7 @@ export default function ProspectDetailScreen({ route, navigation }: ProspectDeta
 
       {/* ── Historial de estados ─────────────────────────────────── */}
       {historial.length > 0 ? (
-        <CollapsibleSection title="Historial de estados" count={historial.length}>
+        <CollapsibleSection title="Historial de estados" count={historial.length} defaultExpanded={false}>
           {historial.map((h) => (
             <View key={h.id} style={styles.histRow}>
               <Text style={styles.histTipo}>{estadoLabel[h.tipo] ?? h.tipo}</Text>

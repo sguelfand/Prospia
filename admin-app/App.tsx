@@ -61,6 +61,9 @@ const screenOptions = {
 function AppDrawer() {
   return (
     <Drawer.Navigator
+      // "history": el botón atrás vuelve a la última pantalla visitada
+      // (ProspectDetail → ClienteView → Dashboard), no siempre al Dashboard.
+      backBehavior="history"
       screenOptions={screenOptions}
       drawerContent={(props) => <DrawerContent {...props} />}
     >
