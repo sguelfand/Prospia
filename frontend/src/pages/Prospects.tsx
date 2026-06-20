@@ -608,11 +608,13 @@ function ConversacionPanel({ prospect, onClose }: { prospect: Prospect; onClose:
                 <div className={`flex ${out ? 'justify-end' : 'justify-start'}`}>
                   <div
                     className={`max-w-[78%] rounded-lg px-2.5 py-1.5 shadow-sm text-sm whitespace-pre-wrap break-words ${
-                      out ? 'bg-[#d9fdd3]' : 'bg-card'
+                      out
+                        ? 'bg-[#d9fdd3] text-[#0C1730] dark:bg-[#005c4b] dark:text-white'
+                        : 'bg-card text-ink'
                     }`}
                   >
-                    <span className="text-ink">{m.texto}</span>
-                    <span className="text-[10px] text-muted ml-2 float-right mt-1.5">{horaMsg(m.fecha)}</span>
+                    <span>{m.texto}</span>
+                    <span className={`text-[10px] ml-2 float-right mt-1.5 ${out ? 'opacity-60' : 'text-muted'}`}>{horaMsg(m.fecha)}</span>
                   </div>
                 </div>
               </React.Fragment>
