@@ -87,6 +87,8 @@ export default function Pendientes() {
   const marcarRealizado = (it: Pendiente) => patch(it.id, { hecho: true }).then(() => showToast('Marcado como realizado')).catch((e) => showToast(e.message))
   const reabrir = (it: Pendiente) => patch(it.id, { hecho: false }).catch((e) => showToast(e.message))
   const dequeue = (it: Pendiente) => patch(it.id, { cola_estado: '' }).catch((e) => showToast(e.message))
+  // Reactivar un standby: vuelve a 'pendiente' al instante (ya pasaste la info).
+  const reactivar = (it: Pendiente) => patch(it.id, { cola_estado: 'pendiente' }).then(() => showToast('Volvió a la cola')).catch((e) => showToast(e.message))
   const rechazar = (it: Pendiente) => setModal({ editing: it, rejecting: true })
 
   const del = async (it: Pendiente) => {
@@ -162,7 +164,7 @@ export default function Pendientes() {
 
   if (loading) return <p className="text-muted text-sm">Cargando…</p>
 
-  const itemCtx: ItemCtx = { openIds, setOpenIds, selected, toggleSelect, colaSettled, marcarRealizado, reabrir, rechazar, dequeue, copyItem, del, openEdit: (it: Pendiente) => setModal({ editing: it, rejecting: false }) }
+  const itemCtx: ItemCtx = { openIds, setOpenIds, selected, toggleSelect, colaSettled, marcarRealizado, reabrir, rechazar, reactivar, dequeue, copyItem, del, openEdit: (it: Pendiente) => setModal({ editing: it, rejecting: false }) }
 
   return (
     <div className="max-w-4xl mx-auto pb-24">
@@ -286,6 +288,7 @@ type ItemCtx = {
   marcarRealizado: (it: Pendiente) => void
   reabrir: (it: Pendiente) => void
   rechazar: (it: Pendiente) => void
+  reactivar: (it: Pendiente) => void
   dequeue: (it: Pendiente) => void
   copyItem: (it: Pendiente) => void
   del: (it: Pendiente) => void
@@ -325,11 +328,22 @@ function ItemCard({ it, ctx }: { it: Pendiente; ctx: ItemCtx }) {
         )}
 
         <div className="flex-1 flex items-center gap-2 cursor-pointer min-w-0" onClick={toggleOpen}>
+          <span className="font-mono text-[11px] font-bold text-muted tabular-nums shrink-0">#{it.id}</span>
           {badge && <span className="font-mono text-[11px] bg-primary-soft text-accent px-1.5 py-0.5 rounded shrink-0">{badge}</span>}
           <span className={`flex-1 text-sm text-ink truncate ${it.hecho ? 'line-through' : ''}`}>{title}</span>
         </div>
 
         {cola && <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded shrink-0" style={{ color: COLA_COLOR[cola], background: COLA_COLOR[cola] + '22' }}>{COLA_LABELS[cola] ?? cola}</span>}
+        {cola === 'standby' && (
+          <button
+            onClick={() => ctx.reactivar(it)}
+            title="Ya te pasé la info — volver a la cola"
+            className="flex items-center gap-1 text-[11px] font-bold text-white rounded-md px-2.5 py-1 shrink-0"
+            style={{ background: COLA_COLOR.pendiente }}
+          >
+            <RotateCcw size={13} /> Volver a la cola
+          </button>
+        )}
         {mostrarRealizado && (
           <button
             onClick={() => ctx.marcarRealizado(it)}
