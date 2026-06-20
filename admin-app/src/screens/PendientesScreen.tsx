@@ -35,10 +35,11 @@ const COLA_LABEL: Record<NonNullable<ColaEstado>, string> = {
   procesado: "Realizado · sin confirmar",
   standby: "En espera · falta info",
 };
+const YELLOW = "#EBC944"; // standby = en espera de info (amarillo)
 const colaColor: Record<NonNullable<ColaEstado>, string> = {
   pendiente: colors.blue,
   procesado: colors.amber,
-  standby: colors.textDim,
+  standby: YELLOW,
 };
 
 export default function PendientesScreen(_props: PendientesProps) {
@@ -168,14 +169,18 @@ export default function PendientesScreen(_props: PendientesProps) {
 
   // En cola activa = encolado y todavía no confirmado como hecho. Va al tray de arriba.
   const enCola = (p: Pendiente) => !!p.cola_estado && !p.hecho;
-  const COLA_ORDER: Record<NonNullable<ColaEstado>, number> = { pendiente: 0, standby: 1, procesado: 2 };
+  // Orden: procesando arriba → terminados → en espera (standby) al fondo.
+  const COLA_ORDER: Record<NonNullable<ColaEstado>, number> = { pendiente: 0, procesado: 1, standby: 2 };
   const queued = items
     .filter(enCola)
     .sort((a, b) => (COLA_ORDER[a.cola_estado!] ?? 9) - (COLA_ORDER[b.cola_estado!] ?? 9) || b.id - a.id);
   const colaDone = queued.filter((p) => p.cola_estado === "procesado").length;
   const colaPend = queued.filter((p) => p.cola_estado === "pendiente").length;
+  const colaStandby = queued.filter((p) => p.cola_estado === "standby").length;
   const colaPct = queued.length ? Math.round((colaDone / queued.length) * 100) : 0;
-  const colaAllDone = queued.length > 0 && queued.every((p) => p.cola_estado === "procesado");
+  const colaSettled = queued.length > 0 && colaPend === 0; // ya no queda nada procesándose
+  const colaAllDone = colaSettled && colaStandby === 0;     // todo terminado → verde
+  const colaWaiting = colaSettled && colaStandby > 0;       // terminé lo que pude, faltan datos tuyos
   const mostrarCola = !selectMode && filtro === "pendientes" && queued.length > 0;
 
   const visibles = items.filter((p) => (filtro === "pendientes" ? !p.hecho : p.hecho) && !enCola(p));
@@ -183,32 +188,43 @@ export default function PendientesScreen(_props: PendientesProps) {
   const nReal = items.length - nPend;
 
   const colaHeader = mostrarCola ? (
-    <View style={[styles.colaBox, colaAllDone && styles.colaBoxDone]}>
+    <View style={[styles.colaBox, colaAllDone && styles.colaBoxDone, colaWaiting && styles.colaBoxWaiting]}>
       <View style={styles.colaBoxHead}>
         {colaAllDone ? (
           <View style={styles.colaCheckHead}>
             <Icon name="check" size={11} color={colors.bg} />
           </View>
+        ) : colaWaiting ? (
+          <View style={styles.colaWaitHead}>
+            <Icon name="clock" size={11} color={colors.bg} />
+          </View>
         ) : colaPend > 0 ? (
           <ActivityIndicator size="small" color={colors.blue} />
         ) : null}
         <Text style={styles.colaBoxTitle}>
-          {colaAllDone ? (queued.length === 1 ? "Listo, terminé 1" : `Listo, terminé los ${queued.length}`) : "Procesando"}
+          {colaAllDone
+            ? queued.length === 1 ? "Listo, terminé 1" : `Listo, terminé los ${queued.length}`
+            : colaWaiting ? "Terminé los que pude" : "Procesando"}
         </Text>
-        <Text style={[styles.colaBoxCount, colaAllDone && styles.colaBoxCountDone]}>{colaDone}/{queued.length}</Text>
-        <View style={[styles.colaBoxBar, colaAllDone && styles.colaBoxBarDone]}>
-          <View style={[styles.colaBoxBarFill, colaAllDone && styles.colaBoxBarFillDone, { width: `${colaPct}%` }]} />
+        <Text style={[styles.colaBoxCount, colaAllDone && styles.colaBoxCountDone, colaWaiting && styles.colaBoxCountWaiting]}>{colaDone}/{queued.length}</Text>
+        <View style={[styles.colaBoxBar, colaAllDone && styles.colaBoxBarDone, colaWaiting && styles.colaBoxBarWaiting]}>
+          <View style={[styles.colaBoxBarFill, colaAllDone && styles.colaBoxBarFillDone, colaWaiting && styles.colaBoxBarFillWaiting, { width: `${colaPct}%` }]} />
         </View>
       </View>
       {colaAllDone && <Text style={styles.colaBoxHint}>Revisá y confirmá cada uno para pasarlo a Realizados.</Text>}
+      {colaWaiting && (
+        <Text style={styles.colaBoxHint}>
+          {colaStandby === 1 ? "1 espera" : `${colaStandby} esperan`} tu info para seguir. Confirmá los que ya están listos.
+        </Text>
+      )}
       {queued.map((q) => (
         <View key={q.id}>
-          {colaAllDone ? (
+          {colaSettled ? (
             <PendienteCard item={q} onPress={() => abrirEditar(q)} />
           ) : (
             renderRow(q)
           )}
-          {colaAllDone && (
+          {colaSettled && q.cola_estado === "procesado" && (
             <TouchableOpacity style={styles.colaConfirmBtn} onPress={() => setHecho(q, true)} activeOpacity={0.8}>
               <Icon name="check" size={15} color={colors.green} />
               <Text style={styles.colaConfirmText}>Confirmar realizado</Text>
@@ -344,7 +360,13 @@ function ColaDot({ estado }: { estado: NonNullable<ColaEstado> }) {
       </View>
     );
   }
-  if (estado === "standby") return <View style={[styles.colaDot, styles.colaDotStandby]} />;
+  if (estado === "standby") {
+    return (
+      <View style={[styles.colaDot, styles.colaDotStandby]}>
+        <View style={styles.colaDotStandbyInner} />
+      </View>
+    );
+  }
   // pendiente = spinner girando (procesándose), no un círculo vacío
   return <ActivityIndicator size="small" color={colors.blue} style={styles.colaDotSpin} />;
 }
@@ -572,13 +594,19 @@ const styles = StyleSheet.create({
   colaBoxCountDone: { color: colors.green },
   colaBoxBarDone: { backgroundColor: "rgba(34,197,94,0.18)" },
   colaBoxBarFillDone: { backgroundColor: colors.green },
+  colaBoxWaiting: { backgroundColor: "rgba(235,201,68,0.12)", borderColor: "rgba(235,201,68,0.5)" },
+  colaWaitHead: { width: 18, height: 18, borderRadius: 9, backgroundColor: YELLOW, alignItems: "center", justifyContent: "center" },
+  colaBoxCountWaiting: { color: YELLOW },
+  colaBoxBarWaiting: { backgroundColor: "rgba(235,201,68,0.18)" },
+  colaBoxBarFillWaiting: { backgroundColor: YELLOW },
   colaBoxHint: { color: colors.textDim, fontSize: 12, marginTop: -4, marginBottom: 10, paddingHorizontal: 4 },
   colaConfirmBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderWidth: 1, borderColor: colors.green, borderRadius: 9, paddingVertical: 9, marginTop: -2, marginBottom: 10 },
   colaConfirmText: { color: colors.green, fontSize: 13, fontWeight: "700" },
   colaDot: { width: 19, height: 19, borderRadius: 10, borderWidth: 2, alignItems: "center", justifyContent: "center", marginTop: 1 },
   colaDotSpin: { width: 19, height: 19, marginTop: 1 },
   colaDotDone: { borderColor: colors.amber, backgroundColor: colors.amber },
-  colaDotStandby: { borderColor: colors.textDim, borderStyle: "dashed" },
+  colaDotStandby: { borderColor: YELLOW, backgroundColor: "transparent" },
+  colaDotStandbyInner: { width: 6, height: 6, borderRadius: 3, backgroundColor: YELLOW },
 
   card: { backgroundColor: colors.card, borderRadius: 12, padding: 14, marginBottom: 10 },
   cardSelected: { borderWidth: 1, borderColor: colors.primary },

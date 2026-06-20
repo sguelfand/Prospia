@@ -123,7 +123,7 @@
     .cola-badge { font-family: var(--mono); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 3px 7px; border-radius: 5px; flex-shrink: 0; }
     .cola-badge.pendiente { background: rgba(110,150,230,0.18); color: #7FA6F0; }
     .cola-badge.procesado { background: var(--prio-media-soft); color: var(--accent); }
-    .cola-badge.standby { background: var(--prio-baja-soft); color: var(--prio-baja); }
+    .cola-badge.standby { background: rgba(235,201,68,0.16); color: #EBC944; }
     .item-actions button.confirm:hover { border-color: var(--green); color: var(--green); }
 
     /* Recuadro "Procesando" (tray arriba de todo) */
@@ -138,6 +138,12 @@
     .cola-box.done .cola-box-count { color: var(--green); }
     .cola-box.done .cola-box-bar { background: rgba(70,177,123,0.18); }
     .cola-box.done .cola-box-bar > i { background: var(--green); }
+    /* Cola en espera: terminé lo que pude, faltan datos tuyos → recuadro amarillo */
+    .cola-box.waiting { background: linear-gradient(180deg, rgba(235,201,68,0.12), rgba(235,201,68,0.03)); border-color: rgba(235,201,68,0.5); }
+    .cola-box.waiting .cola-box-count { color: #EBC944; }
+    .cola-box.waiting .cola-box-bar { background: rgba(235,201,68,0.18); }
+    .cola-box.waiting .cola-box-bar > i { background: #EBC944; }
+    .cola-wait-head { width: 18px; height: 18px; border-radius: 50%; background: #EBC944; color: var(--bg); font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
     .cola-check-head { width: 18px; height: 18px; border-radius: 50%; background: var(--green); color: var(--bg); font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
     .cola-box-hint { font-size: 12px; color: var(--text-muted); margin: -6px 4px 12px; }
     .cola-confirm-head { background: var(--green-soft); border: 1px solid var(--green); color: var(--green); font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 6px; cursor: pointer; flex-shrink: 0; }
@@ -151,8 +157,8 @@
     .cola-dot.pendiente { border-color: rgba(110,150,230,0.28); border-top-color: #7FA6F0; animation: cola-spin 0.8s linear infinite; }
     .cola-dot.procesado { border-color: var(--accent); background: var(--accent); }
     .cola-dot.procesado svg { width: 11px; height: 11px; color: var(--bg); }
-    .cola-dot.standby { border-color: var(--prio-baja); border-style: dashed; }
-    .cola-dot.standby::after { content: ''; width: 6px; height: 2px; border-radius: 1px; background: var(--prio-baja); }
+    .cola-dot.standby { border-color: #EBC944; border-style: dashed; }
+    .cola-dot.standby::after { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #EBC944; }
     @keyframes cola-pulse { 0%,100% { opacity: 0.3; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1); } }
 
     /* Modo selección (tildar para procesar) */
@@ -325,7 +331,8 @@
     let selectMode = false;
     let selected = new Set();
     let pollTimer = null;
-    let colaAllDone = false; // true cuando todos los de la cola están `procesado`
+    let colaAllDone = false; // true cuando todos los de la cola están `procesado` (sin standby)
+    let colaSettled = false; // true cuando no queda nada `pendiente` (terminé lo que podía)
 
     const AREA_LABELS = { app: 'App (Prospia Admin)', web: 'Web / Plataforma', etiguel: 'Etiguel / Scraper' };
     const AREA_ORDER = ['app', 'web', 'etiguel'];
@@ -426,14 +433,14 @@
             ${badge ? `<span class="test-id">${esc(badge)}</span>` : ''}
             <span class="test-title">${esc(title)}</span>
             ${cola ? `<span class="cola-badge ${cola}">${COLA_LABELS[cola] || cola}</span>` : ''}
-            ${cola === 'procesado' && colaAllDone && !it.hecho ? `<button class="cola-confirm-head" onclick="confirmHecho(${it.id}, event)">✓ Confirmar</button>` : ''}
+            ${cola === 'procesado' && colaSettled && !it.hecho ? `<button class="cola-confirm-head" onclick="confirmHecho(${it.id}, event)">✓ Confirmar</button>` : ''}
             <span class="prio ${prio}">${PRIO_LABELS[prio] || prio}</span>
             <span class="test-toggle">▼</span>
           </div>
           <div class="test-body"><div class="test-body-inner">
             ${sections || '<div class="test-section-content" style="color:var(--text-muted);font-size:13px">Sin detalle. Tocá «Editar» para agregar contexto.</div>'}
             <div class="item-actions">
-              ${cola === 'procesado' && colaAllDone && !it.hecho ? `<button class="confirm" onclick="confirmHecho(${it.id}, event)">Confirmar hecho</button>` : ''}
+              ${cola === 'procesado' && colaSettled && !it.hecho ? `<button class="confirm" onclick="confirmHecho(${it.id}, event)">Confirmar hecho</button>` : ''}
               ${cola ? `<button onclick="dequeue(${it.id}, event)">Sacar de cola</button>` : ''}
               <button onclick="copyItem(${it.id}, event)">Copiar</button>
               <button onclick="openEdit(${it.id}, event)">Editar</button>
@@ -455,26 +462,39 @@
       const enCola = (i) => i.cola_estado && !i.hecho;
       const queued = items.filter(enCola);
       if (filter !== 'done' && queued.length) {
-        const ORDER = { pendiente: 0, standby: 1, procesado: 2 };
+        // Orden: procesando arriba → terminados → en espera (standby) al fondo.
+        const ORDER = { pendiente: 0, procesado: 1, standby: 2 };
         const q = [...queued].sort((a, b) => (ORDER[a.cola_estado] ?? 9) - (ORDER[b.cola_estado] ?? 9) || b.id - a.id);
         const doneN = q.filter(i => i.cola_estado === 'procesado').length;
         const pendN = q.filter(i => i.cola_estado === 'pendiente').length;
+        const standbyN = q.filter(i => i.cola_estado === 'standby').length;
         const pct = q.length ? Math.round(doneN / q.length * 100) : 0;
-        colaAllDone = q.every(i => i.cola_estado === 'procesado');
+        colaSettled = pendN === 0;                 // ya no hay nada procesándose de mi lado
+        colaAllDone = colaSettled && standbyN === 0; // todo terminado → verde
+        const waiting = colaSettled && standbyN > 0; // terminé lo que pude, faltan datos tuyos
         const titulo = colaAllDone
           ? (q.length === 1 ? 'Listo, terminé 1' : `Listo, terminé los ${q.length}`)
-          : 'Procesando';
-        html += `<div class="cola-box ${colaAllDone ? 'done' : ''}">
+          : waiting
+            ? 'Terminé los que pude'
+            : 'Procesando';
+        const icono = colaAllDone ? '<span class="cola-check-head">✓</span>'
+          : waiting ? '<span class="cola-wait-head">⏸</span>'
+          : (pendN ? '<span class="cola-spinner"></span>' : '');
+        const hint = colaAllDone ? 'Revisá y confirmá cada uno para pasarlo a Realizados.'
+          : waiting ? `${standbyN === 1 ? '1 espera' : standbyN + ' esperan'} tu info para seguir. Confirmá los que ya están listos.`
+          : '';
+        html += `<div class="cola-box ${colaAllDone ? 'done' : waiting ? 'waiting' : ''}">
           <div class="cola-box-head">
-            ${colaAllDone ? '<span class="cola-check-head">✓</span>' : (pendN ? '<span class="cola-spinner"></span>' : '')}
+            ${icono}
             <span class="cola-box-title">${titulo}</span>
             <span class="cola-box-count">${doneN}/${q.length}</span>
             <span class="cola-box-bar"><i style="width:${pct}%"></i></span>
           </div>
-          ${colaAllDone ? '<p class="cola-box-hint">Revisá y confirmá cada uno para pasarlo a Realizados.</p>' : ''}
+          ${hint ? `<p class="cola-box-hint">${hint}</p>` : ''}
           ${q.map(renderItem).join('')}
         </div>`;
       } else {
+        colaSettled = false;
         colaAllDone = false;
       }
 
