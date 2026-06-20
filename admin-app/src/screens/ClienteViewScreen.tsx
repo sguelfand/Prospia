@@ -332,23 +332,65 @@ function contarFiltros(f: ProspectsFiltro): number {
 }
 
 // ── Card de prospect ─────────────────────────────────────────────────────────
+// Misma estética que la tarjeta de la web (mobile): nombre + URL, clasificación,
+// meta (estado · contactos · fecha) y un "Ver más" con el detalle.
+function fechaCorta(iso: string | null): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
+}
+
 function ProspectCard({ prospect, onPress }: { prospect: ProspectRow; onPress: () => void }) {
+  const [expanded, setExpanded] = useState(false);
   const color = estadoColor[prospect.estado] ?? colors.textDim;
+  const url = prospect.url ? prospect.url.replace(/^https?:\/\//, "") : null;
+  const detalle: { label: string; value: string }[] = [];
+  if (prospect.email) detalle.push({ label: "Email", value: prospect.email });
+  if (prospect.whatsapp) detalle.push({ label: "WhatsApp", value: prospect.whatsapp });
+  if (prospect.termino_texto) detalle.push({ label: "Término", value: prospect.termino_texto });
+  if (prospect.rubro_nombre) detalle.push({ label: "Rubro", value: prospect.rubro_nombre });
+  if (prospect.clasificacion_detalle) detalle.push({ label: "Detalle IA", value: prospect.clasificacion_detalle });
+
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress}>
-      <View style={styles.cardRow}>
-        <Text style={styles.cardTitle} numberOfLines={1}>{prospect.nombre}</Text>
-        <Text style={[styles.estadoBadge, { color, borderColor: color }]}>
-          {estadoLabel[prospect.estado] ?? prospect.estado}
-        </Text>
-      </View>
-      <View style={styles.cardMeta}>
-        {prospect.termino_texto ? <IconText name="search" text={prospect.termino_texto} /> : null}
-        {prospect.clasificacion ? <IconText name="star" text={prospect.clasificacion} /> : null}
-        <IconText name="send" text={String(prospect.cant_contactos)} />
-        {prospect.cant_mensajes > 0 ? <IconText name="message" text={String(prospect.cant_mensajes)} /> : null}
-      </View>
-    </TouchableOpacity>
+    <View style={styles.card}>
+      <TouchableOpacity style={styles.cardBody} onPress={onPress} activeOpacity={0.7}>
+        <View style={styles.cardRow}>
+          <View style={{ flex: 1, marginRight: 8 }}>
+            <Text style={styles.cardTitle} numberOfLines={1}>{prospect.nombre}</Text>
+            {url ? <Text style={styles.cardUrl} numberOfLines={1}>{url}</Text> : null}
+          </View>
+          {prospect.clasificacion ? (
+            <Text style={styles.clasifChip}>{prospect.clasificacion}</Text>
+          ) : null}
+        </View>
+        <View style={styles.cardMeta}>
+          <View style={styles.metaItem}>
+            <View style={[styles.estadoDot, { backgroundColor: color }]} />
+            <Text style={styles.metaText}>{estadoLabel[prospect.estado] ?? prospect.estado}</Text>
+          </View>
+          {prospect.cant_contactos > 0 ? (
+            <IconText name="message" text={`${prospect.cant_contactos} ${prospect.cant_contactos === 1 ? "contacto" : "contactos"}`} />
+          ) : null}
+          {prospect.ult_contacto ? <IconText name="clock" text={fechaCorta(prospect.ult_contacto)} /> : null}
+        </View>
+      </TouchableOpacity>
+
+      {expanded && detalle.length > 0 ? (
+        <View style={styles.cardDetalle}>
+          {detalle.map((d) => (
+            <View key={d.label} style={styles.detalleRow}>
+              <Text style={styles.detalleLabel}>{d.label}</Text>
+              <Text style={styles.detalleValue}>{d.value}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {detalle.length > 0 ? (
+        <TouchableOpacity style={styles.verMas} onPress={() => setExpanded((v) => !v)} activeOpacity={0.7}>
+          <Text style={styles.verMasText}>{expanded ? "▴ Ver menos" : "▾ Ver más"}</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
   );
 }
 
@@ -540,12 +582,22 @@ const styles = StyleSheet.create({
   filtrarBtnActive: { borderColor: colors.primary, backgroundColor: colors.cardAlt },
   filtrarText: { color: colors.text, fontSize: 13, fontWeight: "600" },
 
-  card: { backgroundColor: colors.card, borderRadius: 12, padding: 14, marginBottom: 10 },
+  card: { backgroundColor: colors.card, borderRadius: 12, marginBottom: 10, overflow: "hidden" },
+  cardBody: { padding: 14 },
   cardRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  cardTitle: { color: colors.text, fontSize: 15, fontWeight: "700", flex: 1, marginRight: 8 },
-  estadoBadge: { fontSize: 11, fontWeight: "700", borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, overflow: "hidden" },
-  cardMeta: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 8 },
-  metaItem: { color: colors.textDim, fontSize: 12 },
+  cardTitle: { color: colors.text, fontSize: 15, fontWeight: "700" },
+  cardUrl: { color: colors.blue, fontSize: 12, marginTop: 2 },
+  clasifChip: { color: colors.textDim, fontSize: 11, fontWeight: "700", borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, overflow: "hidden", textTransform: "capitalize" },
+  cardMeta: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 12, marginTop: 8 },
+  metaItem: { flexDirection: "row", alignItems: "center" },
+  estadoDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
+  metaText: { color: colors.textDim, fontSize: 12 },
+  cardDetalle: { paddingHorizontal: 14, paddingBottom: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border },
+  detalleRow: { flexDirection: "row", marginBottom: 6 },
+  detalleLabel: { color: colors.textDim, fontSize: 12, width: 80, flexShrink: 0 },
+  detalleValue: { color: colors.text, fontSize: 12, flex: 1 },
+  verMas: { borderTopWidth: 1, borderTopColor: colors.border, paddingVertical: 8, alignItems: "center" },
+  verMasText: { color: colors.textDim, fontSize: 12, fontWeight: "600" },
 
   leadEstado: { color: colors.primary, fontSize: 11, fontWeight: "700", borderColor: colors.primary, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, overflow: "hidden" },
 

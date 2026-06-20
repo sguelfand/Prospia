@@ -315,6 +315,7 @@ def get_cliente_config(tenant_id: int, db: Session = Depends(get_db)):
         sitio_web=cfg.sitio_web,
         deriva_nombre=cfg.deriva_nombre,
         deriva_whatsapp=cfg.deriva_whatsapp,
+        bot_numero_whatsapp=cfg.bot_numero_whatsapp,
         envio_auto_habilitado=cfg.envio_auto_habilitado,
         envio_tope_diario=cfg.envio_tope_diario,
         envio_delay_seg=cfg.envio_delay_seg,
@@ -359,6 +360,7 @@ def update_cliente_config(
     for campo in (
         "negocio_nombre", "negocio_que_vende", "negocio_propuesta_valor",
         "negocio_zona", "pais", "sitio_web", "deriva_nombre", "deriva_whatsapp",
+        "bot_numero_whatsapp",
     ):
         val = getattr(body, campo)
         if val is not None:

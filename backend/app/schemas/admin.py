@@ -244,6 +244,7 @@ class ClienteConfigOut(BaseModel):
     sitio_web: str | None
     deriva_nombre: str | None
     deriva_whatsapp: str | None
+    bot_numero_whatsapp: str | None
     # Contacto y envío
     envio_auto_habilitado: bool
     envio_tope_diario: int
@@ -270,6 +271,7 @@ class ClienteConfigUpdate(BaseModel):
     sitio_web: str | None = None
     deriva_nombre: str | None = None
     deriva_whatsapp: str | None = None
+    bot_numero_whatsapp: str | None = None
     # Contacto y envío
     envio_auto_habilitado: bool | None = None
     envio_tope_diario: int | None = None

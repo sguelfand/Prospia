@@ -19,6 +19,7 @@ type ClienteConfig = {
   sitio_web: string | null
   deriva_nombre: string | null
   deriva_whatsapp: string | null
+  bot_numero_whatsapp: string | null
   // Contacto y envío
   envio_auto_habilitado: boolean
   envio_tope_diario: number
@@ -112,6 +113,7 @@ export default function AdminClientes() {
         sitio_web: cfg.sitio_web,
         deriva_nombre: cfg.deriva_nombre,
         deriva_whatsapp: cfg.deriva_whatsapp,
+        bot_numero_whatsapp: cfg.bot_numero_whatsapp,
         envio_auto_habilitado: cfg.envio_auto_habilitado,
         envio_tope_diario: cfg.envio_tope_diario,
         envio_delay_seg: cfg.envio_delay_seg,
@@ -307,6 +309,15 @@ export default function AdminClientes() {
                 <input
                   value={cfg.deriva_whatsapp ?? ''}
                   onChange={(e) => field('deriva_whatsapp', e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>WhatsApp de Camila (bot)</label>
+                <input
+                  value={cfg.bot_numero_whatsapp ?? ''}
+                  onChange={(e) => field('bot_numero_whatsapp', e.target.value)}
+                  placeholder="Ej: 54911..."
                   className={inputCls}
                 />
               </div>
