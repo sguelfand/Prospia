@@ -83,9 +83,10 @@ export default function Configuracion() {
   }
 
   return (
-    <div className="max-w-xl mx-auto space-y-6">
+    <div className="space-y-6">
       <h1 className="text-xl font-semibold text-ink">Configuración</h1>
 
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
       {/* ── Perfil / usuario ── */}
       <form onSubmit={saveProfile} className="bg-card border border-line rounded-2xl p-6 space-y-4">
         <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Usuario</h2>
@@ -165,6 +166,7 @@ export default function Configuracion() {
           </button>
         </div>
       </form>
+      </div>
 
       {/* ── Notificaciones push (#38) ── */}
       <NotificacionesPush />
