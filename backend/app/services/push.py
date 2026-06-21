@@ -103,12 +103,43 @@ def _log_aviso(db, tipo: str, title: str, body: str, tenant_id=None, cliente=Non
         print(f"[PUSH] no se pudo guardar el aviso: {type(e).__name__}: {e}")
 
 
+def _textos_evento(evento: str, cliente: str, nombre: str, detalle: str | None) -> tuple[str, str]:
+    """Arma (title, body) de un evento de cliente. Compartido Plataforma/Etiguel."""
+    resumen = (detalle or "").strip()
+    if evento == "respuesta":
+        return f"💬 Nueva respuesta — {cliente}", f"{nombre} respondió por primera vez"
+    if evento == "interesado":
+        return f"🔥 Interesado — {cliente}", f"{nombre}" + (f": {resumen[:90]}" if resumen else " se mostró interesado")
+    if evento == "mensaje_entrante":
+        return f"💬 {cliente} · {nombre}", (resumen[:120] if resumen else "Nuevo mensaje entrante")
+    return f"{cliente}", resumen[:120]
+
+
+def _enviar_evento_filtrado(db, evento: str, title: str, body: str, tenant_id: int,
+                            cliente: str | None = None, prospect_id: int | None = None) -> int:
+    """Manda un push de evento de cliente (interesado/respuesta/mensaje_entrante)
+    respetando el toggle GLOBAL por evento (#38) Y el toggle POR CLIENTE (#44).
+    Sirve para Plataforma y para Etiguel (tenant -1). Persiste aviso. Devuelve
+    a cuántos devices se mandó."""
+    from app.models.device import Device
+    permitidos = set(_tokens_para_evento(db, evento))
+    tokens = [
+        d.expo_token for d in db.query(Device).all()
+        if d.expo_token in permitidos and _cliente_evento_ok(db, d.expo_token, tenant_id, evento)
+    ]
+    _enviar(tokens, title, body, {"tenant_id": tenant_id, "prospect_id": prospect_id, "evento": evento})
+    if tokens:
+        _log_aviso(db, evento, title, body, tenant_id=tenant_id, cliente=cliente, prospect_id=prospect_id)
+    return len(tokens)
+
+
 def _notificar_evento(prospect_id: int, tipo: str, detalle: str | None) -> None:
     from app.database import SessionLocal
-    from app.models.device import Device
     from app.models.prospect import Prospect
     from app.models.tenant import Tenant
 
+    # tipo del endpoint → clave de evento de la config
+    evento = "respuesta" if tipo == "en_conversacion" else tipo  # interesado / mensaje_entrante / respuesta
     db = SessionLocal()
     try:
         prospect = db.get(Prospect, prospect_id)
@@ -116,39 +147,8 @@ def _notificar_evento(prospect_id: int, tipo: str, detalle: str | None) -> None:
             return
         tenant = db.get(Tenant, prospect.tenant_id)
         cliente = tenant.nombre if tenant else "Cliente"
-
-        if tipo == "en_conversacion":
-            title = f"💬 Nueva respuesta — {cliente}"
-            body = f"{prospect.nombre} respondió por primera vez"
-            evento_key = "respuesta"
-        elif tipo == "interesado":
-            title = f"🔥 Interesado — {cliente}"
-            resumen = (detalle or "").strip()
-            body = f"{prospect.nombre}" + (f": {resumen[:90]}" if resumen else " se mostró interesado")
-            evento_key = "interesado"
-        elif tipo == "mensaje_entrante":
-            resumen = (detalle or "").strip()
-            title = f"💬 {cliente} · {prospect.nombre}"
-            body = resumen[:120] if resumen else "Nuevo mensaje entrante"
-            evento_key = "mensaje_entrante"
-        else:
-            return
-
-        # Se manda si el evento está activo GLOBALMENTE (#38, PushEventMute) Y para
-        # ESTE cliente (#44, PushClienteEvento). interesado/respuesta default ON;
-        # mensaje_entrante default OFF (opt-in por cliente).
-        permitidos = set(_tokens_para_evento(db, evento_key))
-        tokens = [
-            d.expo_token for d in db.query(Device).all()
-            if d.expo_token in permitidos and _cliente_evento_ok(db, d.expo_token, prospect.tenant_id, evento_key)
-        ]
-        _enviar(tokens, title, body, {
-            "tenant_id": prospect.tenant_id,
-            "prospect_id": prospect_id,
-            "tipo": tipo,
-        })
-        if tokens:
-            _log_aviso(db, tipo, title, body, tenant_id=prospect.tenant_id, cliente=cliente, prospect_id=prospect_id)
+        title, body = _textos_evento(evento, cliente, prospect.nombre, detalle)
+        _enviar_evento_filtrado(db, evento, title, body, prospect.tenant_id, cliente=cliente, prospect_id=prospect_id)
     except Exception as e:
         print(f"[PUSH] error armando notificación: {type(e).__name__}: {e}")
     finally:
@@ -162,6 +162,30 @@ def notificar_evento_async(prospect_id: int, tipo: str, detalle: str | None = No
         args=(prospect_id, tipo, detalle),
         daemon=True,
     ).start()
+
+
+# Etiguel vive en Monday, fuera de la tabla `prospects` (tenant sentinela -1).
+ETIGUEL_TENANT_ID = -1
+ETIGUEL_NOMBRE = "Etiguel"
+
+
+def _notificar_evento_etiguel(evento: str, nombre: str, detalle: str | None) -> None:
+    from app.database import SessionLocal
+    db = SessionLocal()
+    try:
+        title, body = _textos_evento(evento, ETIGUEL_NOMBRE, nombre or "un lead", detalle)
+        _enviar_evento_filtrado(db, evento, title, body, ETIGUEL_TENANT_ID, cliente=ETIGUEL_NOMBRE)
+    except Exception as e:
+        print(f"[PUSH] error armando evento Etiguel: {type(e).__name__}: {e}")
+    finally:
+        db.close()
+
+
+def notificar_evento_etiguel_async(evento: str, nombre: str, detalle: str | None = None) -> None:
+    """Push de un evento de Etiguel (interesado / respuesta / mensaje_entrante),
+    respetando los mismos toggles (global + por cliente con tenant -1) que la
+    Plataforma. Lo dispara el espejo de Etiguel (#44 diferenciado)."""
+    threading.Thread(target=_notificar_evento_etiguel, args=(evento, nombre, detalle), daemon=True).start()
 
 
 def _notificar_error(error_id: int, fuente: str, contenido: str) -> None:
