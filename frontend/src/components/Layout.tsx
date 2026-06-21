@@ -1,4 +1,4 @@
-import { BarChart2, ChevronLeft, ChevronRight, Eye, ListTodo, LogOut, Menu, Search, Settings, ShieldCheck, Users, X } from 'lucide-react'
+import { AlertTriangle, BarChart2, ChevronLeft, ChevronRight, Eye, ListTodo, LogOut, Menu, Search, Settings, ShieldCheck, Users, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
@@ -140,6 +140,16 @@ export default function Layout() {
             )}
             {nivel === 1 && (
               <Link
+                to="/errores"
+                onClick={() => setMobileOpen(false)}
+                className={navClass(location.pathname.startsWith('/errores'))}
+              >
+                <AlertTriangle size={16} />
+                Errores
+              </Link>
+            )}
+            {nivel === 1 && (
+              <Link
                 to="/admin-clientes"
                 onClick={() => setMobileOpen(false)}
                 className={navClass(location.pathname.startsWith('/admin-clientes'))}
@@ -213,6 +223,16 @@ export default function Layout() {
           >
             <ListTodo size={16} />
             {!collapsed && 'Pendientes'}
+          </Link>
+        )}
+        {nivel === 1 && (
+          <Link
+            to="/errores"
+            title={collapsed ? 'Errores' : undefined}
+            className={navClass(location.pathname.startsWith('/errores'), collapsed)}
+          >
+            <AlertTriangle size={16} />
+            {!collapsed && 'Errores'}
           </Link>
         )}
         {nivel === 1 && (

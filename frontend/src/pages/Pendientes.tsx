@@ -46,6 +46,7 @@ export default function Pendientes() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'pending' | 'done' | 'all'>('pending')
   const [areaFilter, setAreaFilter] = useState<Area | ''>('')
+  const [orden, setOrden] = useState<'fecha' | 'prioridad'>('fecha')
   const [openIds, setOpenIds] = useState<Record<number, boolean>>({})
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [modal, setModal] = useState<{ editing: Pendiente | null; rejecting: boolean } | null>(null)
@@ -122,6 +123,18 @@ export default function Pendientes() {
     } catch (e) { if (e instanceof Error) showToast(e.message) }
   }
 
+  // Borrar todos los seleccionados (con confirmación).
+  const eliminarSelected = async () => {
+    const ids = [...selected]
+    if (!ids.length) return
+    if (!confirm(`¿Eliminar ${ids.length} pendiente(s)? No se puede deshacer.`)) return
+    setItems((prev) => prev.filter((p) => !selected.has(p.id)))
+    setSelected(new Set())
+    try {
+      await Promise.all(ids.map((id) => api.delete(`/admin/pendientes/${id}`)))
+    } catch (e) { if (e instanceof Error) showToast(e.message) }
+  }
+
   const copyItem = async (it: Pendiente) => {
     const { badge, title } = splitBadge(it.texto)
     let out = (badge ? `[${badge}] ` : '') + title + '\n' + `Prioridad: ${it.prioridad} · Área: ${it.area}\n`
@@ -188,13 +201,21 @@ export default function Pendientes() {
       </div>
 
       {/* Filtros */}
-      <div className="flex flex-wrap gap-1.5 mb-5">
+      <div className="flex flex-wrap gap-1.5 mb-3">
         {([['pending', 'Pendientes'], ['done', 'Hechas'], ['all', 'Todas']] as const).map(([k, l]) => (
           <Chip key={k} active={filter === k} onClick={() => setFilter(k)}>{l}</Chip>
         ))}
         <span className="w-px bg-line mx-1.5 my-0.5" />
         {([['', 'Todas las áreas'], ['app', 'App'], ['web', 'Web'], ['etiguel', 'Etiguel']] as const).map(([k, l]) => (
           <Chip key={k || 'all'} active={areaFilter === k} onClick={() => setAreaFilter(k as Area | '')}>{l}</Chip>
+        ))}
+      </div>
+
+      {/* Orden */}
+      <div className="flex items-center gap-1.5 mb-5">
+        <span className="text-xs text-muted mr-1">Ordenar:</span>
+        {([['fecha', 'Fecha'], ['prioridad', 'Prioridad']] as const).map(([k, l]) => (
+          <Chip key={k} active={orden === k} onClick={() => setOrden(k)}>{l}</Chip>
         ))}
       </div>
 
@@ -221,7 +242,12 @@ export default function Pendientes() {
 
       {/* Grupos por área */}
       {AREA_ORDER.map((area) => {
-        const group = items.filter((i) => visible(i) && i.area === area && !enCola(i)).sort((a, b) => (PRIO_RANK[a.prioridad] ?? 3) - (PRIO_RANK[b.prioridad] ?? 3) || b.id - a.id)
+        const fechaMs = (p: Pendiente) => (p.fecha ? new Date(p.fecha).getTime() : 0)
+        const group = items.filter((i) => visible(i) && i.area === area && !enCola(i)).sort((a, b) =>
+          orden === 'prioridad'
+            ? (PRIO_RANK[a.prioridad] ?? 3) - (PRIO_RANK[b.prioridad] ?? 3) || fechaMs(b) - fechaMs(a)
+            : fechaMs(b) - fechaMs(a) || b.id - a.id,
+        )
         if (!group.length) return null
         return (
           <div key={area} className="mb-7">
@@ -241,6 +267,9 @@ export default function Pendientes() {
           <span className="text-sm font-medium text-ink">{selected.size === 1 ? '1 seleccionado' : `${selected.size} seleccionados`}</span>
           <div className="flex gap-2">
             <button onClick={() => setSelected(new Set())} className="px-4 py-2 rounded-lg border border-line text-sm text-ink">Cancelar</button>
+            <button onClick={eliminarSelected} className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-red-500/50 text-red-500 text-sm font-semibold hover:bg-red-500/10">
+              <Trash2 size={14} /> Eliminar
+            </button>
             <button onClick={processSelected} className="px-5 py-2 rounded-lg bg-primary text-on-primary text-sm font-semibold">Procesar</button>
           </div>
         </div>
