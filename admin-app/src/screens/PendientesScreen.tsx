@@ -188,20 +188,27 @@ export default function PendientesScreen(_props: PendientesProps) {
     }
   };
 
-  // Marcar todos los seleccionados como realizados (hecho=true).
-  const terminarMarcados = async () => {
+  // Borrar todos los seleccionados (con confirmación).
+  const eliminarMarcados = () => {
     if (!token || selected.size === 0 || procesando) return;
     const ids = [...selected];
-    setProcesando(true);
-    setItems((prev) => prev.map((p) => (selected.has(p.id) ? { ...p, hecho: true } : p)));
-    try {
-      await Promise.all(ids.map((id) => editarPendiente(token, id, { hecho: true })));
-      salirSeleccion();
-    } catch {
-      load();
-    } finally {
-      setProcesando(false);
-    }
+    Alert.alert("Eliminar", `¿Eliminar ${ids.length} pendiente(s)? No se puede deshacer.`, [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Eliminar", style: "destructive", onPress: async () => {
+          setProcesando(true);
+          setItems((prev) => prev.filter((p) => !selected.has(p.id)));
+          salirSeleccion();
+          try {
+            await Promise.all(ids.map((id) => borrarPendiente(token, id)));
+          } catch {
+            load();
+          } finally {
+            setProcesando(false);
+          }
+        },
+      },
+    ]);
   };
 
   const renderRow = (item: Pendiente) => (
@@ -387,12 +394,12 @@ export default function PendientesScreen(_props: PendientesProps) {
           </Text>
           <View style={styles.procBtns}>
             <TouchableOpacity
-              style={[styles.terminarBtn, selected.size === 0 ? styles.procBtnOff : null]}
-              onPress={terminarMarcados}
+              style={[styles.eliminarBtn, selected.size === 0 ? styles.procBtnOff : null]}
+              onPress={eliminarMarcados}
               disabled={selected.size === 0 || procesando}
             >
-              <Icon name="check" size={15} color={colors.green} />
-              <Text style={styles.terminarBtnText}>Terminar</Text>
+              <Icon name="x" size={15} color={colors.red} />
+              <Text style={styles.eliminarBtnText}>Eliminar</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.procBtn, selected.size === 0 ? styles.procBtnOff : null]}
@@ -696,8 +703,8 @@ const styles = StyleSheet.create({
   procBtn: { backgroundColor: colors.primary, borderRadius: 10, paddingVertical: 11, paddingHorizontal: 18 },
   procBtnOff: { opacity: 0.5 },
   procBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
-  terminarBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderColor: colors.green, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14 },
-  terminarBtnText: { color: colors.green, fontSize: 14, fontWeight: "700" },
+  eliminarBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderColor: colors.red, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14 },
+  eliminarBtnText: { color: colors.red, fontSize: 14, fontWeight: "700" },
   ordenRow: { flexDirection: "row", alignItems: "center", gap: 8, marginHorizontal: 12, marginTop: 8 },
   ordenLabel: { color: colors.textDim, fontSize: 12, fontWeight: "600" },
   ordenBtn: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 },
