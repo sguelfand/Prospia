@@ -430,6 +430,7 @@ function PendienteCard({
   selected?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [showConcl, setShowConcl] = useState(false);
   const richCampos = RICH_ORDER.filter((k) => item[k]);
   const tieneDetalle = richCampos.length > 0;
   const cola = item.cola_estado;
@@ -459,6 +460,18 @@ function PendienteCard({
           </View>
         </View>
       </TouchableOpacity>
+      {!selectMode && item.cola_resultado ? (
+        <View>
+          <TouchableOpacity style={styles.conclToggle} onPress={() => setShowConcl((v) => !v)} activeOpacity={0.7}>
+            <Text style={styles.conclToggleText}>{showConcl ? "▾ Ocultar conclusión" : "▸ Ver conclusión"}</Text>
+          </TouchableOpacity>
+          {showConcl && (
+            <View style={styles.conclBody}>
+              <Text style={styles.conclText}>{item.cola_resultado}</Text>
+            </View>
+          )}
+        </View>
+      ) : null}
       {!selectMode && tieneDetalle && (
         <>
           <TouchableOpacity style={styles.detalleToggle} onPress={() => setExpanded((v) => !v)} activeOpacity={0.7}>
@@ -681,6 +694,10 @@ const styles = StyleSheet.create({
   detalleToggle: { marginTop: 12, paddingVertical: 4 },
   detalleToggleText: { color: colors.primary, fontSize: 12, fontWeight: "700" },
   detalle: { marginTop: 8, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 12 },
+  conclToggle: { marginTop: 10, paddingVertical: 4 },
+  conclToggleText: { color: colors.green, fontSize: 12, fontWeight: "700" },
+  conclBody: { marginTop: 6, backgroundColor: "rgba(70,177,123,0.12)", borderWidth: 1, borderColor: "rgba(70,177,123,0.3)", borderRadius: 10, padding: 11 },
+  conclText: { color: colors.text, fontSize: 13, lineHeight: 19 },
   section: { marginBottom: 12 },
   sectionTitle: { color: colors.textDim, fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 5 },
   sectionText: { color: colors.text, fontSize: 13, lineHeight: 19, flex: 1 },

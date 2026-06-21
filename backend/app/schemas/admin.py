@@ -223,6 +223,7 @@ class PendienteUpdate(BaseModel):
     alcance: str | None = None
     # cola: NULL = sacar de cola | "pendiente" | "procesado" | "standby"
     cola_estado: str | None = None
+    cola_resultado: str | None = None
 
 
 class ColaIn(BaseModel):
@@ -244,6 +245,7 @@ class PendienteOut(BaseModel):
     alcance: str | None = None
     cola_estado: str | None = None
     cola_orden: datetime | None = None
+    cola_resultado: str | None = None
 
     model_config = {"from_attributes": True}
 

@@ -21,6 +21,7 @@ type Pendiente = {
   alcance?: string | null
   cola_estado?: ColaEstado
   cola_orden?: string | null
+  cola_resultado?: string | null
 }
 
 const AREA_LABELS: Record<Area, string> = { app: 'App (Prospia Admin)', web: 'Web / Plataforma', etiguel: 'Etiguel / Scraper' }
@@ -309,6 +310,7 @@ function ItemCard({ it, ctx }: { it: Pendiente; ctx: ItemCtx }) {
   const seleccionable = !it.hecho && !cola
   // El botón "Realizado" aparece para lo no hecho (salvo lo que se está procesando ahora).
   const mostrarRealizado = !it.hecho && cola !== 'pendiente'
+  const [showConcl, setShowConcl] = useState(false)
   const toggleOpen = () => ctx.setOpenIds((p) => ({ ...p, [it.id]: !p[it.id] }))
 
   return (
@@ -361,6 +363,22 @@ function ItemCard({ it, ctx }: { it: Pendiente; ctx: ItemCtx }) {
         <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded shrink-0 hidden sm:inline" style={{ color: PRIO_COLOR[it.prioridad], background: PRIO_COLOR[it.prioridad] + '22' }}>{PRIO_LABELS[it.prioridad]}</span>
         <button onClick={toggleOpen} className={`text-muted text-[11px] transition-transform shrink-0 ${open ? 'rotate-180' : ''}`}>▼</button>
       </div>
+
+      {/* Conclusión: lo que hizo Claude al procesarlo (botón que despliega adentro) */}
+      {it.cola_resultado && (
+        <div className="px-4 pb-3" style={{ paddingLeft: '2.6rem' }}>
+          <button onClick={() => setShowConcl((v) => !v)} className="flex items-center gap-1.5 text-xs font-bold text-emerald-500">
+            <span className={`transition-transform ${showConcl ? 'rotate-90' : ''}`}>▸</span>
+            {showConcl ? 'Ocultar conclusión' : 'Ver conclusión'}
+          </button>
+          {showConcl && (
+            <div className="mt-2 rounded-lg border px-3 py-2.5 text-[13px] text-ink-soft whitespace-pre-wrap" style={{ background: 'rgba(70,177,123,0.12)', borderColor: 'rgba(70,177,123,0.3)' }}>
+              {it.cola_resultado}
+            </div>
+          )}
+        </div>
+      )}
+
       {open && (
         <div className="px-4 pb-4 pt-3 border-t border-line">
           {sections.length ? sections.map((k) => (

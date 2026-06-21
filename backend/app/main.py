@@ -101,6 +101,9 @@ def run_migrations():
         conn.execute(text(
             "ALTER TABLE pendientes ADD COLUMN IF NOT EXISTS cola_orden TIMESTAMPTZ"
         ))
+        conn.execute(text(
+            "ALTER TABLE pendientes ADD COLUMN IF NOT EXISTS cola_resultado TEXT"
+        ))
 
 
 Base.metadata.create_all(bind=engine)

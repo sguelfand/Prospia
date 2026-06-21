@@ -36,3 +36,6 @@ class Pendiente(Base):
     cola_orden: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )  # momento de encolado → FIFO
+    # Conclusión: resumen de lo que hizo Claude al procesarlo (lo que da en el
+    # chat). Se setea al marcar 'procesado'. La app/web lo muestran con un botón.
+    cola_resultado: Mapped[str | None] = mapped_column(Text, nullable=True)

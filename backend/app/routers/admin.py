@@ -578,6 +578,9 @@ def editar_pendiente(pendiente_id: int, body: PendienteUpdate, db: Session = Dep
         val = getattr(body, campo)
         if val is not None:
             setattr(p, campo, val.strip() or None)
+    # Conclusión: lo que hizo Claude al procesarlo ("" → NULL).
+    if body.cola_resultado is not None:
+        p.cola_resultado = body.cola_resultado.strip() or None
     db.commit()
     db.refresh(p)
     return p
