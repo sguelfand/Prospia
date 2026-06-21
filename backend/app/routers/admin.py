@@ -4,7 +4,7 @@ Alimenta la app Android de administración: ver todos los clientes (tenants)
 de Prospia con sus KPIs, el detalle de stats de cualquiera, y los
 totales agregados. Etiguel (que vive en Monday, no en esta base) se suma
 como una "fuente" más en la Fase 4 vía un adapter."""
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import case, extract, func
@@ -14,6 +14,7 @@ from app.core.auth import create_access_token, hash_password
 from app.core.deps import get_superadmin
 from app.database import get_db
 from app.models.agent_error import AgentError
+from app.models.aviso import Aviso
 from app.models.device import Device
 from app.models.etiguel_mirror import EtiguelMirror, EtiguelMirrorMensaje
 from app.models.historial import ProspectHistorial
@@ -22,6 +23,7 @@ from app.models.pendiente import Pendiente
 from app.models.prospect import ESTADOS, Prospect
 from app.models.push_mute import PushMute
 from app.models.push_event_mute import PushEventMute
+from app.models.push_cliente_evento import PushClienteEvento
 from app.models.rubro import Rubro
 from app.models.tenant import Tenant, TenantConfig
 from app.models.termino import Termino
@@ -38,6 +40,8 @@ from app.schemas.admin import (
     DashboardComparativa,
     DeviceIn,
     EtiguelLead,
+    AvisoOut,
+    AvisosEliminar,
     EtiguelMirrorItem,
     EtiguelMirrorMensajeOut,
     EventoOut,
@@ -45,6 +49,8 @@ from app.schemas.admin import (
     ImpersonateOut,
     OpcionFiltro,
     ColaIn,
+    ClienteNotifPrefsOut,
+    ClienteNotifPrefUpdate,
     DeviceOut,
     NotifEvento,
     NotifPrefUpdate,
@@ -800,6 +806,50 @@ def set_push_pref(tenant_id: int, body: PushPrefIn, db: Session = Depends(get_db
     return PushPrefOut(enabled=body.enabled)
 
 
+# ── Notificaciones por cliente y por evento (#44) ────────────────────────────
+@router.get("/clientes/{tenant_id}/notif-prefs", response_model=ClienteNotifPrefsOut)
+def get_cliente_notif_prefs(tenant_id: int, expo_token: str = Query(...), db: Session = Depends(get_db)):
+    """Estado de cada evento (interesado / primera respuesta / cada mensaje
+    entrante) para ESTE cliente y device. Sin fila → default por evento."""
+    rows = {
+        r.evento: r.enabled
+        for r in db.query(PushClienteEvento).filter(
+            PushClienteEvento.expo_token == expo_token,
+            PushClienteEvento.tenant_id == tenant_id,
+        ).all()
+    }
+    eventos = [
+        NotifEvento(
+            evento=k, label=label,
+            enabled=rows[k] if k in rows else push.DEFAULT_CLIENTE_EVENTO.get(k, True),
+        )
+        for k, label in push.EVENTOS_CLIENTE
+    ]
+    return ClienteNotifPrefsOut(tenant_id=tenant_id, eventos=eventos)
+
+
+@router.put("/clientes/{tenant_id}/notif-prefs", response_model=ClienteNotifPrefsOut)
+def set_cliente_notif_pref(tenant_id: int, body: ClienteNotifPrefUpdate, db: Session = Depends(get_db)):
+    """Activa/desactiva un evento de push de un cliente para un device (upsert)."""
+    if body.evento not in [k for k, _ in push.EVENTOS_CLIENTE]:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Evento desconocido")
+    row = (
+        db.query(PushClienteEvento)
+        .filter(
+            PushClienteEvento.expo_token == body.expo_token,
+            PushClienteEvento.tenant_id == tenant_id,
+            PushClienteEvento.evento == body.evento,
+        )
+        .first()
+    )
+    if row:
+        row.enabled = body.enabled
+    else:
+        db.add(PushClienteEvento(expo_token=body.expo_token, tenant_id=tenant_id, evento=body.evento, enabled=body.enabled))
+    db.commit()
+    return get_cliente_notif_prefs(tenant_id=tenant_id, expo_token=body.expo_token, db=db)
+
+
 @router.post("/devices", status_code=status.HTTP_204_NO_CONTENT)
 def registrar_device(
     body: DeviceIn,
@@ -910,3 +960,27 @@ def listar_eventos(db: Session = Depends(get_db), limit: int = 100):
         )
         for h, pnombre, tid, tnombre in rows
     ]
+
+
+# ── Avisos: historial de push REALES (#42) ───────────────────────────────────
+@router.get("/avisos", response_model=list[AvisoOut])
+def listar_avisos(db: Session = Depends(get_db), limit: int = 200):
+    """Historial de los push reales enviados (últimos 3 días), más recientes
+    primero. Alimenta la pantalla de Avisos de la app."""
+    limit = max(1, min(limit, 500))
+    corte = datetime.now(timezone.utc) - timedelta(days=3)
+    return (
+        db.query(Aviso)
+        .filter(Aviso.fecha >= corte)
+        .order_by(Aviso.fecha.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+@router.post("/avisos/eliminar", status_code=status.HTTP_204_NO_CONTENT)
+def eliminar_avisos(body: AvisosEliminar, db: Session = Depends(get_db)):
+    """Borra los avisos tildados (botón Eliminar de la app)."""
+    if body.ids:
+        db.query(Aviso).filter(Aviso.id.in_(body.ids)).delete(synchronize_session=False)
+        db.commit()
