@@ -1,4 +1,4 @@
-import { Check, Copy, Pencil, RotateCcw, Trash2, X } from 'lucide-react'
+import { Check, Copy, Pencil, RotateCcw, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 
@@ -308,8 +308,11 @@ function ItemCard({ it, ctx }: { it: Pendiente; ctx: ItemCtx }) {
   // El checkbox de la izquierda = seleccionar para procesar. Solo para pendientes
   // normales sin encolar. Los que están en la cola muestran su círculo de estado.
   const seleccionable = !it.hecho && !cola
-  // El botón "Realizado" aparece para lo no hecho (salvo lo que se está procesando ahora).
-  const mostrarRealizado = !it.hecho && cola !== 'pendiente'
+  // Misma lógica que la app: pendiente normal → "Realizado"; procesado (cuando la
+  // cola terminó) → "Confirmar" + "Rechazar"; standby → "Volver a la cola".
+  const esNormal = !it.hecho && !cola
+  const esConfirmar = !it.hecho && cola === 'procesado' && ctx.colaSettled
+  const esVolverCola = cola === 'standby' && ctx.colaSettled
   const [showConcl, setShowConcl] = useState(false)
   const toggleOpen = () => ctx.setOpenIds((p) => ({ ...p, [it.id]: !p[it.id] }))
 
@@ -337,7 +340,7 @@ function ItemCard({ it, ctx }: { it: Pendiente; ctx: ItemCtx }) {
         </div>
 
         {cola && <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded shrink-0" style={{ color: COLA_COLOR[cola], background: COLA_COLOR[cola] + '22' }}>{COLA_LABELS[cola] ?? cola}</span>}
-        {cola === 'standby' && (
+        {esVolverCola && (
           <button
             onClick={() => ctx.reactivar(it)}
             title="Ya te pasé la info — volver a la cola"
@@ -347,7 +350,23 @@ function ItemCard({ it, ctx }: { it: Pendiente; ctx: ItemCtx }) {
             <RotateCcw size={13} /> Volver a la cola
           </button>
         )}
-        {mostrarRealizado && (
+        {esConfirmar && (
+          <>
+            <button
+              onClick={() => ctx.marcarRealizado(it)}
+              className="flex items-center gap-1 text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-md px-2.5 py-1 shrink-0"
+            >
+              <Check size={13} /> Confirmar
+            </button>
+            <button
+              onClick={() => ctx.rechazar(it)}
+              className="flex items-center gap-1 text-[11px] font-bold text-red-500 border border-red-500/50 hover:bg-red-500/10 rounded-md px-2.5 py-1 shrink-0"
+            >
+              <RotateCcw size={13} /> Rechazar
+            </button>
+          </>
+        )}
+        {esNormal && (
           <button
             onClick={() => ctx.marcarRealizado(it)}
             className="flex items-center gap-1 text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-md px-2.5 py-1 shrink-0"
@@ -396,9 +415,6 @@ function ItemCard({ it, ctx }: { it: Pendiente; ctx: ItemCtx }) {
             </div>
           )) : <p className="text-xs text-muted">Sin detalle. Tocá «Editar» para agregar contexto.</p>}
           <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-dashed border-line">
-            {cola === 'procesado' && ctx.colaSettled && !it.hecho && (
-              <ActBtn onClick={() => ctx.rechazar(it)} className="border-red-500/50 text-red-500"><X size={12} /> Rechazar</ActBtn>
-            )}
             {cola && cola !== 'procesado' && <ActBtn onClick={() => ctx.dequeue(it)}>Sacar de cola</ActBtn>}
             <ActBtn onClick={() => ctx.copyItem(it)}><Copy size={12} /> Copiar</ActBtn>
             <ActBtn onClick={() => ctx.openEdit(it)}><Pencil size={12} /> Editar</ActBtn>
