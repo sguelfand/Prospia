@@ -14,12 +14,38 @@ EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 EVENTOS_PUSH: list[tuple[str, str]] = [
     ("interesado", "Interesado"),
     ("respuesta", "Primera respuesta"),
+    ("mensaje_entrante", "Cada mensaje entrante"),
     ("error_camila", "Error de Camila"),
     ("standby", "Pendiente en espera (standby)"),
     ("cola_terminada", "Cola de pendientes terminada"),
     ("necesita_autorizacion", "Necesita tu autorización"),
 ]
 EVENTOS_PUSH_KEYS = [k for k, _ in EVENTOS_PUSH]
+
+# Eventos configurables POR CLIENTE (#44) + su default cuando no hay fila.
+# mensaje_entrante arranca OFF para no inundar; el resto ON.
+EVENTOS_CLIENTE: list[tuple[str, str]] = [
+    ("interesado", "Interesado"),
+    ("respuesta", "Primera respuesta"),
+    ("mensaje_entrante", "Cada mensaje entrante"),
+]
+DEFAULT_CLIENTE_EVENTO = {"interesado": True, "respuesta": True, "mensaje_entrante": False}
+
+
+def _cliente_evento_ok(db, expo_token: str, tenant_id: int, evento: str) -> bool:
+    """¿Este device quiere `evento` para `tenant_id`? Usa la fila explícita de
+    push_cliente_evento o el default (#44)."""
+    from app.models.push_cliente_evento import PushClienteEvento
+    row = (
+        db.query(PushClienteEvento)
+        .filter(
+            PushClienteEvento.expo_token == expo_token,
+            PushClienteEvento.tenant_id == tenant_id,
+            PushClienteEvento.evento == evento,
+        )
+        .first()
+    )
+    return row.enabled if row else DEFAULT_CLIENTE_EVENTO.get(evento, True)
 
 
 def _tokens_para_evento(db, evento: str) -> list[str]:
@@ -64,11 +90,23 @@ def _enviar(tokens: list[str], title: str, body: str, data: dict) -> None:
         print(f"[PUSH] error enviando: {type(e).__name__}: {e}")
 
 
+def _log_aviso(db, tipo: str, title: str, body: str, tenant_id=None, cliente=None, prospect_id=None) -> None:
+    """Persiste el push como Aviso (#42) para que quede en el historial de la app.
+    Best-effort: si falla, no rompe el envío."""
+    from app.models.aviso import Aviso
+    try:
+        db.add(Aviso(tipo=tipo, title=title[:160], body=(body or "")[:2000],
+                     tenant_id=tenant_id, cliente=cliente, prospect_id=prospect_id))
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"[PUSH] no se pudo guardar el aviso: {type(e).__name__}: {e}")
+
+
 def _notificar_evento(prospect_id: int, tipo: str, detalle: str | None) -> None:
     from app.database import SessionLocal
     from app.models.device import Device
     from app.models.prospect import Prospect
-    from app.models.push_mute import PushMute
     from app.models.tenant import Tenant
 
     db = SessionLocal()
@@ -82,31 +120,35 @@ def _notificar_evento(prospect_id: int, tipo: str, detalle: str | None) -> None:
         if tipo == "en_conversacion":
             title = f"💬 Nueva respuesta — {cliente}"
             body = f"{prospect.nombre} respondió por primera vez"
+            evento_key = "respuesta"
         elif tipo == "interesado":
             title = f"🔥 Interesado — {cliente}"
             resumen = (detalle or "").strip()
             body = f"{prospect.nombre}" + (f": {resumen[:90]}" if resumen else " se mostró interesado")
+            evento_key = "interesado"
+        elif tipo == "mensaje_entrante":
+            resumen = (detalle or "").strip()
+            title = f"💬 {cliente} · {prospect.nombre}"
+            body = resumen[:120] if resumen else "Nuevo mensaje entrante"
+            evento_key = "mensaje_entrante"
         else:
             return
 
-        # Devices que silenciaron este cliente (APP.4): se excluyen del envío.
-        muteados = {
-            t for (t,) in db.query(PushMute.expo_token)
-            .filter(PushMute.tenant_id == prospect.tenant_id)
-            .all()
-        }
-        # Además, el toggle por evento (#38): interesado / respuesta.
-        evento_key = "respuesta" if tipo == "en_conversacion" else "interesado"
+        # Se manda si el evento está activo GLOBALMENTE (#38, PushEventMute) Y para
+        # ESTE cliente (#44, PushClienteEvento). interesado/respuesta default ON;
+        # mensaje_entrante default OFF (opt-in por cliente).
         permitidos = set(_tokens_para_evento(db, evento_key))
         tokens = [
             d.expo_token for d in db.query(Device).all()
-            if d.expo_token not in muteados and d.expo_token in permitidos
+            if d.expo_token in permitidos and _cliente_evento_ok(db, d.expo_token, prospect.tenant_id, evento_key)
         ]
         _enviar(tokens, title, body, {
             "tenant_id": prospect.tenant_id,
             "prospect_id": prospect_id,
             "tipo": tipo,
         })
+        if tokens:
+            _log_aviso(db, tipo, title, body, tenant_id=prospect.tenant_id, cliente=cliente, prospect_id=prospect_id)
     except Exception as e:
         print(f"[PUSH] error armando notificación: {type(e).__name__}: {e}")
     finally:
@@ -134,6 +176,8 @@ def _notificar_error(error_id: int, fuente: str, contenido: str) -> None:
         # Alerta global, pero respeta el toggle de evento "error_camila" (#38).
         tokens = _tokens_para_evento(db, "error_camila")
         _enviar(tokens, title, body, {"tipo": "agent_error", "error_id": error_id})
+        if tokens:
+            _log_aviso(db, "error_camila", title, body)
     except Exception as e:
         print(f"[PUSH] error armando alerta de error: {type(e).__name__}: {e}")
     finally:
@@ -155,6 +199,8 @@ def _notificar_aviso(title: str, body: str, data: dict) -> None:
         # va a TODOS los devices, sin filtro de silencio por cliente.
         tokens = [d.expo_token for d in db.query(Device).all()]
         _enviar(tokens, title, body, data)
+        if tokens:
+            _log_aviso(db, (data or {}).get("tipo", "aviso"), title, body)
     except Exception as e:
         print(f"[PUSH] error armando aviso: {type(e).__name__}: {e}")
     finally:
@@ -173,6 +219,8 @@ def _notificar_global(evento: str, title: str, body: str, data: dict) -> None:
     try:
         tokens = _tokens_para_evento(db, evento)
         _enviar(tokens, title, body, {**data, "evento": evento})
+        if tokens:
+            _log_aviso(db, evento, title, body)
     except Exception as e:
         print(f"[PUSH] error armando push global {evento}: {type(e).__name__}: {e}")
     finally:
@@ -190,6 +238,8 @@ def notificar_global(evento: str, title: str, body: str, data: dict | None = Non
     try:
         tokens = _tokens_para_evento(db, evento)
         _enviar(tokens, title, body, {**(data or {}), "evento": evento})
+        if tokens:
+            _log_aviso(db, evento, title, body)
         return len(tokens)
     finally:
         db.close()

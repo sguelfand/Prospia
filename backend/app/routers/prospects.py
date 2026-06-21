@@ -379,6 +379,12 @@ def chat_log(
     db.add(msg)
     db.commit()
     db.refresh(msg)
+    # Push por cada mensaje entrante (#44), respeta el toggle global + por cliente.
+    if body.direccion == "in":
+        try:
+            push.notificar_evento_async(prospect.id, "mensaje_entrante", texto)
+        except Exception:
+            pass
     return {"ok": True, "id": msg.id, "prospect_id": prospect.id}
 
 

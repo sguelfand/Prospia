@@ -48,6 +48,7 @@ export default function PendientesScreen(_props: PendientesProps) {
   const insets = useSafeAreaInsets();
   const [items, setItems] = useState<Pendiente[]>([]);
   const [filtro, setFiltro] = useState<"pendientes" | "realizados">("pendientes");
+  const [orden, setOrden] = useState<"fecha" | "prioridad">("fecha");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -187,6 +188,22 @@ export default function PendientesScreen(_props: PendientesProps) {
     }
   };
 
+  // Marcar todos los seleccionados como realizados (hecho=true).
+  const terminarMarcados = async () => {
+    if (!token || selected.size === 0 || procesando) return;
+    const ids = [...selected];
+    setProcesando(true);
+    setItems((prev) => prev.map((p) => (selected.has(p.id) ? { ...p, hecho: true } : p)));
+    try {
+      await Promise.all(ids.map((id) => editarPendiente(token, id, { hecho: true })));
+      salirSeleccion();
+    } catch {
+      load();
+    } finally {
+      setProcesando(false);
+    }
+  };
+
   const renderRow = (item: Pendiente) => (
     <SwipeRow
       left={
@@ -218,7 +235,15 @@ export default function PendientesScreen(_props: PendientesProps) {
   const colaWaiting = colaSettled && colaStandby > 0;       // terminé lo que pude, faltan datos tuyos
   const mostrarCola = !selectMode && filtro === "pendientes" && queued.length > 0;
 
-  const visibles = items.filter((p) => (filtro === "pendientes" ? !p.hecho : p.hecho) && !enCola(p));
+  const PRIO_RANK: Record<string, number> = { alta: 0, media: 1, baja: 2 };
+  const fechaMs = (p: Pendiente) => (p.fecha ? new Date(p.fecha).getTime() : 0);
+  const visibles = items
+    .filter((p) => (filtro === "pendientes" ? !p.hecho : p.hecho) && !enCola(p))
+    .sort((a, b) =>
+      orden === "prioridad"
+        ? (PRIO_RANK[a.prioridad] ?? 3) - (PRIO_RANK[b.prioridad] ?? 3) || fechaMs(b) - fechaMs(a)
+        : fechaMs(b) - fechaMs(a) || b.id - a.id,
+    );
   const nPend = items.filter((p) => !p.hecho).length;
   const nReal = items.length - nPend;
 
@@ -297,16 +322,29 @@ export default function PendientesScreen(_props: PendientesProps) {
           </TouchableOpacity>
         </View>
       ) : (
-        <View style={styles.topActions}>
-          <TouchableOpacity style={styles.addBtn} onPress={abrirNuevo}>
-            <Icon name="plus" size={18} color="#fff" />
-            <Text style={styles.addBtnText}>Nuevo pendiente</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.selBtn} onPress={() => setSelectMode(true)}>
-            <Icon name="check" size={16} color={colors.primary} />
-            <Text style={styles.selBtnText}>Seleccionar</Text>
-          </TouchableOpacity>
-        </View>
+        <>
+          <View style={styles.topActions}>
+            <TouchableOpacity style={styles.addBtn} onPress={abrirNuevo}>
+              <Icon name="plus" size={18} color="#fff" />
+              <Text style={styles.addBtnText}>Nuevo pendiente</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.selBtn} onPress={() => setSelectMode(true)}>
+              <Icon name="check" size={16} color={colors.primary} />
+              <Text style={styles.selBtnText}>Seleccionar</Text>
+            </TouchableOpacity>
+          </View>
+          {filtro === "pendientes" && (
+            <View style={styles.ordenRow}>
+              <Text style={styles.ordenLabel}>Ordenar:</Text>
+              <TouchableOpacity style={[styles.ordenBtn, orden === "fecha" && styles.ordenBtnOn]} onPress={() => setOrden("fecha")}>
+                <Text style={[styles.ordenBtnText, orden === "fecha" && styles.ordenBtnTextOn]}>Fecha</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.ordenBtn, orden === "prioridad" && styles.ordenBtnOn]} onPress={() => setOrden("prioridad")}>
+                <Text style={[styles.ordenBtnText, orden === "prioridad" && styles.ordenBtnTextOn]}>Prioridad</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </>
       )}
 
       <FlatList
@@ -347,13 +385,23 @@ export default function PendientesScreen(_props: PendientesProps) {
           <Text style={styles.procCount}>
             {selected.size === 1 ? "1 seleccionado" : `${selected.size} seleccionados`}
           </Text>
-          <TouchableOpacity
-            style={[styles.procBtn, selected.size === 0 ? styles.procBtnOff : null]}
-            onPress={procesar}
-            disabled={selected.size === 0 || procesando}
-          >
-            <Text style={styles.procBtnText}>{procesando ? "Procesando…" : "Procesar"}</Text>
-          </TouchableOpacity>
+          <View style={styles.procBtns}>
+            <TouchableOpacity
+              style={[styles.terminarBtn, selected.size === 0 ? styles.procBtnOff : null]}
+              onPress={terminarMarcados}
+              disabled={selected.size === 0 || procesando}
+            >
+              <Icon name="check" size={15} color={colors.green} />
+              <Text style={styles.terminarBtnText}>Terminar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.procBtn, selected.size === 0 ? styles.procBtnOff : null]}
+              onPress={procesar}
+              disabled={selected.size === 0 || procesando}
+            >
+              <Text style={styles.procBtnText}>{procesando ? "…" : "Procesar"}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -644,9 +692,18 @@ const styles = StyleSheet.create({
 
   procBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 12, backgroundColor: colors.cardAlt, borderTopWidth: 1, borderTopColor: colors.border },
   procCount: { color: colors.text, fontSize: 14, fontWeight: "700" },
-  procBtn: { backgroundColor: colors.primary, borderRadius: 10, paddingVertical: 11, paddingHorizontal: 22 },
+  procBtns: { flexDirection: "row", gap: 8 },
+  procBtn: { backgroundColor: colors.primary, borderRadius: 10, paddingVertical: 11, paddingHorizontal: 18 },
   procBtnOff: { opacity: 0.5 },
   procBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  terminarBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderColor: colors.green, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14 },
+  terminarBtnText: { color: colors.green, fontSize: 14, fontWeight: "700" },
+  ordenRow: { flexDirection: "row", alignItems: "center", gap: 8, marginHorizontal: 12, marginTop: 8 },
+  ordenLabel: { color: colors.textDim, fontSize: 12, fontWeight: "600" },
+  ordenBtn: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 },
+  ordenBtnOn: { backgroundColor: colors.cardAlt, borderColor: colors.primary },
+  ordenBtnText: { color: colors.textDim, fontSize: 13, fontWeight: "600" },
+  ordenBtnTextOn: { color: colors.text },
 
   colaBox: { backgroundColor: "rgba(110,150,230,0.08)", borderWidth: 1, borderColor: "rgba(110,150,230,0.38)", borderRadius: 14, padding: 10, paddingBottom: 2, marginBottom: 16 },
   colaBoxHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10, paddingHorizontal: 4, paddingTop: 2 },

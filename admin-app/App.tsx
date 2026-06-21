@@ -19,6 +19,7 @@ import { Loader } from "./src/components/ui";
 import { AuthStackParamList, DrawerParamList } from "./src/navigation";
 import { registerForPush } from "./src/push";
 import AvisosScreen from "./src/screens/AvisosScreen";
+import ClienteNotificacionesScreen from "./src/screens/ClienteNotificacionesScreen";
 import ClienteViewScreen from "./src/screens/ClienteViewScreen";
 import ConfiguracionScreen from "./src/screens/ConfiguracionScreen";
 import DashboardScreen from "./src/screens/DashboardScreen";
@@ -80,6 +81,7 @@ function AppDrawer() {
       <Drawer.Screen name="Configuracion" component={ConfiguracionScreen} options={{ title: "Configuración" }} />
       <Drawer.Screen name="Perfil" component={PerfilScreen} options={{ title: "Perfil" }} />
       <Drawer.Screen name="Notificaciones" component={NotificacionesScreen} options={{ title: "Notificaciones" }} />
+      <Drawer.Screen name="ClienteNotificaciones" component={ClienteNotificacionesScreen} options={{ title: "" }} />
     </Drawer.Navigator>
   );
 }

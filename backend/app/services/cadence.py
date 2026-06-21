@@ -24,6 +24,16 @@ def _check_once():
     db = SessionLocal()
     try:
         ahora = datetime.now(timezone.utc)
+
+        # ── 0) Limpieza: avisos (push guardados) de más de 3 días (#42) ──────────
+        try:
+            from app.models.aviso import Aviso
+            db.query(Aviso).filter(Aviso.fecha < ahora - timedelta(days=3)).delete(synchronize_session=False)
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            print(f"[CADENCE] no se pudo limpiar avisos viejos: {type(e).__name__}: {e}")
+
         # Config por tenant precargada (1 query) para no pegarle a la DB por prospect
         configs = {c.tenant_id: c for c in db.query(TenantConfig).all()}
 

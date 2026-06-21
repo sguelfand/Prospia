@@ -285,6 +285,23 @@ export const getClienteStats = (token: string, tenantId: number) =>
 
 export const getEventos = (token: string) => request<Evento[]>("/admin/eventos", {}, token);
 
+// ── Avisos: historial de push reales (#42) ────────────────────────────────────
+export interface Aviso {
+  id: number;
+  tipo: string;
+  title: string;
+  body: string;
+  tenant_id: number | null;
+  cliente: string | null;
+  prospect_id: number | null;
+  fecha: string;
+}
+
+export const getAvisos = (token: string) => request<Aviso[]>("/admin/avisos", {}, token);
+
+export const eliminarAvisos = (token: string, ids: number[]) =>
+  request<void>("/admin/avisos/eliminar", { method: "POST", body: JSON.stringify({ ids }) }, token);
+
 export const getEtiguelLeads = (token: string) =>
   request<EtiguelLead[]>("/admin/etiguel/leads", {}, token);
 
@@ -413,6 +430,22 @@ export const getNotifPrefs = (token: string, expoToken: string) =>
 export const setNotifPref = (token: string, expoToken: string, evento: string, enabled: boolean) =>
   request<NotifPrefs>(
     "/admin/notif-prefs",
+    { method: "PUT", body: JSON.stringify({ expo_token: expoToken, evento, enabled }) },
+    token,
+  );
+
+// ── Notificaciones por cliente y por evento (#44) ─────────────────────────────
+export interface ClienteNotifPrefs {
+  tenant_id: number;
+  eventos: NotifEvento[];
+}
+
+export const getClienteNotifPrefs = (token: string, tenantId: number, expoToken: string) =>
+  request<ClienteNotifPrefs>(`/admin/clientes/${tenantId}/notif-prefs?expo_token=${encodeURIComponent(expoToken)}`, {}, token);
+
+export const setClienteNotifPref = (token: string, tenantId: number, expoToken: string, evento: string, enabled: boolean) =>
+  request<ClienteNotifPrefs>(
+    `/admin/clientes/${tenantId}/notif-prefs`,
     { method: "PUT", body: JSON.stringify({ expo_token: expoToken, evento, enabled }) },
     token,
   );

@@ -97,6 +97,19 @@ class NotifPrefUpdate(BaseModel):
     enabled: bool
 
 
+class ClienteNotifPrefsOut(BaseModel):
+    """Preferencias de notificación de un device PARA UN CLIENTE (#44)."""
+    tenant_id: int
+    eventos: list[NotifEvento]
+
+
+class ClienteNotifPrefUpdate(BaseModel):
+    """Activa/desactiva un evento de push de un cliente para un device (#44)."""
+    expo_token: str
+    evento: str
+    enabled: bool
+
+
 class NotifyIn(BaseModel):
     """Dispara un push de evento global (lo usa Claude / un proceso interno)."""
     evento: str
@@ -261,6 +274,24 @@ class EventoOut(BaseModel):
     prospect_nombre: str
     detalle: str | None
     fuente: str = "plataforma"
+
+
+class AvisoOut(BaseModel):
+    """Un push real guardado (#42), para el historial de la pantalla Avisos."""
+    id: int
+    tipo: str
+    title: str
+    body: str
+    tenant_id: int | None = None
+    cliente: str | None = None
+    prospect_id: int | None = None
+    fecha: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AvisosEliminar(BaseModel):
+    ids: list[int]
 
 
 # ── Admin clientes: ver/editar la config esencial de un cliente (nivel 1) ──

@@ -142,8 +142,20 @@ export default function ClienteViewScreen({ route, navigation }: ClienteViewProp
 
   const header = (
     <View>
-      {/* ── Interruptor de push de este cliente (APP.4) ──────────── */}
-      <PushToggle tenantId={tenantId} />
+      {/* ── Notificaciones de este cliente (#44): botón → config detallada ── */}
+      {!esEtiguel && (
+        <TouchableOpacity
+          style={styles.pushRow}
+          onPress={() => navigation.navigate("ClienteNotificaciones", { tenantId, nombre })}
+          activeOpacity={0.7}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Icon name="bell" size={16} color={colors.text} />
+            <Text style={[styles.pushLabel, { marginLeft: 6 }]}>Notificaciones de este cliente</Text>
+          </View>
+          <Text style={styles.pushChevron}>›</Text>
+        </TouchableOpacity>
+      )}
 
       {/* ── Estadística actual del cliente (tocar → filtra la lista) ── */}
       <Section title="Este mes">
@@ -576,6 +588,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   pushLabel: { color: colors.text, fontSize: 14, fontWeight: "600" },
+  pushChevron: { color: colors.textDim, fontSize: 20, fontWeight: "300" },
 
   prospectsHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 24, marginBottom: 10 },
   prospectsTitle: { color: colors.text, fontSize: 16, fontWeight: "700" },
