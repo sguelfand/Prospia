@@ -143,19 +143,17 @@ export default function ClienteViewScreen({ route, navigation }: ClienteViewProp
   const header = (
     <View>
       {/* ── Notificaciones de este cliente (#44): botón → config detallada ── */}
-      {!esEtiguel && (
-        <TouchableOpacity
-          style={styles.pushRow}
-          onPress={() => navigation.navigate("ClienteNotificaciones", { tenantId, nombre })}
-          activeOpacity={0.7}
-        >
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <Icon name="bell" size={16} color={colors.text} />
-            <Text style={[styles.pushLabel, { marginLeft: 6 }]}>Notificaciones de este cliente</Text>
-          </View>
-          <Text style={styles.pushChevron}>›</Text>
-        </TouchableOpacity>
-      )}
+      <TouchableOpacity
+        style={styles.pushRow}
+        onPress={() => navigation.navigate("ClienteNotificaciones", { tenantId, nombre })}
+        activeOpacity={0.7}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <Icon name="bell" size={16} color={colors.text} />
+          <Text style={[styles.pushLabel, { marginLeft: 6 }]}>Notificaciones de este cliente</Text>
+        </View>
+        <Text style={styles.pushChevron}>›</Text>
+      </TouchableOpacity>
 
       {/* ── Estadística actual del cliente (tocar → filtra la lista) ── */}
       <Section title="Este mes">
