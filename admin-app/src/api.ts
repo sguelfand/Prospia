@@ -211,6 +211,7 @@ export interface Pendiente extends Partial<PendienteRich> {
   fecha: string;
   cola_estado?: ColaEstado;
   cola_orden?: string | null;
+  cola_resultado?: string | null;
 }
 
 // tenant_id sentinela de Etiguel (coincide con el backend)
