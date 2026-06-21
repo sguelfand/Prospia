@@ -49,6 +49,8 @@ def ingest_etiguel_mirror(
         mirror = EtiguelMirror(tipo=body.tipo, item_id=str(body.item_id))
         db.add(mirror)
 
+    estado_anterior = mirror.estado  # para detectar transición a "interesado" (#44 Etiguel)
+
     # Actualiza datos si vienen (no pisa con None).
     if body.nombre is not None:
         mirror.nombre = body.nombre
@@ -77,7 +79,28 @@ def ingest_etiguel_mirror(
             ))
             agregado = True
 
+    # Cuántos mensajes 'in' tiene este lead (para distinguir primera respuesta).
+    n_in = (
+        db.query(EtiguelMirrorMensaje)
+        .filter(EtiguelMirrorMensaje.mirror_id == mirror.id, EtiguelMirrorMensaje.direccion == "in")
+        .count()
+    )
+    nombre_lead = mirror.nombre
     db.commit()
+
+    # ── Push diferenciado de Etiguel (#44), respetando los toggles por cliente ──
+    try:
+        # Mensaje entrante nuevo: el 1° 'in' = primera respuesta; los siguientes = mensaje entrante.
+        if agregado and body.direccion == "in":
+            evento = "respuesta" if n_in <= 1 else "mensaje_entrante"
+            push.notificar_evento_etiguel_async(evento, nombre_lead or "un lead", body.texto)
+        # Transición de estado a "interesado".
+        nuevo = (body.estado or "")
+        if nuevo and "interes" in nuevo.lower() and "interes" not in (estado_anterior or "").lower():
+            push.notificar_evento_etiguel_async("interesado", nombre_lead or "un lead", None)
+    except Exception:
+        pass
+
     return {"ok": True, "tipo": mirror.tipo, "item_id": mirror.item_id, "mensaje_agregado": agregado}
 
 
