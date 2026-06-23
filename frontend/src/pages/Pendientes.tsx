@@ -383,33 +383,9 @@ function ItemCard({ it, ctx }: { it: Pendiente; ctx: ItemCtx }) {
           <span className={`flex-1 text-sm text-ink ${open ? 'whitespace-pre-wrap break-words' : 'truncate'} ${it.hecho ? 'line-through' : ''}`}>{title}</span>
         </div>
 
-        {cola && <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded shrink-0" style={{ color: COLA_COLOR[cola], background: COLA_COLOR[cola] + '22' }}>{COLA_LABELS[cola] ?? cola}</span>}
-        {esVolverCola && (
-          <button
-            onClick={() => ctx.reactivar(it)}
-            title="Ya te pasé la info — volver a la cola"
-            className="flex items-center gap-1 text-[11px] font-bold text-white rounded-md px-2.5 py-1 shrink-0"
-            style={{ background: COLA_COLOR.pendiente }}
-          >
-            <RotateCcw size={13} /> Volver a la cola
-          </button>
-        )}
-        {esConfirmar && (
-          <>
-            <button
-              onClick={() => ctx.marcarRealizado(it)}
-              className="flex items-center gap-1 text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-md px-2.5 py-1 shrink-0"
-            >
-              <Check size={13} /> Confirmar
-            </button>
-            <button
-              onClick={() => ctx.rechazar(it)}
-              className="flex items-center gap-1 text-[11px] font-bold text-red-500 border border-red-500/50 hover:bg-red-500/10 rounded-md px-2.5 py-1 shrink-0"
-            >
-              <RotateCcw size={13} /> Rechazar
-            </button>
-          </>
-        )}
+        {/* Estado de cola inline solo mientras NO hay acciones abajo (p.ej. spinner "En cola").
+            Cuando la cola terminó (procesado/standby), el estado y los botones van debajo. */}
+        {cola && !esConfirmar && !esVolverCola && <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded shrink-0" style={{ color: COLA_COLOR[cola], background: COLA_COLOR[cola] + '22' }}>{COLA_LABELS[cola] ?? cola}</span>}
         {esNormal && (
           <button
             onClick={() => ctx.marcarRealizado(it)}
@@ -426,6 +402,40 @@ function ItemCard({ it, ctx }: { it: Pendiente; ctx: ItemCtx }) {
         <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded shrink-0 hidden sm:inline" style={{ color: PRIO_COLOR[it.prioridad], background: PRIO_COLOR[it.prioridad] + '22' }}>{PRIO_LABELS[it.prioridad]}</span>
         <button onClick={toggleOpen} className={`text-muted text-[11px] transition-transform shrink-0 ${open ? 'rotate-180' : ''}`}>▼</button>
       </div>
+
+      {/* Estado + acciones de cola DEBAJO (cola terminada): así la descripción de
+          arriba ocupa todo el ancho en vez de competir con los botones a la derecha. */}
+      {(esConfirmar || esVolverCola) && (
+        <div className="flex flex-wrap items-center gap-2 px-4 pb-3" style={{ paddingLeft: '2.6rem' }}>
+          {cola && <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded shrink-0" style={{ color: COLA_COLOR[cola], background: COLA_COLOR[cola] + '22' }}>{COLA_LABELS[cola] ?? cola}</span>}
+          {esVolverCola && (
+            <button
+              onClick={() => ctx.reactivar(it)}
+              title="Ya te pasé la info — volver a la cola"
+              className="flex items-center gap-1 text-[11px] font-bold text-white rounded-md px-2.5 py-1"
+              style={{ background: COLA_COLOR.pendiente }}
+            >
+              <RotateCcw size={13} /> Volver a la cola
+            </button>
+          )}
+          {esConfirmar && (
+            <>
+              <button
+                onClick={() => ctx.marcarRealizado(it)}
+                className="flex items-center gap-1 text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-md px-2.5 py-1"
+              >
+                <Check size={13} /> Confirmar
+              </button>
+              <button
+                onClick={() => ctx.rechazar(it)}
+                className="flex items-center gap-1 text-[11px] font-bold text-red-500 border border-red-500/50 hover:bg-red-500/10 rounded-md px-2.5 py-1"
+              >
+                <RotateCcw size={13} /> Rechazar
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Conclusión: lo que hizo Claude al procesarlo (botón que despliega adentro) */}
       {it.cola_resultado && (
