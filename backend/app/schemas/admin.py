@@ -150,6 +150,7 @@ class EtiguelMirrorIn(BaseModel):
     telefono: str | None = None
     email: str | None = None
     estado: str | None = None
+    prox_contacto: str | None = None   # 'YYYY-MM-DD' próximo contacto; "" = limpiar
     direccion: str | None = None       # "in" | "out" (opcional: solo si hay mensaje)
     texto: str | None = None
 
@@ -172,6 +173,7 @@ class EtiguelMirrorItem(BaseModel):
     telefono: str | None
     email: str | None
     estado: str | None
+    prox_contacto: str | None = None
     ultima_actividad: datetime
     cant_mensajes: int
 

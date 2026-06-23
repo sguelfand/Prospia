@@ -60,6 +60,9 @@ def ingest_etiguel_mirror(
         mirror.email = body.email
     if body.estado is not None:
         mirror.estado = body.estado
+    if body.prox_contacto is not None:
+        # "" (sin fecha en Monday) → limpiar; 'YYYY-MM-DD' → setear.
+        mirror.prox_contacto = body.prox_contacto.strip() or None
     mirror.ultima_actividad = ahora
     db.flush()  # asegura mirror.id para el mensaje
 

@@ -105,6 +105,11 @@ def run_migrations():
             "ALTER TABLE pendientes ADD COLUMN IF NOT EXISTS cola_resultado TEXT"
         ))
 
+        # ── etiguel_mirror: próximo contacto (cadencia/callback espejado) ──
+        conn.execute(text(
+            "ALTER TABLE etiguel_mirror ADD COLUMN IF NOT EXISTS prox_contacto VARCHAR(20)"
+        ))
+
 
 Base.metadata.create_all(bind=engine)
 run_migrations()

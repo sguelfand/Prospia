@@ -1,7 +1,7 @@
 import os
 import random
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import requests
 
@@ -173,6 +173,13 @@ def contactar_prospect(prospect_id: int):
             prospect.estado = "contactado"
             prospect.cant_contactos = contacto_n
             prospect.ult_contacto = ahora
+            # Dejar agendado el próximo contacto = ahora + ventana de cadencia de
+            # este contacto, para verlo en web/app. En el 4°+ no hay ventana → se
+            # deja en None para que la cadencia lo cancele (no se recontacta).
+            cadencia = (config.cadencia_dias if config and config.cadencia_dias
+                        else {"1": 7, "2": 14, "3": 90})
+            dias = cadencia.get(str(contacto_n))
+            prospect.prox_contacto = (ahora + timedelta(days=int(dias))) if dias else None
 
             if wa_enviado:
                 _registrar_historial(db, prospect.id, prospect.tenant_id, "contactado_wa",

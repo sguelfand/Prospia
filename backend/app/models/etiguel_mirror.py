@@ -22,6 +22,8 @@ class EtiguelMirror(Base):
     telefono: Mapped[str | None] = mapped_column(String(50))
     email: Mapped[str | None] = mapped_column(String(255))
     estado: Mapped[str | None] = mapped_column(String(60))
+    # Próximo contacto agendado (cadencia automática o callback pedido). 'YYYY-MM-DD'.
+    prox_contacto: Mapped[str | None] = mapped_column(String(20))
     # Última actividad (último contacto o mensaje): ordena la lista, más reciente arriba.
     ultima_actividad: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True

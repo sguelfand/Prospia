@@ -454,6 +454,7 @@ def etiguel_mirror(tipo: str | None = Query(None), db: Session = Depends(get_db)
             telefono=m.telefono,
             email=m.email,
             estado=m.estado,
+            prox_contacto=m.prox_contacto,
             ultima_actividad=m.ultima_actividad,
             cant_mensajes=len(m.mensajes),
         )
