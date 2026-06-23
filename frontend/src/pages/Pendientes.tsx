@@ -377,10 +377,10 @@ function ItemCard({ it, ctx }: { it: Pendiente; ctx: ItemCtx }) {
           <span className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 bg-emerald-500"><Check size={12} className="text-white" /></span>
         )}
 
-        <div className="flex-1 flex items-center gap-2 cursor-pointer min-w-0" onClick={toggleOpen}>
-          <span className="font-mono text-[11px] font-bold text-muted tabular-nums shrink-0">#{it.id}</span>
-          {badge && <span className="font-mono text-[11px] bg-primary-soft text-accent px-1.5 py-0.5 rounded shrink-0">{badge}</span>}
-          <span className={`flex-1 text-sm text-ink truncate ${it.hecho ? 'line-through' : ''}`}>{title}</span>
+        <div className={`flex-1 flex gap-2 cursor-pointer min-w-0 ${open ? 'items-start' : 'items-center'}`} onClick={toggleOpen}>
+          <span className={`font-mono text-[11px] font-bold text-muted tabular-nums shrink-0 ${open ? 'mt-0.5' : ''}`}>#{it.id}</span>
+          {badge && <span className={`font-mono text-[11px] bg-primary-soft text-accent px-1.5 py-0.5 rounded shrink-0 ${open ? 'mt-px' : ''}`}>{badge}</span>}
+          <span className={`flex-1 text-sm text-ink ${open ? 'whitespace-pre-wrap break-words' : 'truncate'} ${it.hecho ? 'line-through' : ''}`}>{title}</span>
         </div>
 
         {cola && <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded shrink-0" style={{ color: COLA_COLOR[cola], background: COLA_COLOR[cola] + '22' }}>{COLA_LABELS[cola] ?? cola}</span>}
