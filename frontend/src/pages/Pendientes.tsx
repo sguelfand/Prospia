@@ -47,6 +47,7 @@ export default function Pendientes() {
   const [filter, setFilter] = useState<'pending' | 'done' | 'all'>('pending')
   const [areaFilter, setAreaFilter] = useState<Area | ''>('')
   const [orden, setOrden] = useState<'fecha' | 'prioridad'>('fecha')
+  const [vista, setVista] = useState<'areas' | 'todas'>('areas')
   const [openIds, setOpenIds] = useState<Record<number, boolean>>({})
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [modal, setModal] = useState<{ editing: Pendiente | null; rejecting: boolean } | null>(null)
@@ -165,6 +166,12 @@ export default function Pendientes() {
   const done = items.filter((i) => i.hecho).length
   const total = items.length
 
+  const fechaMs = (p: Pendiente) => (p.fecha ? new Date(p.fecha).getTime() : 0)
+  const cmp = (a: Pendiente, b: Pendiente) =>
+    orden === 'prioridad'
+      ? (PRIO_RANK[a.prioridad] ?? 3) - (PRIO_RANK[b.prioridad] ?? 3) || fechaMs(b) - fechaMs(a)
+      : fechaMs(b) - fechaMs(a) || b.id - a.id
+
   const queued = items.filter(enCola)
   const ORDER: Record<string, number> = { pendiente: 0, procesado: 1, standby: 2 }
   const q = [...queued].sort((a, b) => (ORDER[a.cola_estado!] ?? 9) - (ORDER[b.cola_estado!] ?? 9) || b.id - a.id)
@@ -217,6 +224,11 @@ export default function Pendientes() {
         {([['fecha', 'Fecha'], ['prioridad', 'Prioridad']] as const).map(([k, l]) => (
           <Chip key={k} active={orden === k} onClick={() => setOrden(k)}>{l}</Chip>
         ))}
+        <span className="w-px bg-line mx-1.5 my-0.5" />
+        <span className="text-xs text-muted mr-1">Vista:</span>
+        {([['areas', 'Por áreas'], ['todas', 'Todas juntas']] as const).map(([k, l]) => (
+          <Chip key={k} active={vista === k} onClick={() => setVista(k)}>{l}</Chip>
+        ))}
       </div>
 
       {/* Recuadro "Procesando" */}
@@ -240,24 +252,27 @@ export default function Pendientes() {
         </div>
       )}
 
-      {/* Grupos por área */}
-      {AREA_ORDER.map((area) => {
-        const fechaMs = (p: Pendiente) => (p.fecha ? new Date(p.fecha).getTime() : 0)
-        const group = items.filter((i) => visible(i) && i.area === area && !enCola(i)).sort((a, b) =>
-          orden === 'prioridad'
-            ? (PRIO_RANK[a.prioridad] ?? 3) - (PRIO_RANK[b.prioridad] ?? 3) || fechaMs(b) - fechaMs(a)
-            : fechaMs(b) - fechaMs(a) || b.id - a.id,
-        )
-        if (!group.length) return null
-        return (
-          <div key={area} className="mb-7">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted mb-2 px-1">{AREA_LABELS[area]}</p>
-            <div className="space-y-2">{group.map((it) => <ItemCard key={it.id} it={it} ctx={itemCtx} />)}</div>
-          </div>
-        )
-      })}
+      {/* Lista de pendientes: todas juntas o agrupadas por área */}
+      {vista === 'todas' ? (
+        (() => {
+          const lista = items.filter((i) => visible(i) && !enCola(i)).sort(cmp)
+          if (!lista.length) return null
+          return <div className="space-y-2 mb-7">{lista.map((it) => <ItemCard key={it.id} it={it} ctx={itemCtx} />)}</div>
+        })()
+      ) : (
+        AREA_ORDER.map((area) => {
+          const group = items.filter((i) => visible(i) && i.area === area && !enCola(i)).sort(cmp)
+          if (!group.length) return null
+          return (
+            <div key={area} className="mb-7">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted mb-2 px-1">{AREA_LABELS[area]}</p>
+              <div className="space-y-2">{group.map((it) => <ItemCard key={it.id} it={it} ctx={itemCtx} />)}</div>
+            </div>
+          )
+        })
+      )}
 
-      {!mostrarCola && AREA_ORDER.every((area) => !items.some((i) => visible(i) && i.area === area && !enCola(i))) && (
+      {!mostrarCola && !items.some((i) => visible(i) && !enCola(i)) && (
         <p className="text-center text-muted text-sm py-16">Nada que mostrar en este filtro</p>
       )}
 
