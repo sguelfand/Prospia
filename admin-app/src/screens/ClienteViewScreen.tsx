@@ -444,6 +444,7 @@ function MirrorCard({ item, onPress }: { item: EtiguelMirrorItem; onPress: () =>
         {item.telefono ? <IconText name="phone" text={item.telefono} /> : null}
         {item.cant_mensajes > 0 ? <IconText name="message" text={String(item.cant_mensajes)} /> : null}
         <IconText name="clock" text={fmtFecha(item.ultima_actividad)} />
+        {item.prox_contacto ? <IconText name="calendar" text={`Próx. ${fmtFechaCorta(item.prox_contacto)}`} /> : null}
       </View>
     </TouchableOpacity>
   );
@@ -453,6 +454,12 @@ function fmtFecha(iso: string): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "";
   return d.toLocaleString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+// Fecha 'YYYY-MM-DD' → 'dd/mm' sin pasar por Date (evita el corrimiento de día por timezone).
+function fmtFechaCorta(s: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || "");
+  return m ? `${m[3]}/${m[2]}` : s;
 }
 
 // ── Modal de filtros ─────────────────────────────────────────────────────────

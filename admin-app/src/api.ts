@@ -173,6 +173,7 @@ export interface EtiguelMirrorItem {
   telefono: string | null;
   email: string | null;
   estado: string | null;
+  prox_contacto: string | null; // 'YYYY-MM-DD' próximo contacto (cadencia/callback)
   ultima_actividad: string;
   cant_mensajes: number;
 }
