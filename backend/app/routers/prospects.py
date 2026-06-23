@@ -213,6 +213,7 @@ def marcar_en_conversacion(
         )
         db.add(entry)
         prospect.estado = "en_conversacion"
+        prospect.prox_contacto = None  # cliente respondió → se frena el recontacto
         db.commit()
         push.notificar_evento_async(prospect.id, "en_conversacion")
 

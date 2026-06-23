@@ -13,6 +13,7 @@ export interface Prospect {
   cant_contactos: number
   cant_mensajes: number
   ult_contacto: string | null
+  prox_contacto: string | null
   clasificacion: 'ALTO' | 'MEDIO' | 'BAJO' | 'CANCELADO' | null
   clasificacion_detalle: string | null
   clasificacion_verificada: boolean

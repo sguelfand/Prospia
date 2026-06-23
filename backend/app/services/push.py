@@ -90,17 +90,21 @@ def _enviar(tokens: list[str], title: str, body: str, data: dict) -> None:
         print(f"[PUSH] error enviando: {type(e).__name__}: {e}")
 
 
-def _log_aviso(db, tipo: str, title: str, body: str, tenant_id=None, cliente=None, prospect_id=None) -> None:
+def _log_aviso(db, tipo: str, title: str, body: str, tenant_id=None, cliente=None, prospect_id=None) -> int | None:
     """Persiste el push como Aviso (#42) para que quede en el historial de la app.
+    Devuelve el id del aviso creado (para deep-link desde la push) o None si falla.
     Best-effort: si falla, no rompe el envío."""
     from app.models.aviso import Aviso
     try:
-        db.add(Aviso(tipo=tipo, title=title[:160], body=(body or "")[:2000],
-                     tenant_id=tenant_id, cliente=cliente, prospect_id=prospect_id))
+        av = Aviso(tipo=tipo, title=title[:160], body=(body or "")[:2000],
+                   tenant_id=tenant_id, cliente=cliente, prospect_id=prospect_id)
+        db.add(av)
         db.commit()
+        return av.id
     except Exception as e:
         db.rollback()
         print(f"[PUSH] no se pudo guardar el aviso: {type(e).__name__}: {e}")
+        return None
 
 
 def _textos_evento(evento: str, cliente: str, nombre: str, detalle: str | None) -> tuple[str, str]:
@@ -127,9 +131,9 @@ def _enviar_evento_filtrado(db, evento: str, title: str, body: str, tenant_id: i
         d.expo_token for d in db.query(Device).all()
         if d.expo_token in permitidos and _cliente_evento_ok(db, d.expo_token, tenant_id, evento)
     ]
-    _enviar(tokens, title, body, {"tenant_id": tenant_id, "prospect_id": prospect_id, "evento": evento})
-    if tokens:
-        _log_aviso(db, evento, title, body, tenant_id=tenant_id, cliente=cliente, prospect_id=prospect_id)
+    # Persistir el aviso ANTES de enviar para incluir su id en la push (deep-link).
+    aviso_id = _log_aviso(db, evento, title, body, tenant_id=tenant_id, cliente=cliente, prospect_id=prospect_id) if tokens else None
+    _enviar(tokens, title, body, {"tenant_id": tenant_id, "prospect_id": prospect_id, "evento": evento, "aviso_id": aviso_id})
     return len(tokens)
 
 
@@ -199,9 +203,8 @@ def _notificar_error(error_id: int, fuente: str, contenido: str) -> None:
         body = (f"[{fuente}] " + resumen)[:140] if resumen else f"[{fuente}] error capturado"
         # Alerta global, pero respeta el toggle de evento "error_camila" (#38).
         tokens = _tokens_para_evento(db, "error_camila")
-        _enviar(tokens, title, body, {"tipo": "agent_error", "error_id": error_id})
-        if tokens:
-            _log_aviso(db, "error_camila", title, body)
+        aviso_id = _log_aviso(db, "error_camila", title, body) if tokens else None
+        _enviar(tokens, title, body, {"tipo": "agent_error", "error_id": error_id, "aviso_id": aviso_id})
     except Exception as e:
         print(f"[PUSH] error armando alerta de error: {type(e).__name__}: {e}")
     finally:
@@ -222,9 +225,8 @@ def _notificar_aviso(title: str, body: str, data: dict) -> None:
         # Aviso al dueño (primer contacto, consulta de Camila, alertas técnicas):
         # va a TODOS los devices, sin filtro de silencio por cliente.
         tokens = [d.expo_token for d in db.query(Device).all()]
-        _enviar(tokens, title, body, data)
-        if tokens:
-            _log_aviso(db, (data or {}).get("tipo", "aviso"), title, body)
+        aviso_id = _log_aviso(db, (data or {}).get("tipo", "aviso"), title, body) if tokens else None
+        _enviar(tokens, title, body, {**(data or {}), "aviso_id": aviso_id})
     except Exception as e:
         print(f"[PUSH] error armando aviso: {type(e).__name__}: {e}")
     finally:
@@ -242,9 +244,8 @@ def _notificar_global(evento: str, title: str, body: str, data: dict) -> None:
     db = SessionLocal()
     try:
         tokens = _tokens_para_evento(db, evento)
-        _enviar(tokens, title, body, {**data, "evento": evento})
-        if tokens:
-            _log_aviso(db, evento, title, body)
+        aviso_id = _log_aviso(db, evento, title, body) if tokens else None
+        _enviar(tokens, title, body, {**data, "evento": evento, "aviso_id": aviso_id})
     except Exception as e:
         print(f"[PUSH] error armando push global {evento}: {type(e).__name__}: {e}")
     finally:
@@ -261,9 +262,8 @@ def notificar_global(evento: str, title: str, body: str, data: dict | None = Non
     db = SessionLocal()
     try:
         tokens = _tokens_para_evento(db, evento)
-        _enviar(tokens, title, body, {**(data or {}), "evento": evento})
-        if tokens:
-            _log_aviso(db, evento, title, body)
+        aviso_id = _log_aviso(db, evento, title, body) if tokens else None
+        _enviar(tokens, title, body, {**(data or {}), "evento": evento, "aviso_id": aviso_id})
         return len(tokens)
     finally:
         db.close()

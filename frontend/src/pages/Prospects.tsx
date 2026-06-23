@@ -1,4 +1,4 @@
-import { Check, CheckCircle2, Clock, MessageCircle, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Check, CheckCircle2, Clock, Columns, MessageCircle, Pencil, Plus, Trash2, X } from 'lucide-react'
 import React, { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api } from '../api/client'
@@ -466,6 +466,9 @@ function ProspectCard({
           {p.ult_contacto && (
             <span>🕐 {new Date(p.ult_contacto).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })}</span>
           )}
+          {p.prox_contacto && (
+            <span>📅 Próx. {new Date(p.prox_contacto).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })}</span>
+          )}
         </div>
       </div>
 
@@ -631,22 +634,82 @@ function ConversacionPanel({ prospect, onClose }: { prospect: Prospect; onClose:
 
 // ── Columnas redimensionables ────────────────────────────────────────────────
 
+// `label` = nombre de la columna en el selector; `fixed` = no se puede ocultar.
 const COL_DEFS = [
-  { id: 'check',         defaultW: 40,  resizable: false },
-  { id: 'nombre',        defaultW: 180, resizable: true  },
-  { id: 'web',           defaultW: 150, resizable: true  },
-  { id: 'email',         defaultW: 160, resizable: true  },
-  { id: 'whatsapp',      defaultW: 120, resizable: true  },
-  { id: 'termino',       defaultW: 110, resizable: true  },
-  { id: 'rubro',         defaultW: 110, resizable: true  },
-  { id: 'contactos',     defaultW: 90,  resizable: true  },
-  { id: 'ult_contacto',  defaultW: 130, resizable: true  },
-  { id: 'clasificacion', defaultW: 130, resizable: true  },
-  { id: 'estado',        defaultW: 140, resizable: true  },
-  { id: 'acciones',      defaultW: 170, resizable: false },
+  { id: 'check',         defaultW: 40,  resizable: false, fixed: true,  label: '' },
+  { id: 'nombre',        defaultW: 180, resizable: true,  fixed: true,  label: 'Nombre' },
+  { id: 'web',           defaultW: 150, resizable: true,  label: 'Web' },
+  { id: 'email',         defaultW: 160, resizable: true,  label: 'Email' },
+  { id: 'whatsapp',      defaultW: 120, resizable: true,  label: 'WhatsApp' },
+  { id: 'termino',       defaultW: 110, resizable: true,  label: 'Término' },
+  { id: 'rubro',         defaultW: 110, resizable: true,  label: 'Rubro' },
+  { id: 'contactos',     defaultW: 90,  resizable: true,  label: 'Contactos' },
+  { id: 'ult_contacto',  defaultW: 130, resizable: true,  label: 'Últ. contacto' },
+  { id: 'prox_contacto', defaultW: 130, resizable: true,  label: 'Próx. contacto' },
+  { id: 'clasificacion', defaultW: 130, resizable: true,  label: 'Clasificación' },
+  { id: 'estado',        defaultW: 140, resizable: true,  label: 'Estado' },
+  { id: 'acciones',      defaultW: 170, resizable: false, fixed: true,  label: 'Acciones' },
 ]
 
 const WIDTHS_KEY = 'prospects_col_widths_v1'
+const VISIBLE_KEY = 'prospects_visible_cols_v1'
+
+// Columnas que el usuario puede mostrar/ocultar (las `fixed` quedan siempre).
+const TOGGLEABLE = COL_DEFS.filter(c => !c.fixed)
+
+function useVisibleColumns() {
+  const allIds = COL_DEFS.map(c => c.id)
+  const [hidden, setHidden] = useState<Set<string>>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(VISIBLE_KEY) || '[]') as string[]
+      return new Set(raw.filter(id => allIds.includes(id)))
+    } catch { return new Set() }
+  })
+  const isVisible = (id: string) => !hidden.has(id)
+  const toggle = (id: string) => {
+    setHidden(prev => {
+      const n = new Set(prev)
+      n.has(id) ? n.delete(id) : n.add(id)
+      localStorage.setItem(VISIBLE_KEY, JSON.stringify([...n]))
+      return n
+    })
+  }
+  return { isVisible, hidden, toggle }
+}
+
+function ColumnChooser({ isVisible, toggle }: { isVisible: (id: string) => boolean; toggle: (id: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        title="Elegir columnas"
+        className="flex items-center gap-1.5 border border-line rounded-lg px-3 py-2 text-sm text-muted hover:bg-subtle whitespace-nowrap"
+      >
+        <Columns size={15} /> Columnas
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-1 z-50 w-56 bg-card border border-line rounded-xl shadow-xl p-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-faint px-2 py-1.5">Mostrar columnas</p>
+          {TOGGLEABLE.map(c => (
+            <label key={c.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-subtle cursor-pointer text-sm text-ink">
+              <input type="checkbox" checked={isVisible(c.id)} onChange={() => toggle(c.id)} className="accent-primary" />
+              {c.label}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function useColumnWidths() {
   const defaults: Record<string, number> = Object.fromEntries(COL_DEFS.map(c => [c.id, c.defaultW]))
@@ -720,6 +783,9 @@ export default function Prospects() {
   const [historialProspect, setHistorialProspect] = useState<Prospect | null>(null)
   const [conversacionProspect, setConversacionProspect] = useState<Prospect | null>(null)
   const { widths, startResize } = useColumnWidths()
+  const { isVisible, toggle: toggleCol } = useVisibleColumns()
+  const cols = COL_DEFS.filter(c => isVisible(c.id))
+  const tableWidth = cols.reduce((s, c) => s + widths[c.id], 0)
 
   useEffect(() => {
     const e = searchParams.get('estado') ?? ''
@@ -888,6 +954,9 @@ export default function Prospects() {
             Mes: {mesChipLabel(mes)} ✕
           </button>
         )}
+        <div className="hidden md:block ml-auto">
+          <ColumnChooser isVisible={isVisible} toggle={toggleCol} />
+        </div>
       </div>
 
       {/* Mobile: cards */}
@@ -910,64 +979,79 @@ export default function Prospects() {
 
       {/* Desktop: tabla */}
       <div className="hidden md:block bg-card rounded-xl shadow overflow-x-auto">
-        <table className="text-sm" style={{ tableLayout: 'fixed', width: COL_DEFS.reduce((s, c) => s + widths[c.id], 0), minWidth: '100%' }}>
+        <table className="text-sm" style={{ tableLayout: 'fixed', width: tableWidth, minWidth: '100%' }}>
           <colgroup>
-            {COL_DEFS.map(c => <col key={c.id} style={{ width: widths[c.id] }} />)}
+            {cols.map(c => <col key={c.id} style={{ width: widths[c.id] }} />)}
           </colgroup>
           <thead>
             <tr className="border-b bg-app text-muted">
-              <th className="px-4 py-3 text-left">
-                <input type="checkbox" onChange={toggleAll} checked={data ? selected.size === data.items.length && data.items.length > 0 : false} />
-              </th>
-              <ResizableTh id="nombre"        startResize={startResize}>Nombre</ResizableTh>
-              <ResizableTh id="web"           startResize={startResize}>Web</ResizableTh>
-              <ResizableTh id="email"         startResize={startResize}>Email</ResizableTh>
-              <ResizableTh id="whatsapp"      startResize={startResize}>WhatsApp</ResizableTh>
-              <ResizableTh id="termino"       startResize={startResize}>Término</ResizableTh>
-              <ResizableTh id="rubro"         startResize={startResize}>Rubro</ResizableTh>
-              <ResizableTh id="contactos"     startResize={startResize}>Contactos</ResizableTh>
-              <ResizableTh id="ult_contacto"  startResize={startResize}>Últ. contacto</ResizableTh>
-              <ResizableTh id="clasificacion" startResize={startResize}>Clasificación</ResizableTh>
-              <ResizableTh id="estado"        startResize={startResize}>Estado</ResizableTh>
-              <th className="px-4 py-3 text-left">Acciones</th>
+              {isVisible('check') && (
+                <th className="px-4 py-3 text-left">
+                  <input type="checkbox" onChange={toggleAll} checked={data ? selected.size === data.items.length && data.items.length > 0 : false} />
+                </th>
+              )}
+              {isVisible('nombre')        && <ResizableTh id="nombre"        startResize={startResize}>Nombre</ResizableTh>}
+              {isVisible('web')           && <ResizableTh id="web"           startResize={startResize}>Web</ResizableTh>}
+              {isVisible('email')         && <ResizableTh id="email"         startResize={startResize}>Email</ResizableTh>}
+              {isVisible('whatsapp')      && <ResizableTh id="whatsapp"      startResize={startResize}>WhatsApp</ResizableTh>}
+              {isVisible('termino')       && <ResizableTh id="termino"       startResize={startResize}>Término</ResizableTh>}
+              {isVisible('rubro')         && <ResizableTh id="rubro"         startResize={startResize}>Rubro</ResizableTh>}
+              {isVisible('contactos')     && <ResizableTh id="contactos"     startResize={startResize}>Contactos</ResizableTh>}
+              {isVisible('ult_contacto')  && <ResizableTh id="ult_contacto"  startResize={startResize}>Últ. contacto</ResizableTh>}
+              {isVisible('prox_contacto') && <ResizableTh id="prox_contacto" startResize={startResize}>Próx. contacto</ResizableTh>}
+              {isVisible('clasificacion') && <ResizableTh id="clasificacion" startResize={startResize}>Clasificación</ResizableTh>}
+              {isVisible('estado')        && <ResizableTh id="estado"        startResize={startResize}>Estado</ResizableTh>}
+              {isVisible('acciones')      && <th className="px-4 py-3 text-left">Acciones</th>}
             </tr>
           </thead>
           <tbody>
             {data?.items.map(p => (
               <tr key={p.id} className="border-b hover:bg-app">
-                <td className="px-4 py-3">
-                  <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />
-                </td>
-                <td className="px-4 py-3 font-medium truncate overflow-hidden">{p.nombre}</td>
-                <td className="px-4 py-3 truncate overflow-hidden">
-                  {p.url ? <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">{p.url.replace(/^https?:\/\//, '')}</a> : '—'}
-                </td>
-                <td className="px-4 py-3 text-muted truncate overflow-hidden">{p.email || '—'}</td>
-                <td className="px-4 py-3 text-muted truncate overflow-hidden">{p.whatsapp || '—'}</td>
-                <td className="px-4 py-3 text-muted text-xs truncate overflow-hidden">{p.termino_texto || '—'}</td>
-                <td className="px-4 py-3 text-muted text-xs truncate overflow-hidden">{p.rubro_nombre || '—'}</td>
-                <td className="px-4 py-3 text-center">
-                  {p.cant_contactos > 0
-                    ? <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary-soft text-accent text-xs font-semibold">{p.cant_contactos}</span>
-                    : <span className="text-faint">—</span>
-                  }
-                </td>
-                <td className="px-4 py-3 text-muted text-xs whitespace-nowrap">{formatDate(p.ult_contacto)}</td>
-                <td className="px-4 py-3">
-                  <ClasificacionCell prospect={p} onVerificar={toggleVerificacion} onCambiar={cambiarClasificacion} />
-                </td>
-                <td className="px-4 py-3">
-                  <select
-                    value={p.estado}
-                    onChange={e => changeEstado(p.id, e.target.value)}
-                    className="text-xs border-0 bg-transparent cursor-pointer focus:outline-none"
-                    style={{ color: ESTADOS[p.estado]?.color }}
-                  >
-                    {Object.entries(ESTADOS).map(([k, v]) => (
-                      <option key={k} value={k}>{v.label}</option>
-                    ))}
-                  </select>
-                </td>
+                {isVisible('check') && (
+                  <td className="px-4 py-3">
+                    <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />
+                  </td>
+                )}
+                {isVisible('nombre') && <td className="px-4 py-3 font-medium truncate overflow-hidden">{p.nombre}</td>}
+                {isVisible('web') && (
+                  <td className="px-4 py-3 truncate overflow-hidden">
+                    {p.url ? <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">{p.url.replace(/^https?:\/\//, '')}</a> : '—'}
+                  </td>
+                )}
+                {isVisible('email') && <td className="px-4 py-3 text-muted truncate overflow-hidden">{p.email || '—'}</td>}
+                {isVisible('whatsapp') && <td className="px-4 py-3 text-muted truncate overflow-hidden">{p.whatsapp || '—'}</td>}
+                {isVisible('termino') && <td className="px-4 py-3 text-muted text-xs truncate overflow-hidden">{p.termino_texto || '—'}</td>}
+                {isVisible('rubro') && <td className="px-4 py-3 text-muted text-xs truncate overflow-hidden">{p.rubro_nombre || '—'}</td>}
+                {isVisible('contactos') && (
+                  <td className="px-4 py-3 text-center">
+                    {p.cant_contactos > 0
+                      ? <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary-soft text-accent text-xs font-semibold">{p.cant_contactos}</span>
+                      : <span className="text-faint">—</span>
+                    }
+                  </td>
+                )}
+                {isVisible('ult_contacto') && <td className="px-4 py-3 text-muted text-xs whitespace-nowrap">{formatDate(p.ult_contacto)}</td>}
+                {isVisible('prox_contacto') && <td className="px-4 py-3 text-muted text-xs whitespace-nowrap">{p.prox_contacto ? formatDate(p.prox_contacto) : '—'}</td>}
+                {isVisible('clasificacion') && (
+                  <td className="px-4 py-3">
+                    <ClasificacionCell prospect={p} onVerificar={toggleVerificacion} onCambiar={cambiarClasificacion} />
+                  </td>
+                )}
+                {isVisible('estado') && (
+                  <td className="px-4 py-3">
+                    <select
+                      value={p.estado}
+                      onChange={e => changeEstado(p.id, e.target.value)}
+                      className="text-xs border-0 bg-transparent cursor-pointer focus:outline-none"
+                      style={{ color: ESTADOS[p.estado]?.color }}
+                    >
+                      {Object.entries(ESTADOS).map(([k, v]) => (
+                        <option key={k} value={k}>{v.label}</option>
+                      ))}
+                    </select>
+                  </td>
+                )}
+                {isVisible('acciones') && (
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1.5">
                     <button
@@ -1000,6 +1084,7 @@ export default function Prospects() {
                     </button>
                   </div>
                 </td>
+                )}
               </tr>
             ))}
           </tbody>
