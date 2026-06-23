@@ -762,11 +762,11 @@ function ResizableTh({ id, children, startResize }: {
   return (
     <th className="px-4 py-3 text-left relative">
       {children}
-      {/* Raya divisoria visible siempre (con el color del hover) para que se note
-          que la columna se puede redimensionar; en hover toma el ámbar de marca. */}
+      {/* Raya divisoria siempre visible pero muy leve: azul apenas más claro que
+          el fondo (token de línea). En hover toma el ámbar de marca como feedback. */}
       <div
         onMouseDown={e => startResize(id, e)}
-        className="absolute right-0 top-2 bottom-2 w-[3px] rounded-full cursor-col-resize bg-faint hover:bg-accent transition-colors"
+        className="absolute right-0 top-2 bottom-2 w-[3px] rounded-full cursor-col-resize bg-line hover:bg-accent transition-colors"
       />
     </th>
   )
