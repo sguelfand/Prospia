@@ -97,10 +97,13 @@ function Routes() {
   // Al tocar una notificación, ir al feed de Avisos.
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data as { tenant_id?: number; tipo?: string };
+      const data = response.notification.request.content.data as { tenant_id?: number; tipo?: string; aviso_id?: number };
       if (!navigationRef.isReady()) return;
       if (data?.tipo === "agent_error") {
         navigationRef.navigate("Errores");
+      } else if (data?.aviso_id != null) {
+        // Abrir directamente ESE aviso en Avisos (deep-link).
+        navigationRef.navigate("Avisos", { avisoId: data.aviso_id });
       } else if (data?.tenant_id != null) {
         navigationRef.navigate("Avisos");
       }

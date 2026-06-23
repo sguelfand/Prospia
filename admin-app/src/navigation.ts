@@ -17,7 +17,7 @@ export type DrawerParamList = {
   EtiguelMirrorDetail: { item: EtiguelMirrorItem };
   Errores: undefined;
   Pendientes: undefined;
-  Avisos: undefined;
+  Avisos: { avisoId?: number } | undefined;
   Configuracion: undefined;
   Perfil: undefined;
   Notificaciones: undefined;

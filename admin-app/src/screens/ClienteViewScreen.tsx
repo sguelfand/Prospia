@@ -382,6 +382,7 @@ function ProspectCard({ prospect, onPress }: { prospect: ProspectRow; onPress: (
             <IconText name="message" text={`${prospect.cant_contactos} ${prospect.cant_contactos === 1 ? "contacto" : "contactos"}`} />
           ) : null}
           {prospect.ult_contacto ? <IconText name="clock" text={fechaCorta(prospect.ult_contacto)} /> : null}
+          {prospect.prox_contacto ? <IconText name="calendar" text={`Próx. ${fechaCorta(prospect.prox_contacto)}`} /> : null}
         </View>
       </TouchableOpacity>
 
@@ -437,7 +438,7 @@ function MirrorCard({ item, onPress }: { item: EtiguelMirrorItem; onPress: () =>
     <TouchableOpacity style={styles.card} onPress={onPress}>
       <View style={styles.cardRow}>
         <Text style={styles.cardTitle} numberOfLines={1}>{item.nombre ?? "(sin nombre)"}</Text>
-        {item.estado ? <Text style={styles.leadEstado}>{item.estado}</Text> : null}
+        {item.estado ? <Text style={styles.leadEstado} numberOfLines={2}>{item.estado}</Text> : null}
       </View>
       <View style={styles.cardMeta}>
         {item.telefono ? <IconText name="phone" text={item.telefono} /> : null}
@@ -597,7 +598,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: colors.card, borderRadius: 12, marginBottom: 10, overflow: "hidden" },
   cardBody: { padding: 14 },
   cardRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  cardTitle: { color: colors.text, fontSize: 15, fontWeight: "700" },
+  cardTitle: { color: colors.text, fontSize: 15, fontWeight: "700", flex: 1, marginRight: 8 },
   cardUrl: { color: colors.blue, fontSize: 12, marginTop: 2 },
   clasifChip: { color: colors.textDim, fontSize: 11, fontWeight: "700", borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, overflow: "hidden", textTransform: "capitalize" },
   cardMeta: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 12, marginTop: 8 },
@@ -611,7 +612,7 @@ const styles = StyleSheet.create({
   verMas: { borderTopWidth: 1, borderTopColor: colors.border, paddingVertical: 8, alignItems: "center" },
   verMasText: { color: colors.textDim, fontSize: 12, fontWeight: "600" },
 
-  leadEstado: { color: colors.primary, fontSize: 11, fontWeight: "700", borderColor: colors.primary, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, overflow: "hidden" },
+  leadEstado: { color: colors.primary, fontSize: 11, fontWeight: "700", borderColor: colors.primary, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, flexShrink: 0, maxWidth: "52%", textAlign: "right" },
 
   collapsible: { marginBottom: 14 },
   collapsibleHeader: { flexDirection: "row", alignItems: "center", paddingVertical: 10, borderBottomColor: colors.border, borderBottomWidth: 1, marginBottom: 10 },

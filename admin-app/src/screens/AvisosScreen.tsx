@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Aviso, eliminarAvisos, getAvisos } from "../api";
@@ -30,7 +30,7 @@ function iconoPara(tipo: string): { name: IconName; color: string } {
   return { name: "bell", color: colors.textDim };
 }
 
-export default function AvisosScreen({ navigation }: AvisosProps) {
+export default function AvisosScreen({ navigation, route }: AvisosProps) {
   const { token } = useAuth();
   const insets = useSafeAreaInsets();
   const [avisos, setAvisos] = useState<Aviso[]>([]);
@@ -39,6 +39,7 @@ export default function AvisosScreen({ navigation }: AvisosProps) {
   const [error, setError] = useState<string | null>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [detalle, setDetalle] = useState<Aviso | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -55,6 +56,16 @@ export default function AvisosScreen({ navigation }: AvisosProps) {
 
   useEffect(() => { load(); }, [load]);
 
+  // Deep-link: si llegamos desde una push con avisoId, abrir ese aviso apenas
+  // estén cargados. Después limpiamos el param para no reabrirlo.
+  useEffect(() => {
+    const id = route.params?.avisoId;
+    if (id == null || avisos.length === 0) return;
+    const a = avisos.find((x) => x.id === id);
+    if (a) setDetalle(a);
+    navigation.setParams({ avisoId: undefined });
+  }, [route.params?.avisoId, avisos]);
+
   const salirSeleccion = () => { setSelectMode(false); setSelected(new Set()); };
   const toggle = (id: number) =>
     setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -70,6 +81,18 @@ export default function AvisosScreen({ navigation }: AvisosProps) {
 
   const onCard = (a: Aviso) => {
     if (selectMode) { toggle(a.id); return; }
+    setDetalle(a); // abrir el aviso completo (descripción larga + acciones)
+  };
+
+  const eliminarUno = async (a: Aviso) => {
+    if (!token) return;
+    setAvisos((prev) => prev.filter((x) => x.id !== a.id));
+    setDetalle(null);
+    try { await eliminarAvisos(token, [a.id]); } catch { load(); }
+  };
+
+  const irACliente = (a: Aviso) => {
+    setDetalle(null);
     if (a.tenant_id != null) {
       navigation.navigate("ClienteView", { tenantId: a.tenant_id, nombre: a.cliente ?? "Cliente", fuente: "plataforma" });
     }
@@ -143,6 +166,48 @@ export default function AvisosScreen({ navigation }: AvisosProps) {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* Detalle del aviso: descripción completa + acciones */}
+      <Modal visible={detalle != null} transparent animationType="fade" onRequestClose={() => setDetalle(null)}>
+        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setDetalle(null)}>
+          <TouchableOpacity style={styles.modalCard} activeOpacity={1} onPress={() => {}}>
+            {detalle && (
+              <>
+                <View style={styles.modalHeader}>
+                  <View style={styles.modalIcon}><Icon name={iconoPara(detalle.tipo).name} size={22} color={iconoPara(detalle.tipo).color} /></View>
+                  <Text style={styles.modalTitle}>{detalle.title}</Text>
+                </View>
+                <Text style={styles.modalTiempo}>
+                  {tiempoRelativo(detalle.fecha)}{detalle.cliente ? ` · ${detalle.cliente}` : ""}
+                </Text>
+                <ScrollView style={styles.modalBodyScroll} contentContainerStyle={{ paddingVertical: 4 }}>
+                  <Text style={styles.modalBody}>{detalle.body || "(sin descripción)"}</Text>
+                </ScrollView>
+                <View style={styles.modalActions}>
+                  {detalle.tenant_id != null && (
+                    <TouchableOpacity style={styles.modalBtnGhost} onPress={() => irACliente(detalle)}>
+                      <Text style={styles.modalBtnGhostText}>Ver cliente</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    style={styles.modalBtnDanger}
+                    onPress={() => Alert.alert("Eliminar", "¿Eliminar este aviso?", [
+                      { text: "Cancelar", style: "cancel" },
+                      { text: "Eliminar", style: "destructive", onPress: () => eliminarUno(detalle) },
+                    ])}
+                  >
+                    <Icon name="x" size={14} color="#fff" />
+                    <Text style={styles.modalBtnDangerText}>Eliminar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.modalBtnPrimary} onPress={() => setDetalle(null)}>
+                    <Text style={styles.modalBtnPrimaryText}>Cerrar</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -170,4 +235,20 @@ const styles = StyleSheet.create({
   delBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: colors.red, borderRadius: 10, paddingVertical: 12 },
   delBtnOff: { opacity: 0.5 },
   delBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center", padding: 22 },
+  modalCard: { backgroundColor: colors.card, borderRadius: 18, padding: 18, width: "100%", maxWidth: 440, maxHeight: "80%" },
+  modalHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 4 },
+  modalIcon: { marginTop: 2 },
+  modalTitle: { color: colors.text, fontSize: 17, fontWeight: "800", flex: 1 },
+  modalTiempo: { color: colors.textDim, fontSize: 12, marginBottom: 12, marginLeft: 32 },
+  modalBodyScroll: { maxHeight: 320 },
+  modalBody: { color: colors.text, fontSize: 15, lineHeight: 22 },
+  modalActions: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8, marginTop: 16, flexWrap: "wrap" },
+  modalBtnGhost: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: colors.border, marginRight: "auto" },
+  modalBtnGhostText: { color: colors.text, fontSize: 14, fontWeight: "700" },
+  modalBtnDanger: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, backgroundColor: colors.red },
+  modalBtnDangerText: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  modalBtnPrimary: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, backgroundColor: colors.primary },
+  modalBtnPrimaryText: { color: colors.bg, fontSize: 14, fontWeight: "800" },
 });
