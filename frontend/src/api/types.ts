@@ -65,6 +65,28 @@ export interface DashboardStats {
   }
 }
 
+export interface ClienteComparativa {
+  tenant_id: number
+  nombre: string
+  fuente: string
+  total_prospects: number
+  contactados: number
+  en_conversacion: number
+  interesados: number
+  interesados_mes: number
+  tasa_respuesta: number
+  tasa_conversion: number
+}
+
+export interface DashboardComparativa {
+  total_clientes: number
+  total_prospects: number
+  en_conversacion: number
+  interesados: number
+  interesados_mes: number
+  clientes: ClienteComparativa[]
+}
+
 export const ESTADOS: Record<string, { label: string; color: string }> = {
   sin_contactar:   { label: 'Sin contactar',    color: '#94a3b8' },
   en_cola:         { label: 'En cola',           color: '#3b82f6' },

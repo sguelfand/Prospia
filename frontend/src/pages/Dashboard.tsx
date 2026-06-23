@@ -5,7 +5,7 @@ import {
   Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import { api } from '../api/client'
-import { DashboardStats, ESTADOS } from '../api/types'
+import { ClienteComparativa, DashboardComparativa, DashboardStats, ESTADOS } from '../api/types'
 
 // Cada serie de la evolución histórica → estado por el que filtra en Prospects
 const SERIE_ESTADO: Record<string, string> = {
@@ -189,9 +189,26 @@ function TerminoChart({ data, navigate }: { data: TerminoRow[]; navigate: Return
   )
 }
 
-// ── Dashboard ────────────────────────────────────────────────────────────────
+// ── Dashboard (wrapper) ──────────────────────────────────────────────────────
+// Superadmin (nivel 1) fuera de impersonación → comparativa de TODOS los clientes.
+// Cualquier otro caso (cliente, o superadmin "viendo como cliente") → su dashboard.
 
 export default function Dashboard() {
+  const [nivel, setNivel] = useState<number | null>(null)
+  const impersonating = !!localStorage.getItem('admin_token')
+
+  useEffect(() => {
+    api.get<{ nivel: number }>('/auth/me').then(me => setNivel(me.nivel)).catch(() => setNivel(2))
+  }, [])
+
+  if (nivel === null) return <div className="text-faint p-4">Cargando...</div>
+  if (nivel === 1 && !impersonating) return <ComparativaDashboard />
+  return <ClienteDashboard />
+}
+
+// ── Dashboard de un cliente (vista por tenant) ───────────────────────────────
+
+function ClienteDashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const navigate = useNavigate()
 
@@ -369,6 +386,130 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Dashboard comparativo (superadmin) ───────────────────────────────────────
+
+// "Ver como cliente" desde la comparativa: impersona ese tenant y recarga.
+async function verComoCliente(tenantId: number) {
+  try {
+    const r = await api.post<{ access_token: string; cliente: string }>(`/admin/clientes/${tenantId}/impersonate`)
+    localStorage.setItem('admin_token', localStorage.getItem('token') || '')
+    localStorage.setItem('token', r.access_token)
+    localStorage.setItem('viewing_as', r.cliente)
+    window.location.href = '/dashboard'
+  } catch {
+    alert('No se pudo ver como ese cliente (¿tiene usuario?).')
+  }
+}
+
+// Gráfico de barras comparativo por cliente. value = métrica; pct para % (tasas).
+function CompBarChart({ title, sub, data, color, pct, onPick }: {
+  title: string; sub?: string; color: string; pct?: boolean
+  data: { nombre: string; tenant_id: number; fuente: string; value: number }[]
+  onPick: (c: { tenant_id: number; fuente: string }) => void
+}) {
+  return (
+    <div className="bg-card rounded-xl shadow p-4 md:p-5">
+      <h2 className="font-semibold mb-1 text-sm md:text-base">{title}</h2>
+      {sub && <p className="text-xs text-faint mb-2">{sub}</p>}
+      <ResponsiveContainer width="100%" height={Math.max(160, data.length * 38)}>
+        <BarChart data={data} layout="vertical" margin={{ top: 5, bottom: 5, left: 10, right: 16 }}>
+          <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+          <XAxis type="number" tick={{ fontSize: 10 }} domain={pct ? [0, 100] : undefined} />
+          <YAxis type="category" dataKey="nombre" tick={{ fontSize: 10 }} width={110} />
+          <Tooltip cursor={{ fill: 'rgba(0,0,0,.04)' }}
+            formatter={(v: any) => [pct ? `${v}%` : v, title]} />
+          <Bar dataKey="value" fill={color} radius={[0, 3, 3, 0]} cursor="pointer"
+            onClick={(d: any) => onPick(d?.payload)} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+function ComparativaDashboard() {
+  const [data, setData] = useState<DashboardComparativa | null>(null)
+
+  useEffect(() => {
+    api.get<DashboardComparativa>('/admin/comparativa').then(setData).catch(console.error)
+  }, [])
+
+  if (!data) return <div className="text-faint p-4">Cargando...</div>
+
+  // Solo los clientes de la Plataforma se pueden "ver como" (Etiguel vive en Monday).
+  const pick = (c: { tenant_id: number; fuente: string }) => {
+    if (c.fuente === 'plataforma') verComoCliente(c.tenant_id)
+  }
+  const barData = (sel: (c: ClienteComparativa) => number) =>
+    [...data.clientes]
+      .map(c => ({ nombre: c.nombre, tenant_id: c.tenant_id, fuente: c.fuente, value: sel(c) }))
+      .sort((a, b) => b.value - a.value)
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-xl md:text-2xl font-bold">Dashboard — Todos los clientes</h1>
+        <p className="text-xs text-faint mt-0.5">Comparativa entre clientes. Clickeá un cliente para verlo en detalle.</p>
+      </div>
+
+      {/* KPIs globales */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        <KpiCard label="Clientes"        value={fmt(data.total_clientes)}  color="#1e293b" />
+        <KpiCard label="Prospects"       value={fmt(data.total_prospects)} color="#3b82f6" />
+        <KpiCard label="En conversación" value={fmt(data.en_conversacion)}  color={ESTADOS.en_conversacion.color} />
+        <KpiCard label="Interesados"     value={fmt(data.interesados)}      color={ESTADOS.interesado.color} />
+        <KpiCard label="Interesados (mes)" value={fmt(data.interesados_mes)} color="#22c55e" />
+      </div>
+
+      {/* Barras comparativas */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <CompBarChart title="Prospects por cliente"  data={barData(c => c.total_prospects)} color="#3b82f6" onPick={pick} />
+        <CompBarChart title="Interesados por cliente" data={barData(c => c.interesados)}     color="#22c55e" onPick={pick} />
+        <CompBarChart title="Tasa de respuesta"  sub="respondieron / contactados" pct data={barData(c => c.tasa_respuesta)}  color="#8b5cf6" onPick={pick} />
+        <CompBarChart title="Tasa de conversión" sub="interesados / contactados"  pct data={barData(c => c.tasa_conversion)} color="#f59e0b" onPick={pick} />
+      </div>
+
+      {/* Tabla detalle por cliente */}
+      <div className="bg-card rounded-xl shadow overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-line text-muted text-left">
+              <th className="px-4 py-3">Cliente</th>
+              <th className="px-4 py-3 text-right">Prospects</th>
+              <th className="px-4 py-3 text-right">Contactados</th>
+              <th className="px-4 py-3 text-right">En conv.</th>
+              <th className="px-4 py-3 text-right">Interesados</th>
+              <th className="px-4 py-3 text-right">Int./mes</th>
+              <th className="px-4 py-3 text-right">T. resp.</th>
+              <th className="px-4 py-3 text-right">T. conv.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.clientes.map(c => (
+              <tr
+                key={`${c.fuente}-${c.tenant_id}`}
+                onClick={() => pick(c)}
+                className={`border-b border-line ${c.fuente === 'plataforma' ? 'hover:bg-app cursor-pointer' : ''}`}
+              >
+                <td className="px-4 py-3 font-medium">
+                  {c.nombre}
+                  {c.fuente === 'etiguel' && <span className="ml-2 text-[10px] font-mono bg-primary-soft text-accent px-1.5 py-0.5 rounded">Etiguel</span>}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums">{fmt(c.total_prospects)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{fmt(c.contactados)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{fmt(c.en_conversacion)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{fmt(c.interesados)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{fmt(c.interesados_mes)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{c.tasa_respuesta}%</td>
+                <td className="px-4 py-3 text-right tabular-nums">{c.tasa_conversion}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

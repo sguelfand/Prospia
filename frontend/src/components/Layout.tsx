@@ -38,6 +38,11 @@ export default function Layout() {
   const viewingAs   = localStorage.getItem('viewing_as')
   const impersonating = !!adminToken
 
+  // El superadmin fuera de impersonación solo ve el Dashboard (comparativa de
+  // clientes). Prospects/Términos son de un cliente puntual → aparecen al "ver
+  // como un cliente". Un cliente normal (o el superadmin impersonando) ve todo.
+  const navItems = nivel === 1 && !impersonating ? nav.filter(n => n.to === '/dashboard') : nav
+
   useEffect(() => {
     api.get<{ nivel: number }>('/auth/me').then(me => setNivel(me.nivel)).catch(() => {})
   }, [])
@@ -118,7 +123,7 @@ export default function Layout() {
             </div>
             <nav className="flex-1 py-4">
               {nivel === 1 && !impersonating && verComoSelect}
-              {nav.map(({ to, label, icon: Icon }) => {
+              {navItems.map(({ to, label, icon: Icon }) => {
                 const active = location.pathname.startsWith(to)
                 return (
                   <Link key={to} to={to} onClick={() => setMobileOpen(false)} className={navClass(active)}>
@@ -205,7 +210,7 @@ export default function Layout() {
         )}
         <nav className="flex-1 py-4">
           {nivel === 1 && !impersonating && !collapsed && verComoSelect}
-          {nav.map(({ to, label, icon: Icon }) => {
+          {navItems.map(({ to, label, icon: Icon }) => {
             const active = location.pathname.startsWith(to)
             return (
               <Link key={to} to={to} title={collapsed ? label : undefined} className={navClass(active, collapsed)}>
