@@ -32,6 +32,7 @@ import NotificacionesScreen from "./src/screens/NotificacionesScreen";
 import PendientesScreen from "./src/screens/PendientesScreen";
 import PerfilScreen from "./src/screens/PerfilScreen";
 import ProspectDetailScreen from "./src/screens/ProspectDetailScreen";
+import TokensScreen from "./src/screens/TokensScreen";
 import { colors } from "./src/theme";
 
 const Drawer = createDrawerNavigator<DrawerParamList>();
@@ -82,7 +83,8 @@ function AppDrawer() {
       <Drawer.Screen name="Configuracion" component={ConfiguracionScreen} options={{ title: "Configuración" }} />
       <Drawer.Screen name="Perfil" component={PerfilScreen} options={{ title: "Perfil" }} />
       <Drawer.Screen name="Notificaciones" component={NotificacionesScreen} options={{ title: "Notificaciones" }} />
-      <Drawer.Screen name="Monitoreo" component={MonitoreoScreen} options={{ title: "Monitoreo" }} />
+      <Drawer.Screen name="Monitoreo" component={MonitoreoScreen} options={{ title: "Servicios" }} />
+      <Drawer.Screen name="Tokens" component={TokensScreen} options={{ title: "Tokens" }} />
       <Drawer.Screen name="ClienteNotificaciones" component={ClienteNotificacionesScreen} options={{ title: "" }} />
     </Drawer.Navigator>
   );

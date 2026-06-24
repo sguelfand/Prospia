@@ -21,6 +21,7 @@ EVENTOS_PUSH: list[tuple[str, str]] = [
     ("necesita_autorizacion", "Necesita tu autorización"),
     ("servicio_caido", "Servicio caído (monitoreo)"),
     ("servicio_recuperado", "Servicio recuperado (monitoreo)"),
+    ("tokens_oportunidad", "Oportunidad de mejora de consumo (tokens)"),
 ]
 EVENTOS_PUSH_KEYS = [k for k, _ in EVENTOS_PUSH]
 

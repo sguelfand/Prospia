@@ -354,6 +354,37 @@ export const setMonitoreoIntervalo = (token: string, intervalSeconds: number) =>
     token,
   );
 
+// ── Tokens: auditor de consumo de Camila ─────────────────────────────────────
+export interface TokenSource { id: string; nombre: string }
+export interface TokenTotales {
+  input: number; output: number; cacheRead: number; cacheWrite: number; total: number;
+  llamadas: number; costo_usd: number; errores: number; timeouts: number; compactaciones: number;
+}
+export interface TokenConv {
+  sesion: string; agente: string; tokens: number; costo_usd: number;
+  llamadas: number; timeouts: number; errores: number; ejemplo: string | null;
+}
+export interface TokenOportunidad {
+  tipo: string; severidad: "alta" | "media" | "baja"; titulo: string; detalle: string; sesion?: string;
+}
+export interface TokenAgg { tokens: number; costo_usd: number; llamadas: number }
+export interface TokenUltimo {
+  fecha: string; totales: TokenTotales;
+  por_agente: Record<string, TokenAgg>; por_modelo: Record<string, TokenAgg>;
+  top_conversaciones: TokenConv[]; oportunidades: TokenOportunidad[];
+}
+export interface TokenTrend { fecha: string; costo_usd: number; total_tokens: number; errores: number; oportunidades: number }
+export interface TokenAudit { source: string; ultimo: TokenUltimo | null; tendencia: TokenTrend[] }
+
+export const getTokenSources = (token: string) =>
+  request<TokenSource[]>("/admin/tokens/sources", {}, token);
+
+export const getTokenAudit = (token: string, source: string, days = 14) =>
+  request<TokenAudit>(`/admin/tokens/audit?source=${encodeURIComponent(source)}&days=${days}`, {}, token);
+
+export const recomputeTokens = (token: string, source: string) =>
+  request<TokenUltimo>(`/admin/tokens/recompute?source=${encodeURIComponent(source)}`, { method: "POST" }, token);
+
 export const getEtiguelLeads = (token: string) =>
   request<EtiguelLead[]>("/admin/etiguel/leads", {}, token);
 
