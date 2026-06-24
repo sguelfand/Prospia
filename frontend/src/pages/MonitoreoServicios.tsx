@@ -7,6 +7,7 @@ type Estado = 'up' | 'down' | 'warn' | 'unknown'
 type Servicio = {
   slug: string
   nombre: string
+  descripcion: string | null
   grupo: string
   estado: Estado
   last_check: string | null
@@ -178,7 +179,8 @@ export default function MonitoreoServicios() {
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-ink truncate">{s.nombre}</span>
+                        <span className="text-sm font-semibold text-ink truncate">{s.nombre}</span>
+                        {s.descripcion && <span className="text-xs text-muted truncate">{s.descripcion}</span>}
                         <span
                           className="text-[11px] font-medium px-1.5 py-0.5 rounded border"
                           style={{ color: info.color, borderColor: info.color + '55', backgroundColor: info.color + '18' }}

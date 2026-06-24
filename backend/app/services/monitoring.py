@@ -145,17 +145,17 @@ def _check_apify():
     return _reachable("https://api.apify.com/v2")
 
 
-# slug, nombre, grupo, critico, fn
+# slug, nombre (= proveedor, para identificar rápido), descripcion (al lado), grupo, critico, fn
 CHECKS: list[dict] = [
-    {"slug": "etiguel_webhook", "nombre": "Webhook Etiguel", "grupo": "Etiguel (MyClaw)", "critico": True, "fn": _check_etiguel_webhook},
-    {"slug": "camila_gateway", "nombre": "Gateway de Camila", "grupo": "Etiguel (MyClaw)", "critico": True, "fn": _check_camila_gateway},
-    {"slug": "prospia_web", "nombre": "prospia.app (web)", "grupo": "Prospia (Hetzner)", "critico": True, "fn": _check_prospia_web},
-    {"slug": "prospia_api", "nombre": "API Prospia", "grupo": "Prospia (Hetzner)", "critico": True, "fn": _check_prospia_api},
-    {"slug": "varen_app", "nombre": "varen.prospia.app", "grupo": "Prospia (Hetzner)", "critico": True, "fn": _check_varen_app},
-    {"slug": "database", "nombre": "Base de datos", "grupo": "Prospia (Hetzner)", "critico": True, "fn": _check_database},
-    {"slug": "monday", "nombre": "Monday API", "grupo": "Externos", "critico": False, "fn": _check_monday},
-    {"slug": "anthropic", "nombre": "Anthropic API", "grupo": "Externos", "critico": False, "fn": _check_anthropic},
-    {"slug": "apify", "nombre": "Apify API", "grupo": "Externos", "critico": False, "fn": _check_apify},
+    {"slug": "etiguel_webhook", "nombre": "Cloudflare", "descripcion": "Webhook Etiguel", "grupo": "Etiguel (MyClaw)", "critico": True, "fn": _check_etiguel_webhook},
+    {"slug": "camila_gateway", "nombre": "OpenClaw", "descripcion": "Gateway de Camila", "grupo": "Etiguel (MyClaw)", "critico": True, "fn": _check_camila_gateway},
+    {"slug": "prospia_web", "nombre": "Coolify", "descripcion": "prospia.app (web)", "grupo": "Prospia (Hetzner)", "critico": True, "fn": _check_prospia_web},
+    {"slug": "prospia_api", "nombre": "Coolify", "descripcion": "API Prospia", "grupo": "Prospia (Hetzner)", "critico": True, "fn": _check_prospia_api},
+    {"slug": "varen_app", "nombre": "Coolify", "descripcion": "varen.prospia.app", "grupo": "Prospia (Hetzner)", "critico": True, "fn": _check_varen_app},
+    {"slug": "database", "nombre": "PostgreSQL", "descripcion": "Base de datos", "grupo": "Prospia (Hetzner)", "critico": True, "fn": _check_database},
+    {"slug": "monday", "nombre": "Monday", "descripcion": "API de leads", "grupo": "Externos", "critico": False, "fn": _check_monday},
+    {"slug": "anthropic", "nombre": "Anthropic", "descripcion": "Modelo de Camila", "grupo": "Externos", "critico": False, "fn": _check_anthropic},
+    {"slug": "apify", "nombre": "Apify", "descripcion": "Scraping", "grupo": "Externos", "critico": False, "fn": _check_apify},
 ]
 _BY_SLUG = {c["slug"]: c for c in CHECKS}
 
@@ -260,9 +260,11 @@ def run_one(slug: str) -> dict | None:
 # ── lectura / settings ───────────────────────────────────────────────────────
 
 def _service_dict(row) -> dict:
+    entry = _BY_SLUG.get(row.slug, {})
     return {
         "slug": row.slug,
         "nombre": row.nombre,
+        "descripcion": entry.get("descripcion"),
         "grupo": row.grupo,
         "estado": row.estado,
         "last_check": row.last_check,

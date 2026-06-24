@@ -309,6 +309,7 @@ export type EstadoServicio = "up" | "down" | "warn" | "unknown";
 export interface ServicioSalud {
   slug: string;
   nombre: string;
+  descripcion: string | null;
   grupo: string;
   estado: EstadoServicio;
   last_check: string | null;

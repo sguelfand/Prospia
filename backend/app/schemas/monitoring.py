@@ -7,6 +7,7 @@ from pydantic import BaseModel
 class ServiceHealthOut(BaseModel):
     slug: str
     nombre: str
+    descripcion: str | None = None
     grupo: str
     estado: str  # up | down | warn | unknown
     last_check: datetime | None = None

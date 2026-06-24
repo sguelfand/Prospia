@@ -224,6 +224,11 @@ function ServicioRow({
           <Text style={styles.nombre} numberOfLines={1}>
             {s.nombre}
           </Text>
+          {s.descripcion ? (
+            <Text style={styles.desc} numberOfLines={1}>
+              {s.descripcion}
+            </Text>
+          ) : null}
           <View style={[styles.badge, { borderColor: info.color + "66", backgroundColor: info.color + "22" }]}>
             <Text style={[styles.badgeText, { color: info.color }]}>{info.label}</Text>
           </View>
@@ -286,7 +291,8 @@ const styles = StyleSheet.create({
   rowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
   dot: { width: 10, height: 10, borderRadius: 5 },
   rowTop: { flexDirection: "row", alignItems: "center", gap: 8 },
-  nombre: { color: colors.text, fontSize: 15, fontWeight: "600", flexShrink: 1 },
+  nombre: { color: colors.text, fontSize: 15, fontWeight: "700", flexShrink: 0 },
+  desc: { color: colors.textDim, fontSize: 12, flexShrink: 1 },
   badge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
   badgeText: { fontSize: 11, fontWeight: "700" },
   meta: { color: colors.textDim, fontSize: 12, marginTop: 3 },
