@@ -27,6 +27,7 @@ import ErroresScreen from "./src/screens/ErroresScreen";
 import EtiguelMirrorDetailScreen from "./src/screens/EtiguelMirrorDetailScreen";
 import LockScreen from "./src/screens/LockScreen";
 import LoginScreen from "./src/screens/LoginScreen";
+import MonitoreoScreen from "./src/screens/MonitoreoScreen";
 import NotificacionesScreen from "./src/screens/NotificacionesScreen";
 import PendientesScreen from "./src/screens/PendientesScreen";
 import PerfilScreen from "./src/screens/PerfilScreen";
@@ -81,6 +82,7 @@ function AppDrawer() {
       <Drawer.Screen name="Configuracion" component={ConfiguracionScreen} options={{ title: "Configuración" }} />
       <Drawer.Screen name="Perfil" component={PerfilScreen} options={{ title: "Perfil" }} />
       <Drawer.Screen name="Notificaciones" component={NotificacionesScreen} options={{ title: "Notificaciones" }} />
+      <Drawer.Screen name="Monitoreo" component={MonitoreoScreen} options={{ title: "Monitoreo" }} />
       <Drawer.Screen name="ClienteNotificaciones" component={ClienteNotificacionesScreen} options={{ title: "" }} />
     </Drawer.Navigator>
   );

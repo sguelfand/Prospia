@@ -303,6 +303,53 @@ export const getAvisos = (token: string) => request<Aviso[]>("/admin/avisos", {}
 export const eliminarAvisos = (token: string, ids: number[]) =>
   request<void>("/admin/avisos/eliminar", { method: "POST", body: JSON.stringify({ ids }) }, token);
 
+// ── Monitoreo de servicios ───────────────────────────────────────────────────
+export type EstadoServicio = "up" | "down" | "warn" | "unknown";
+
+export interface ServicioSalud {
+  slug: string;
+  nombre: string;
+  grupo: string;
+  estado: EstadoServicio;
+  last_check: string | null;
+  last_ok: string | null;
+  since: string | null;
+  latency_ms: number | null;
+  detalle: string | null;
+  critico: boolean;
+}
+
+export interface MonitoreoResumen {
+  up: number;
+  down: number;
+  warn: number;
+  unknown: number;
+  total: number;
+}
+
+export interface MonitoreoStatus {
+  servicios: ServicioSalud[];
+  interval_seconds: number;
+  last_run: string | null;
+  resumen: MonitoreoResumen;
+}
+
+export const getMonitoreo = (token: string) =>
+  request<MonitoreoStatus>("/admin/monitoring", {}, token);
+
+export const rechequearTodo = (token: string) =>
+  request<MonitoreoStatus>("/admin/monitoring/recheck-all", { method: "POST" }, token);
+
+export const rechequearServicio = (token: string, slug: string) =>
+  request<ServicioSalud>(`/admin/monitoring/${slug}/recheck`, { method: "POST" }, token);
+
+export const setMonitoreoIntervalo = (token: string, intervalSeconds: number) =>
+  request<MonitoreoStatus>(
+    "/admin/monitoring/settings",
+    { method: "PUT", body: JSON.stringify({ interval_seconds: intervalSeconds }) },
+    token,
+  );
+
 export const getEtiguelLeads = (token: string) =>
   request<EtiguelLead[]>("/admin/etiguel/leads", {}, token);
 
