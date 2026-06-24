@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine
-from app.routers import admin, auth, dashboard, etiguel_mirror, monitoring, prospects, terminos
+from app.routers import admin, auth, dashboard, etiguel_mirror, monitoring, prospects, terminos, tokens
 
 
 def run_migrations():
@@ -140,6 +140,7 @@ app.include_router(dashboard.router)
 app.include_router(admin.router)
 app.include_router(etiguel_mirror.router)
 app.include_router(monitoring.router)
+app.include_router(tokens.router)
 
 
 from app.services import cadence
@@ -150,6 +151,9 @@ queue.start()
 
 from app.services import monitoring as monitoring_service
 monitoring_service.start()
+
+from app.services import camila_audit
+camila_audit.start()
 
 
 @app.get("/")
