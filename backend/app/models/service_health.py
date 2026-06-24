@@ -34,12 +34,16 @@ class ServiceHealth(Base):
 
 
 class MonitorSettings(Base):
-    """Config del monitoreo (fila única id=1). Por ahora solo el intervalo del
-    chequeo automático de fondo."""
+    """Config del monitoreo (fila única id=1): intervalo del chequeo automático y
+    el deploy token de Etiguel (para el check del gateway de Camila vía
+    /camila-config/diag). El token se guarda acá —no en el env de Coolify— para
+    poder setearlo por SQL sin depender del panel; tiene fallback al env
+    settings.ETIGUEL_DEPLOY_TOKEN si esta columna está vacía."""
     __tablename__ = "monitor_settings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=300)
+    etiguel_deploy_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

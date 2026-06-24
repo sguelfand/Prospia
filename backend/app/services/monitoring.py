@@ -69,10 +69,28 @@ def _check_etiguel_webhook():
     return _http_up(_ETIGUEL + "/", headers={"User-Agent": _UA}, must_contain="ok")
 
 
+def _etiguel_token() -> str:
+    """Token del webhook de Etiguel: primero la columna en monitor_settings
+    (seteable por SQL sin tocar Coolify), con fallback al env."""
+    try:
+        from app.models.service_health import MonitorSettings
+        from app.database import SessionLocal
+        db = SessionLocal()
+        try:
+            s = db.query(MonitorSettings).filter(MonitorSettings.id == 1).first()
+            if s and s.etiguel_deploy_token:
+                return s.etiguel_deploy_token
+        finally:
+            db.close()
+    except Exception:
+        pass
+    return settings.ETIGUEL_DEPLOY_TOKEN or ""
+
+
 def _check_camila_gateway():
-    token = settings.ETIGUEL_DEPLOY_TOKEN
+    token = _etiguel_token()
     if not token:
-        return "unknown", None, "ETIGUEL_DEPLOY_TOKEN no configurado en el backend"
+        return "unknown", None, "Token de Etiguel no configurado (monitor_settings / env)"
     try:
         r, ms = _timed_get(_ETIGUEL + "/camila-config/diag",
                            headers={"User-Agent": _UA, "X-Deploy-Token": token})
