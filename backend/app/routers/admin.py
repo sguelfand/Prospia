@@ -476,23 +476,45 @@ def etiguel_mirror_mensajes(mirror_id: int, db: Session = Depends(get_db)):
     )
 
 
+ESTADOS_ERROR = ("nuevo", "reportado", "fixed")
+
+
+def _set_estado_error(err: AgentError, estado: str) -> None:
+    """Aplica un estado al error y sincroniza el flag legacy `resuelto`."""
+    err.estado = estado
+    err.resuelto = (estado == "fixed")
+
+
 @router.get("/errores", response_model=list[AgentErrorOut])
-def listar_errores(incluir_resueltos: bool = Query(True), db: Session = Depends(get_db)):
+def listar_errores(
+    incluir_resueltos: bool = Query(True),
+    estado: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
     """Errores de Camila capturados por el outbound-guard, más reciente arriba.
-    El `id` es el #número con el que Sebi los identifica."""
+    El `id` es el #número con el que Sebi los identifica. Filtrable por `estado`."""
     q = db.query(AgentError)
-    if not incluir_resueltos:
-        q = q.filter(AgentError.resuelto.is_(False))
+    if estado:
+        q = q.filter(AgentError.estado == estado)
+    elif not incluir_resueltos:
+        q = q.filter(AgentError.estado != "fixed")
     return q.order_by(AgentError.fecha.desc()).all()
 
 
 @router.patch("/errores/{error_id}", response_model=AgentErrorOut)
 def resolver_error(error_id: int, body: AgentErrorResolve, db: Session = Depends(get_db)):
-    """Marca/desmarca un error como resuelto (el tilde de la app)."""
+    """Cambia el estado de un error (botón Reportar de la app/web, o tilde legacy).
+    Mandá `estado` (nuevo|reportado|fixed). `resuelto` se acepta por compatibilidad."""
     err = db.get(AgentError, error_id)
     if not err:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No existe ese error")
-    err.resuelto = body.resuelto
+    if body.estado is not None:
+        if body.estado not in ESTADOS_ERROR:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                detail=f"estado inválido: {body.estado}")
+        _set_estado_error(err, body.estado)
+    elif body.resuelto is not None:
+        _set_estado_error(err, "fixed" if body.resuelto else "nuevo")
     db.commit()
     db.refresh(err)
     return err

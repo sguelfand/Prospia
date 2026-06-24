@@ -26,6 +26,7 @@ export type IconName =
   | "check"
   | "x"
   | "undo"
+  | "flag"
   | "settings"
   | "pulse"
   | "refresh";
@@ -148,6 +149,12 @@ export function Icon({
         <>
           <Polyline points="1,4 1,10 7,10" {...p} />
           <Path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" {...p} />
+        </>
+      )}
+      {name === "flag" && (
+        <>
+          <Path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" {...p} />
+          <Line x1="4" y1="22" x2="4" y2="15" {...p} />
         </>
       )}
       {name === "settings" && (

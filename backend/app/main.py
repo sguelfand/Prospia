@@ -110,6 +110,15 @@ def run_migrations():
             "ALTER TABLE etiguel_mirror ADD COLUMN IF NOT EXISTS prox_contacto VARCHAR(20)"
         ))
 
+        # ── agent_errors: ciclo nuevo→reportado→fixed (cola de errores) ──
+        conn.execute(text(
+            "ALTER TABLE agent_errors ADD COLUMN IF NOT EXISTS estado VARCHAR(20) NOT NULL DEFAULT 'nuevo'"
+        ))
+        # backfill: los ya resueltos pasan a 'fixed' (idempotente)
+        conn.execute(text(
+            "UPDATE agent_errors SET estado = 'fixed' WHERE resuelto = true AND estado = 'nuevo'"
+        ))
+
 
 Base.metadata.create_all(bind=engine)
 run_migrations()

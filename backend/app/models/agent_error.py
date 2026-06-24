@@ -21,6 +21,11 @@ class AgentError(Base):
     telefono: Mapped[str | None] = mapped_column(String(50))             # a quién iba dirigido
     patron: Mapped[str | None] = mapped_column(String(120))              # qué patrón lo marcó como error
     contenido: Mapped[str] = mapped_column(Text, nullable=False)         # el texto del error
+    # Ciclo de vida que maneja Sebi+Claude: 'nuevo' (recién capturado, solo alerta)
+    # → 'reportado' (Sebi tocó "Reportar" en la app/web → entra a la cola que reviso)
+    # → 'fixed' (Claude lo solucionó). `resuelto` queda sincronizado (resuelto ⇔ fixed)
+    # para compatibilidad con consumidores viejos.
+    estado: Mapped[str] = mapped_column(String(20), default="nuevo", server_default="nuevo", index=True)
     resuelto: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     fecha: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True

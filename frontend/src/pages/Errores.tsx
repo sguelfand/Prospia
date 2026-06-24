@@ -1,6 +1,8 @@
-import { Check, Phone, RotateCcw, Search, Trash2 } from 'lucide-react'
+import { Flag, Phone, RotateCcw, Search, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
+
+type Estado = 'nuevo' | 'reportado' | 'fixed'
 
 type AgentError = {
   id: number
@@ -9,6 +11,7 @@ type AgentError = {
   telefono: string | null
   patron: string | null
   contenido: string
+  estado: Estado
   resuelto: boolean
   fecha: string
 }
@@ -21,7 +24,7 @@ function fmt(iso: string): string {
 
 export default function Errores() {
   const [errores, setErrores] = useState<AgentError[]>([])
-  const [filtro, setFiltro] = useState<'activos' | 'solucionados'>('activos')
+  const [filtro, setFiltro] = useState<Estado>('nuevo')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -38,12 +41,12 @@ export default function Errores() {
 
   useEffect(() => { load() }, [])
 
-  async function setResuelto(err: AgentError, resuelto: boolean) {
-    setErrores((prev) => prev.map((e) => (e.id === err.id ? { ...e, resuelto } : e)))
+  async function setEstado(err: AgentError, estado: Estado) {
+    setErrores((prev) => prev.map((e) => (e.id === err.id ? { ...e, estado } : e)))
     try {
-      await api.patch<AgentError>(`/admin/errores/${err.id}`, { resuelto })
+      await api.patch<AgentError>(`/admin/errores/${err.id}`, { estado })
     } catch {
-      setErrores((prev) => prev.map((e) => (e.id === err.id ? { ...e, resuelto: err.resuelto } : e)))
+      setErrores((prev) => prev.map((e) => (e.id === err.id ? { ...e, estado: err.estado } : e)))
     }
   }
 
@@ -60,18 +63,23 @@ export default function Errores() {
 
   if (loading) return <p className="text-muted text-sm">Cargando…</p>
 
-  const visibles = errores.filter((e) => (filtro === 'activos' ? !e.resuelto : e.resuelto))
-  const nActivos = errores.filter((e) => !e.resuelto).length
-  const nResueltos = errores.length - nActivos
+  const visibles = errores.filter((e) => e.estado === filtro)
+  const n = (s: Estado) => errores.filter((e) => e.estado === s).length
+
+  const tabs: [Estado, string][] = [
+    ['nuevo', `Nuevos (${n('nuevo')})`],
+    ['reportado', `Reportados (${n('reportado')})`],
+    ['fixed', `Fixed (${n('fixed')})`],
+  ]
 
   return (
     <div className="max-w-3xl mx-auto">
       <h1 className="text-xl font-semibold text-ink mb-1">Errores de Camila</h1>
-      <p className="text-xs text-muted mb-4">Mensajes que el outbound-guard frenó para que los revises.</p>
+      <p className="text-xs text-muted mb-4">Mensajes que el outbound-guard frenó (o sospechó). Reportá los que quieras que se solucionen.</p>
 
       {/* Tabs */}
       <div className="flex gap-2 mb-5">
-        {([['activos', `Activos (${nActivos})`], ['solucionados', `Solucionados (${nResueltos})`]] as const).map(([k, l]) => (
+        {tabs.map(([k, l]) => (
           <button
             key={k}
             onClick={() => setFiltro(k)}
@@ -88,12 +96,24 @@ export default function Errores() {
 
       <div className="space-y-3">
         {visibles.map((e) => (
-          <div key={e.id} className={`rounded-xl border-l-4 border bg-card p-4 ${e.resuelto ? 'opacity-60 border-l-emerald-500' : 'border-l-red-500'} border-line`}>
+          <div
+            key={e.id}
+            className={`rounded-xl border-l-4 border bg-card p-4 border-line ${
+              e.estado === 'fixed' ? 'opacity-60 border-l-emerald-500'
+              : e.estado === 'reportado' ? 'border-l-red-500'
+              : 'border-l-amber'
+            }`}
+          >
             <div className="flex items-center gap-2 mb-2">
               <span className="text-base font-extrabold text-ink">#{e.id}</span>
               <span className="text-xs font-bold text-amber">{e.fuente}</span>
               <span className="text-[11px] text-muted">{fmt(e.fecha)}</span>
-              {e.resuelto && <span className="ml-auto text-[11px] font-bold text-emerald-500 border border-emerald-500/50 rounded px-1.5 py-0.5">resuelto</span>}
+              {e.estado === 'reportado' && (
+                <span className="ml-auto text-[11px] font-bold text-red-500 border border-red-500/50 rounded px-1.5 py-0.5">Reportado</span>
+              )}
+              {e.estado === 'fixed' && (
+                <span className="ml-auto text-[11px] font-bold text-emerald-500 border border-emerald-500/50 rounded px-1.5 py-0.5">Fixed</span>
+              )}
             </div>
             <p className="text-sm text-ink whitespace-pre-wrap break-words">{e.contenido}</p>
             <div className="flex flex-wrap items-center gap-3 mt-2">
@@ -101,13 +121,19 @@ export default function Errores() {
               {e.patron && <span className="flex items-center gap-1 text-xs text-muted"><Search size={12} /> {e.patron}</span>}
             </div>
             <div className="flex gap-2 mt-3 pt-3 border-t border-dashed border-line">
-              {e.resuelto ? (
-                <button onClick={() => setResuelto(e, false)} className="flex items-center gap-1 text-xs font-semibold border border-line text-muted rounded-lg px-2.5 py-1.5 hover:text-ink">
-                  <RotateCcw size={12} /> Reabrir
+              {e.estado === 'nuevo' && (
+                <button onClick={() => setEstado(e, 'reportado')} className="flex items-center gap-1 text-xs font-semibold border border-red-500/50 text-red-500 rounded-lg px-2.5 py-1.5 hover:bg-red-500/10">
+                  <Flag size={12} /> Reportar
                 </button>
-              ) : (
-                <button onClick={() => setResuelto(e, true)} className="flex items-center gap-1 text-xs font-semibold border border-emerald-500/50 text-emerald-500 rounded-lg px-2.5 py-1.5 hover:bg-emerald-500/10">
-                  <Check size={12} /> Marcar solucionado
+              )}
+              {e.estado === 'reportado' && (
+                <button onClick={() => setEstado(e, 'nuevo')} className="flex items-center gap-1 text-xs font-semibold border border-line text-muted rounded-lg px-2.5 py-1.5 hover:text-ink">
+                  <RotateCcw size={12} /> Quitar reporte
+                </button>
+              )}
+              {e.estado === 'fixed' && (
+                <button onClick={() => setEstado(e, 'nuevo')} className="flex items-center gap-1 text-xs font-semibold border border-line text-muted rounded-lg px-2.5 py-1.5 hover:text-ink">
+                  <RotateCcw size={12} /> Reabrir
                 </button>
               )}
               <button onClick={() => borrar(e)} className="flex items-center gap-1 text-xs font-semibold border border-line text-muted rounded-lg px-2.5 py-1.5 hover:border-red-500 hover:text-red-500">
@@ -118,7 +144,7 @@ export default function Errores() {
         ))}
         {visibles.length === 0 && !error && (
           <p className="text-center text-muted text-sm py-16">
-            {filtro === 'activos' ? 'Sin errores activos 🎉' : 'No hay errores solucionados.'}
+            {filtro === 'nuevo' ? 'Sin errores nuevos 🎉' : filtro === 'reportado' ? 'No hay errores reportados.' : 'No hay errores solucionados.'}
           </p>
         )}
       </div>

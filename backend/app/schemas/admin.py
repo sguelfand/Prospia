@@ -203,6 +203,7 @@ class AgentErrorOut(BaseModel):
     telefono: str | None
     patron: str | None
     contenido: str
+    estado: str              # nuevo | reportado | fixed
     resuelto: bool
     fecha: datetime
 
@@ -210,7 +211,11 @@ class AgentErrorOut(BaseModel):
 
 
 class AgentErrorResolve(BaseModel):
-    resuelto: bool
+    """PATCH del panel (app/web). Mandá `estado` (nuevo|reportado|fixed) — es lo
+    que usa el botón Reportar. `resuelto` queda por compatibilidad: si solo viene
+    `resuelto`, se traduce a estado fixed/nuevo."""
+    estado: str | None = None
+    resuelto: bool | None = None
 
 
 class PendienteIn(BaseModel):

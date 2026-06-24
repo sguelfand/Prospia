@@ -154,6 +154,52 @@ def ingest_agent_error(
     return {"ok": True, "id": err.id}
 
 
+@router.get("/agent-errors")
+def listar_agent_errors(
+    estado: str | None = None,
+    x_mirror_token: str | None = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Lista de errores para que Claude levante la cola. Auth: token.
+    Con `?estado=reportado` devuelve solo la cola que Sebi marcó para revisar."""
+    _check_token(x_mirror_token)
+    q = db.query(AgentError)
+    if estado:
+        q = q.filter(AgentError.estado == estado)
+    errs = q.order_by(AgentError.fecha.desc()).all()
+    return [
+        {
+            "id": e.id, "estado": e.estado, "fuente": e.fuente, "agente": e.agente,
+            "telefono": e.telefono, "patron": e.patron, "contenido": e.contenido,
+            "fecha": e.fecha.isoformat() if e.fecha else None,
+        }
+        for e in errs
+    ]
+
+
+@router.patch("/agent-error/{error_id}")
+def patch_agent_error(
+    error_id: int,
+    body: dict,
+    x_mirror_token: str | None = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Cambia el estado de un error. Lo usa Claude para marcar `fixed` cuando
+    soluciona un error de la cola reportada. Auth: token. Body: {"estado": "fixed"}."""
+    _check_token(x_mirror_token)
+    err = db.get(AgentError, error_id)
+    if not err:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No existe ese error")
+    estado = (body or {}).get("estado")
+    if estado not in ("nuevo", "reportado", "fixed"):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail=f"estado inválido: {estado}")
+    err.estado = estado
+    err.resuelto = (estado == "fixed")
+    db.commit()
+    return {"ok": True, "id": error_id, "estado": estado}
+
+
 @router.delete("/agent-error/{error_id}")
 def delete_agent_error(
     error_id: int,

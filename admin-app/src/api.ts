@@ -178,6 +178,8 @@ export interface EtiguelMirrorItem {
   cant_mensajes: number;
 }
 
+export type EstadoError = "nuevo" | "reportado" | "fixed";
+
 export interface AgentError {
   id: number; // el #número
   fuente: string;
@@ -185,6 +187,7 @@ export interface AgentError {
   telefono: string | null;
   patron: string | null;
   contenido: string;
+  estado: EstadoError; // nuevo → reportado (Sebi) → fixed (Claude)
   resuelto: boolean;
   fecha: string;
 }
@@ -394,10 +397,10 @@ export const getComparativa = (token: string) =>
 export const getErrores = (token: string) =>
   request<AgentError[]>("/admin/errores", {}, token);
 
-export const resolverError = (token: string, id: number, resuelto: boolean) =>
+export const setEstadoError = (token: string, id: number, estado: EstadoError) =>
   request<AgentError>(`/admin/errores/${id}`, {
     method: "PATCH",
-    body: JSON.stringify({ resuelto }),
+    body: JSON.stringify({ estado }),
   }, token);
 
 export const deleteError = (token: string, id: number) =>
