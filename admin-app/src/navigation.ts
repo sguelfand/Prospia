@@ -22,6 +22,7 @@ export type DrawerParamList = {
   Perfil: undefined;
   Notificaciones: undefined;
   Monitoreo: undefined;
+  Tokens: undefined;
   ClienteNotificaciones: { tenantId: number; nombre: string };
 };
 
@@ -42,4 +43,5 @@ export type ClienteNotificacionesProps = DrawerScreenProps<DrawerParamList, "Cli
 export type PerfilProps = DrawerScreenProps<DrawerParamList, "Perfil">;
 export type NotificacionesProps = DrawerScreenProps<DrawerParamList, "Notificaciones">;
 export type MonitoreoProps = DrawerScreenProps<DrawerParamList, "Monitoreo">;
+export type TokensProps = DrawerScreenProps<DrawerParamList, "Tokens">;
 export type LoginProps = NativeStackScreenProps<AuthStackParamList, "Login">;

@@ -26,13 +26,6 @@ export default function ConfiguracionScreen({ navigation }: ConfiguracionProps) 
           border
           onPress={() => navigation.navigate("Notificaciones")}
         />
-        <Row
-          icon="pulse"
-          label="Monitoreo"
-          sub="Estado de los servicios de la infraestructura"
-          border
-          onPress={() => navigation.navigate("Monitoreo")}
-        />
       </View>
     </ScrollView>
   );

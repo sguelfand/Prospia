@@ -23,6 +23,7 @@ export default function DrawerContent({ navigation, state }: DrawerContentCompon
   const insets = useSafeAreaInsets();
   const [clientes, setClientes] = useState<ClienteResumen[]>([]);
   const [loading, setLoading] = useState(true);
+  const [monOpen, setMonOpen] = useState(true);
 
   const activeRoute = state.routes[state.index]?.name;
   const activeTenant =
@@ -77,6 +78,36 @@ export default function DrawerContent({ navigation, state }: DrawerContentCompon
           active={activeRoute === "Pendientes"}
           onPress={() => navigation.navigate("Pendientes")}
         />
+
+        {/* Monitoreo desplegable → Servicios + Tokens */}
+        <TouchableOpacity
+          style={[styles.item, (activeRoute === "Monitoreo" || activeRoute === "Tokens") ? styles.itemActive : null]}
+          onPress={() => setMonOpen((v) => !v)}
+        >
+          <View style={styles.itemIcon}>
+            <Icon name="pulse" size={18} color={(activeRoute === "Monitoreo" || activeRoute === "Tokens") ? colors.primary : colors.textDim} />
+          </View>
+          <Text style={[styles.itemText, (activeRoute === "Monitoreo" || activeRoute === "Tokens") ? styles.itemTextActive : null]}>
+            Monitoreo
+          </Text>
+          <Text style={styles.chevron}>{monOpen ? "▾" : "▸"}</Text>
+        </TouchableOpacity>
+        {monOpen && (
+          <>
+            <TouchableOpacity
+              style={[styles.subItem, activeRoute === "Monitoreo" ? styles.itemActive : null]}
+              onPress={() => navigation.navigate("Monitoreo")}
+            >
+              <Text style={[styles.subText, activeRoute === "Monitoreo" ? styles.itemTextActive : null]}>Servicios</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.subItem, activeRoute === "Tokens" ? styles.itemActive : null]}
+              onPress={() => navigation.navigate("Tokens")}
+            >
+              <Text style={[styles.subText, activeRoute === "Tokens" ? styles.itemTextActive : null]}>Tokens</Text>
+            </TouchableOpacity>
+          </>
+        )}
 
         <Text style={styles.section}>Clientes</Text>
         {loading ? (
@@ -165,6 +196,9 @@ const styles = StyleSheet.create({
   itemIcon: { width: 26, alignItems: "flex-start" },
   itemText: { color: colors.text, fontSize: 15, flex: 1 },
   itemTextActive: { color: colors.primary, fontWeight: "700" },
+  chevron: { color: colors.textDim, fontSize: 14, marginLeft: 6 },
+  subItem: { paddingVertical: 10, paddingHorizontal: 12, paddingLeft: 50, borderRadius: 10, marginBottom: 2 },
+  subText: { color: colors.textDim, fontSize: 14 },
   tag: {
     color: colors.amber,
     fontSize: 10,
