@@ -6,6 +6,9 @@ frecuencia del chequeo automático."""
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.deps import get_superadmin
+# Importar los modelos al tope registra las tablas en Base.metadata para que
+# create_all() las cree al arrancar (el service solo las importa lazy).
+from app.models.service_health import MonitorSettings, ServiceHealth  # noqa: F401
 from app.schemas.monitoring import IntervalUpdate, MonitoringStatusOut, ServiceHealthOut
 from app.services import monitoring
 
