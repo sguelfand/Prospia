@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     # Token que usa el webhook de Camila para espejar leads/prospects de Etiguel
     # a la app (APP.7). Si queda vacío, cae de fallback a WEBHOOK_TOKEN.
     ETIGUEL_MIRROR_TOKEN: str = ""
+    # Deploy token del webhook de Etiguel (mismo X-Deploy-Token). Lo usa el
+    # monitoreo para consultar /camila-config/diag y saber si el gateway de
+    # Camila está vivo. Si queda vacío, ese check queda en "unknown".
+    ETIGUEL_DEPLOY_TOKEN: str = ""
 
     class Config:
         env_file = ".env"

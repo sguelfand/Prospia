@@ -19,6 +19,8 @@ EVENTOS_PUSH: list[tuple[str, str]] = [
     ("standby", "Pendiente en espera (standby)"),
     ("cola_terminada", "Cola de pendientes terminada"),
     ("necesita_autorizacion", "Necesita tu autorización"),
+    ("servicio_caido", "Servicio caído (monitoreo)"),
+    ("servicio_recuperado", "Servicio recuperado (monitoreo)"),
 ]
 EVENTOS_PUSH_KEYS = [k for k, _ in EVENTOS_PUSH]
 
