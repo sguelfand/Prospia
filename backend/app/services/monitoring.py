@@ -27,6 +27,13 @@ _UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
 _ETIGUEL = "https://webhook.etiguel.net"
 _SLOW_MS = 5000  # respuesta OK pero lenta → warn
 
+# Códigos HTTP que indican que el problema es el tunnel/Cloudflare (no llegamos
+# al origen del container), NO el servicio de adentro: 530 (Argo tunnel error
+# 1033) y la familia 520-527 de Cloudflare, más los 502/503/504 de gateway.
+# Se usan para no marcar OpenClaw como caído cuando en realidad lo único roto
+# es el tunnel (el gateway puede estar perfecto del otro lado).
+_TUNNEL_DOWN_CODES = {502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527, 530}
+
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 def _timed_get(url: str, headers: dict | None = None, timeout: int = 8):
@@ -66,7 +73,22 @@ def _reachable(url: str, timeout: int = 8):
 # ── checks concretos ───────────────────────────────────────────────────────
 
 def _check_etiguel_webhook():
-    return _http_up(_ETIGUEL + "/", headers={"User-Agent": _UA}, must_contain="ok")
+    """El tunnel Cloudflare + el webhook. Un 530/52x significa que el tunnel
+    (cloudflared en el container) está caído y el origen es inalcanzable —
+    lo dejamos explícito para distinguirlo de OpenClaw."""
+    try:
+        r, ms = _timed_get(_ETIGUEL + "/", headers={"User-Agent": _UA})
+    except Exception as e:
+        return "down", None, f"tunnel/origen inalcanzable: {type(e).__name__}"
+    if r.status_code in _TUNNEL_DOWN_CODES:
+        return "down", ms, f"tunnel Cloudflare caído (HTTP {r.status_code}, origen inalcanzable)"
+    if r.status_code != 200:
+        return "down", ms, f"HTTP {r.status_code}"
+    if "ok" not in r.text.lower():
+        return "down", ms, "respuesta inesperada (sin 'ok')"
+    if ms > _SLOW_MS:
+        return "warn", ms, f"lento ({ms}ms)"
+    return "up", ms, None
 
 
 def _etiguel_token() -> str:
@@ -91,18 +113,32 @@ def _check_camila_gateway():
     token = _etiguel_token()
     if not token:
         return "unknown", None, "Token de Etiguel no configurado (monitor_settings / env)"
+    # OJO: este check llega a OpenClaw únicamente a través del tunnel de Etiguel
+    # (webhook.etiguel.net). Si el tunnel se cae, no podemos verificar el gateway,
+    # pero eso NO significa que OpenClaw esté caído — puede estar perfecto del
+    # otro lado. En ese caso devolvemos "unknown" (no verificable) en vez de
+    # "down", para no disparar un falso "OpenClaw caído" cada vez que el problema
+    # real es solo el tunnel. Solo marcamos "down" cuando SÍ llegamos al diag y
+    # nos dice que el supervisor/gateway no está reachable.
     try:
         r, ms = _timed_get(_ETIGUEL + "/camila-config/diag",
                            headers={"User-Agent": _UA, "X-Deploy-Token": token})
-        if r.status_code != 200:
-            return "down", ms, f"diag HTTP {r.status_code}"
-        d = r.json()
-        if d.get("supervisor_reachable"):
-            estado = "up" if ms <= _SLOW_MS else "warn"
-            return estado, ms, (d.get("supervisor_status") or "")[:200]
-        return "down", ms, ("gateway no reachable: " + str(d.get("supervisor_status") or ""))[:180]
     except Exception as e:
-        return "down", None, f"{type(e).__name__}: {e}"
+        return "unknown", None, (f"no verificable (webhook/tunnel inalcanzable, "
+                                 f"OpenClaw puede estar OK): {type(e).__name__}")
+    if r.status_code in _TUNNEL_DOWN_CODES:
+        return "unknown", ms, (f"no verificable (tunnel Cloudflare caído: HTTP "
+                               f"{r.status_code}); OpenClaw puede estar OK")
+    if r.status_code != 200:
+        return "down", ms, f"diag HTTP {r.status_code}"
+    try:
+        d = r.json()
+    except Exception:
+        return "down", ms, "diag no devolvió JSON"
+    if d.get("supervisor_reachable"):
+        estado = "up" if ms <= _SLOW_MS else "warn"
+        return estado, ms, (d.get("supervisor_status") or "")[:200]
+    return "down", ms, ("gateway no reachable: " + str(d.get("supervisor_status") or ""))[:180]
 
 
 def _check_prospia_web():
