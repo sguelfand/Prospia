@@ -1,7 +1,6 @@
 import { Eye, EyeOff } from 'lucide-react'
 import { FormEvent, useEffect, useState } from 'react'
 import { api } from '../api/client'
-import MonitoreoServicios from './MonitoreoServicios'
 
 type Me = {
   id: number
@@ -171,9 +170,6 @@ export default function Configuracion() {
       {/* ── Notificaciones push (#38) ── */}
       <NotificacionesPush />
       </div>
-
-      {/* ── Monitoreo de servicios ── */}
-      <MonitoreoServicios />
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { AlertTriangle, BarChart2, ChevronLeft, ChevronRight, Eye, ListTodo, LogOut, Menu, Search, Settings, ShieldCheck, Users, X } from 'lucide-react'
+import { Activity, AlertTriangle, BarChart2, ChevronDown, ChevronLeft, ChevronRight, Coins, Eye, ListTodo, LogOut, Menu, Search, Server, Settings, ShieldCheck, Users, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
@@ -31,6 +31,7 @@ export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [nivel, setNivel]           = useState<number | null>(null)
   const [clientes, setClientes]     = useState<ClienteOpt[]>([])
+  const [monOpen, setMonOpen]       = useState(location.pathname.startsWith('/monitoreo'))
 
   // Estado de impersonación ("ver como cliente"). Se persiste en localStorage;
   // como al entrar/salir hacemos reload completo, leerlo en render alcanza.
@@ -80,6 +81,49 @@ export default function Layout() {
     localStorage.removeItem('admin_token')
     localStorage.removeItem('viewing_as')
     window.location.href = '/dashboard'
+  }
+
+  /* Grupo "Monitoreo" desplegable → Servicios + Tokens (solo nivel 1) */
+  const subClass = (active: boolean) =>
+    [
+      'flex items-center gap-3 pl-12 pr-6 py-2.5 text-sm transition-colors border-l-2',
+      active
+        ? 'border-amber bg-white/[0.06] text-fog font-medium'
+        : 'border-transparent text-[#8294B4] hover:text-fog hover:bg-white/[0.04]',
+    ].join(' ')
+
+  function renderMonitoreo(collapsed: boolean, onNav?: () => void) {
+    const onMon = location.pathname.startsWith('/monitoreo')
+    if (collapsed) {
+      return (
+        <Link to="/monitoreo/servicios" title="Monitoreo" className={navClass(onMon, true)}>
+          <Activity size={16} />
+        </Link>
+      )
+    }
+    return (
+      <div>
+        <button onClick={() => setMonOpen((v) => !v)} className={`${navClass(onMon)} w-full justify-between`}>
+          <span className="flex items-center gap-3">
+            <Activity size={16} />
+            Monitoreo
+          </span>
+          <ChevronDown size={14} className={`transition-transform ${monOpen ? '' : '-rotate-90'}`} />
+        </button>
+        {monOpen && (
+          <>
+            <Link to="/monitoreo/servicios" onClick={onNav} className={subClass(location.pathname.startsWith('/monitoreo/servicios'))}>
+              <Server size={14} />
+              Servicios
+            </Link>
+            <Link to="/monitoreo/tokens" onClick={onNav} className={subClass(location.pathname.startsWith('/monitoreo/tokens'))}>
+              <Coins size={14} />
+              Tokens
+            </Link>
+          </>
+        )}
+      </div>
+    )
   }
 
   /* Desplegable "Ver como un cliente" (solo nivel 1, fuera de impersonación) */
@@ -163,6 +207,7 @@ export default function Layout() {
                 Admin clientes
               </Link>
             )}
+            {nivel === 1 && renderMonitoreo(false, () => setMobileOpen(false))}
             <Link
               to="/configuracion"
               onClick={() => setMobileOpen(false)}
@@ -250,6 +295,7 @@ export default function Layout() {
             {!collapsed && 'Admin clientes'}
           </Link>
         )}
+        {nivel === 1 && renderMonitoreo(collapsed)}
         <Link
           to="/configuracion"
           title={collapsed ? 'Configuración' : undefined}
