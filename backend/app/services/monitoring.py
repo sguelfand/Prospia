@@ -378,10 +378,10 @@ def _persist_and_alert(results: list[tuple]):
         if db:
             db.close()
 
-    # Mandar pushes después de commitear (best-effort)
+    # Mandar pushes después de commitear (best-effort). nav → Monitoreo → Servicios.
     for evento, title in alertas:
         try:
-            push.notificar_global(evento, title, title)
+            push.notificar_global(evento, title, title, {"nav": "monitoreo_servicios"})
         except Exception as e:
             print(f"[MONITOR] no se pudo notificar {evento}: {type(e).__name__}: {e}")
 

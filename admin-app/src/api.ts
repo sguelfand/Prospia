@@ -422,6 +422,9 @@ export function getProspectsCliente(
 export const getFiltrosCliente = (token: string, tenantId: number) =>
   request<FiltrosCliente>(`/admin/clientes/${tenantId}/filtros`, {}, token);
 
+export const getProspect = (token: string, tenantId: number, prospectId: number) =>
+  request<ProspectRow>(`/admin/clientes/${tenantId}/prospects/${prospectId}`, {}, token);
+
 export const getMensajesProspect = (token: string, tenantId: number, prospectId: number) =>
   request<MensajeRow[]>(`/admin/clientes/${tenantId}/prospects/${prospectId}/mensajes`, {}, token);
 
