@@ -87,6 +87,13 @@ class TenantConfig(Base):
     notif_interesado_canal: Mapped[str] = mapped_column(String(20), default="whatsapp", server_default="whatsapp")
     notif_interesado_destino: Mapped[str | None] = mapped_column(String(255))
 
+    # ── J. Información del negocio (relevamiento) ──────────────────────────────
+    # Documento estructurado del intake, editable por el cliente desde su
+    # Configuración. Forma: {"values": {<field_id>: valor}, "extra": [{label, valor}],
+    # "intake_at": ISO, "updated_at": ISO}. El esquema de campos vive en
+    # services/intake_schema.py. Ver IntakeSubmission para el envío crudo + archivos.
+    info_negocio: Mapped[dict] = mapped_column(JSONB, default=dict, server_default=text("'{}'::jsonb"))
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

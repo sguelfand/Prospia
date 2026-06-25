@@ -2,7 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine
-from app.routers import admin, auth, dashboard, etiguel_mirror, monitoring, prospects, terminos, tokens
+import app.models  # noqa: F401  (registra todas las tablas para create_all)
+from app.routers import admin, auth, dashboard, etiguel_mirror, me, monitoring, prospects, public, terminos, tokens
 
 
 def run_migrations():
@@ -83,6 +84,8 @@ def run_migrations():
             # I. Notificaciones
             "notif_interesado_canal VARCHAR(20) NOT NULL DEFAULT 'whatsapp'",
             "notif_interesado_destino VARCHAR(255)",
+            # J. Información del negocio (relevamiento, editable por el cliente)
+            "info_negocio JSONB NOT NULL DEFAULT '{}'::jsonb",
         ]
         for col in tenant_config_cols:
             conn.execute(text(f"ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS {col}"))
@@ -141,6 +144,8 @@ app.include_router(admin.router)
 app.include_router(etiguel_mirror.router)
 app.include_router(monitoring.router)
 app.include_router(tokens.router)
+app.include_router(public.router)
+app.include_router(me.router)
 
 
 from app.services import cadence

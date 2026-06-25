@@ -23,11 +23,14 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: 43200  # 30 días (app de admin personal; la seguridad real la da el desbloqueo del aparato)
       WEBHOOK_TOKEN: ${WEBHOOK_TOKEN}
       MONDAY_API_KEY: ${MONDAY_API_KEY:-}
+      UPLOADS_DIR: /app/uploads
     depends_on:
       db:
         condition: service_healthy
     expose:
       - "8000"
+    volumes:
+      - uploads:/app/uploads
     restart: unless-stopped
 
   frontend:
@@ -42,3 +45,4 @@ services:
 
 volumes:
   pgdata:
+  uploads:
