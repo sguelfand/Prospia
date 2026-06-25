@@ -6,6 +6,7 @@ totales agregados. Etiguel (que vive en Monday, no en esta base) se suma
 como una "fuente" más en la Fase 4 vía un adapter."""
 from datetime import date, datetime, timedelta, timezone
 
+import requests
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import case, extract, func
 from sqlalchemy.orm import Session
@@ -62,6 +63,8 @@ from app.schemas.admin import (
     PushPrefIn,
     PushPrefOut,
     ResetPasswordOut,
+    ResetNumeroPruebaIn,
+    ResetNumeroPruebaOut,
 )
 from app.schemas.dashboard import DashboardStats
 from app.schemas.prospect import HistorialOut, MensajeOut, ProspectsPage
@@ -473,6 +476,86 @@ def etiguel_mirror_mensajes(mirror_id: int, db: Session = Depends(get_db)):
         .filter(EtiguelMirrorMensaje.mirror_id == mirror_id)
         .order_by(EtiguelMirrorMensaje.fecha.asc(), EtiguelMirrorMensaje.id.asc())
         .all()
+    )
+
+
+@router.post("/etiguel/reset-numero-prueba", response_model=ResetNumeroPruebaOut)
+def reset_numero_prueba(body: ResetNumeroPruebaIn, db: Session = Depends(get_db)):
+    """Reinicia una prueba de Camila: borra todo rastro de un número de teléfono
+    de prueba para poder re-testear desde cero.
+
+    Hace dos cosas (best-effort):
+      (a) Borra de la DB de Prospia el espejo del número: filas de etiguel_mirror
+          cuyo teléfono matchee por los últimos 10 dígitos + sus mensajes.
+      (b) Llama al webhook de Etiguel POST /reset-numero-prueba (X-Deploy-Token,
+          token leído de monitor_settings) para limpiar la memoria local de Camila.
+
+    Si el webhook falla, igual se reporta lo borrado de la DB y el error."""
+    from app.services import monitoring
+
+    digits = "".join(c for c in (body.telefono or "") if c.isdigit())[-10:]
+    if len(digits) < 10:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Teléfono inválido: se necesitan al menos 10 dígitos.",
+        )
+
+    # (a) Borrar el espejo en la DB de Prospia (match por últimos 10 dígitos).
+    #     Usamos un patrón sobre solo-dígitos del teléfono para tolerar formatos
+    #     guardados con +, espacios o guiones.
+    mirrors = [
+        m for m in db.query(EtiguelMirror).all()
+        if m.telefono and "".join(c for c in m.telefono if c.isdigit()).endswith(digits)
+    ]
+    mensajes_borrados = 0
+    for m in mirrors:
+        mensajes_borrados += (
+            db.query(EtiguelMirrorMensaje)
+            .filter(EtiguelMirrorMensaje.mirror_id == m.id)
+            .delete(synchronize_session=False)
+        )
+        db.delete(m)
+    db.commit()
+    db_borrado = {"mirrors": len(mirrors), "mensajes": mensajes_borrados}
+
+    # (b) Limpiar la memoria local de Camila vía el webhook (best-effort).
+    webhook_ok = False
+    webhook_respuesta: dict | None = None
+    webhook_error: str | None = None
+    token = monitoring._etiguel_token()
+    if not token:
+        webhook_error = "Token de Etiguel no configurado (monitor_settings / env)."
+    else:
+        try:
+            r = requests.post(
+                "https://webhook.etiguel.net/reset-numero-prueba",
+                headers={
+                    "X-Deploy-Token": token,
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+                    "Content-Type": "application/json",
+                },
+                json={"telefono": body.telefono},
+                timeout=15,
+            )
+            if r.status_code == 200:
+                try:
+                    webhook_respuesta = r.json()
+                    webhook_ok = bool(webhook_respuesta.get("ok", True))
+                except Exception:
+                    webhook_respuesta = {"raw": r.text[:500]}
+                    webhook_ok = True
+            else:
+                webhook_error = f"HTTP {r.status_code}: {r.text[:300]}"
+        except Exception as e:
+            webhook_error = f"{type(e).__name__}: {e}"
+
+    return ResetNumeroPruebaOut(
+        telefono=body.telefono,
+        digits=digits,
+        db_borrado=db_borrado,
+        webhook_ok=webhook_ok,
+        webhook_respuesta=webhook_respuesta,
+        webhook_error=webhook_error,
     )
 
 

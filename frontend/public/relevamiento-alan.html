@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Prospia · Relevamiento</title>
+<meta name="robots" content="noindex" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --navy:#0C1730; --navy-2:#0F1B36; --surface-up:#13213C; --steel:#43577B;
+    --amber:#F5B23D; --fog:#EEF3FB; --fog-muted:#8294B4;
+    --paper:#E9E7E2; --ink:#0C1730; --ink-soft:#3C465C; --border:#E3DCCE;
+    --success:#46B17B; --danger:#E5664D;
+    --font-display:'Sora',system-ui,-apple-system,sans-serif;
+    --font-mono:'JetBrains Mono',ui-monospace,monospace;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; padding:0; }
+  body {
+    font-family:var(--font-display); color:var(--ink);
+    background:var(--paper);
+    background-image:radial-gradient(1200px 400px at 50% -120px, rgba(67,87,123,.10), transparent);
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ── Header ── */
+  header {
+    background:var(--navy); color:var(--fog);
+    border-bottom:1px solid rgba(255,255,255,.08);
+  }
+  .head-inner { max-width:780px; margin:0 auto; padding:20px 24px; display:flex; align-items:center; gap:14px; }
+  .iso { width:34px; height:34px; flex:none; }
+  .brand-name { font-weight:700; font-size:20px; letter-spacing:.2px; }
+  .brand-sub { color:var(--fog-muted); font-size:13px; margin-top:1px; }
+
+  /* ── Progress (sticky) ── */
+  .progress-wrap { position:sticky; top:0; z-index:20; background:var(--navy-2); border-bottom:1px solid rgba(255,255,255,.06); }
+  .progress-inner { max-width:780px; margin:0 auto; padding:10px 24px; display:flex; align-items:center; gap:14px; }
+  .progress-bar { flex:1; height:7px; background:rgba(255,255,255,.10); border-radius:999px; overflow:hidden; }
+  .progress-fill { height:100%; width:0%; background:var(--amber); border-radius:999px; transition:width .25s ease; }
+  .progress-label { font-family:var(--font-mono); font-size:12px; color:var(--fog-muted); white-space:nowrap; }
+
+  main { max-width:780px; margin:0 auto; padding:28px 24px 80px; }
+
+  .intro { font-size:15px; color:var(--ink-soft); line-height:1.6; margin:0 0 24px; }
+  .intro strong { color:var(--ink); }
+
+  .section {
+    background:#fff; border:1px solid var(--border); border-radius:14px;
+    padding:22px 22px 8px; margin-bottom:18px; box-shadow:0 1px 2px rgba(12,23,48,.05);
+  }
+  .section-head { margin-bottom:6px; }
+  .section-num { font-family:var(--font-mono); font-size:12px; color:var(--amber); font-weight:600; }
+  .section-title { font-size:18px; font-weight:600; margin:2px 0 4px; }
+  .section-desc { font-size:13.5px; color:var(--ink-soft); line-height:1.55; margin:0 0 14px; }
+
+  .field { margin-bottom:16px; }
+  label.field-label { display:block; font-size:14px; font-weight:500; margin-bottom:5px; }
+  .req { color:var(--amber); }
+  .help { font-size:12.5px; color:var(--ink-soft); margin:4px 0 0; line-height:1.45; }
+
+  input[type=text], input[type=email], input[type=tel], input[type=url], input[type=number],
+  textarea, select {
+    width:100%; font-family:var(--font-display); font-size:14px; color:var(--ink);
+    background:#fff; border:1px solid var(--border); border-radius:10px; padding:10px 12px;
+    outline:none; transition:border-color .15s, box-shadow .15s;
+  }
+  textarea { min-height:84px; resize:vertical; line-height:1.5; }
+  input:focus, textarea:focus, select:focus { border-color:var(--amber); box-shadow:0 0 0 3px rgba(245,178,61,.18); }
+
+  .checks { display:flex; flex-wrap:wrap; gap:8px; }
+  .chk {
+    display:inline-flex; align-items:center; gap:7px; font-size:13.5px;
+    border:1px solid var(--border); border-radius:999px; padding:7px 13px; cursor:pointer;
+    user-select:none; transition:all .15s;
+  }
+  .chk input { accent-color:var(--amber); }
+  .chk.on { border-color:var(--amber); background:rgba(245,178,61,.10); }
+
+  .file-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .file-btn {
+    display:inline-flex; align-items:center; gap:7px; font-size:13.5px; font-weight:500;
+    border:1px dashed var(--steel); color:var(--ink-soft); background:#fbfaf7;
+    border-radius:10px; padding:9px 14px; cursor:pointer;
+  }
+  .file-btn:hover { border-color:var(--amber); color:var(--ink); }
+  .file-list { list-style:none; padding:0; margin:8px 0 0; font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); }
+  .file-list li { padding:3px 0; display:flex; align-items:center; gap:8px; }
+  .file-list .rm { color:var(--danger); cursor:pointer; font-weight:600; }
+
+  .submit-row { margin-top:24px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  button.cta {
+    font-family:var(--font-display); font-weight:600; font-size:15px;
+    background:var(--amber); color:var(--navy); border:none; border-radius:12px;
+    padding:13px 28px; cursor:pointer; box-shadow:0 8px 24px rgba(245,178,61,.28);
+    transition:transform .1s, filter .15s;
+  }
+  button.cta:hover { filter:brightness(1.04); }
+  button.cta:active { transform:translateY(1px); }
+  button.cta:disabled { opacity:.6; cursor:default; box-shadow:none; }
+  .save-note { font-size:12.5px; color:var(--ink-soft); }
+  .err { color:var(--danger); font-size:13.5px; margin-top:10px; }
+
+  /* ── Thank-you ── */
+  .done { text-align:center; padding:60px 24px; }
+  .done .iso { width:56px; height:56px; margin:0 auto 18px; }
+  .done h2 { font-size:24px; margin:0 0 10px; }
+  .done p { color:var(--ink-soft); font-size:15px; line-height:1.6; max-width:440px; margin:0 auto; }
+
+  .loading { text-align:center; color:var(--ink-soft); padding:60px 24px; font-size:14px; }
+
+  footer { text-align:center; color:var(--ink-soft); font-size:12px; padding:0 24px 40px; }
+  footer .iso-mini { width:14px; height:14px; vertical-align:-2px; opacity:.7; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="head-inner">
+      <svg class="iso" viewBox="0 0 100 100" aria-hidden="true">
+        <g stroke="#EEF3FB" fill="#EEF3FB">
+          <line x1="50" y1="52" x2="22" y2="24" stroke-width="2.5"/>
+          <line x1="50" y1="52" x2="82" y2="22" stroke-width="2.5"/>
+          <line x1="50" y1="52" x2="76" y2="78" stroke-width="2.5"/>
+          <circle cx="22" cy="24" r="5.5" stroke="none"/>
+          <circle cx="82" cy="22" r="5.5" stroke="none"/>
+          <circle cx="76" cy="78" r="5.5" stroke="none"/>
+          <circle cx="24" cy="74" r="5.5" stroke="none"/>
+          <circle cx="50" cy="52" r="13" stroke="none" fill="#F5B23D"/>
+        </g>
+      </svg>
+      <div>
+        <div class="brand-name">Prospia</div>
+        <div class="brand-sub" id="brandSub">Relevamiento de tu negocio</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="progress-wrap">
+    <div class="progress-inner">
+      <div class="progress-bar"><div class="progress-fill" id="progFill"></div></div>
+      <div class="progress-label" id="progLabel">0%</div>
+    </div>
+  </div>
+
+  <main id="main">
+    <div class="loading" id="loading">Cargando formulario…</div>
+  </main>
+
+  <footer>
+    <svg class="iso-mini" viewBox="0 0 100 100" aria-hidden="true"><g stroke="#43577B" fill="#43577B"><circle cx="50" cy="52" r="13" fill="#F5B23D" stroke="none"/><circle cx="22" cy="24" r="5.5" stroke="none"/><circle cx="82" cy="22" r="5.5" stroke="none"/></g></svg>
+    Prospia · La señal que encuentra a tus próximos clientes
+  </footer>
+
+<script>
+(function () {
+  // Slug del cliente: por defecto "alan"; se puede sobreescribir con ?c=<slug>.
+  const params = new URLSearchParams(location.search);
+  const SLUG = params.get('c') || 'alan';
+  const API = '/api';
+  const LS_KEY = 'relevamiento_' + SLUG;
+
+  const state = { values: {}, files: {} }; // files: {campoId: [File,...]}
+  let SECCIONES = [];
+
+  // Restaurar respuestas de texto guardadas (los archivos no se persisten).
+  try {
+    const saved = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+    if (saved && saved.values) state.values = saved.values;
+  } catch (e) {}
+
+  function persist() {
+    try { localStorage.setItem(LS_KEY, JSON.stringify({ values: state.values })); } catch (e) {}
+  }
+
+  const el = (tag, attrs, html) => {
+    const n = document.createElement(tag);
+    if (attrs) for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (html != null) n.innerHTML = html;
+    return n;
+  };
+  const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+
+  function requiredFields() {
+    const out = [];
+    SECCIONES.forEach(s => s.campos.forEach(c => { if (c.oblig && c.tipo !== 'archivo') out.push(c.id); }));
+    return out;
+  }
+
+  function updateProgress() {
+    const req = requiredFields();
+    const done = req.filter(id => {
+      const v = state.values[id];
+      return Array.isArray(v) ? v.length > 0 : (v != null && String(v).trim() !== '');
+    }).length;
+    const pct = req.length ? Math.round(done / req.length * 100) : 100;
+    document.getElementById('progFill').style.width = pct + '%';
+    document.getElementById('progLabel').textContent = pct + '%';
+  }
+
+  function setVal(id, v) { state.values[id] = v; persist(); updateProgress(); }
+
+  function renderField(c) {
+    const wrap = el('div', { class: 'field' });
+    const lbl = el('label', { class: 'field-label', for: 'f_' + c.id },
+      esc(c.label) + (c.oblig ? ' <span class="req">*</span>' : ''));
+    wrap.appendChild(lbl);
+    const cur = state.values[c.id];
+
+    if (c.tipo === 'textarea') {
+      const t = el('textarea', { id: 'f_' + c.id });
+      if (cur) t.value = cur;
+      t.addEventListener('input', () => setVal(c.id, t.value));
+      wrap.appendChild(t);
+    } else if (c.tipo === 'select') {
+      const sel = el('select', { id: 'f_' + c.id });
+      sel.appendChild(el('option', { value: '' }, '— Elegir —'));
+      (c.opciones || []).forEach(o => {
+        const op = el('option', { value: o }, esc(o));
+        if (cur === o) op.setAttribute('selected', '');
+        sel.appendChild(op);
+      });
+      sel.addEventListener('change', () => setVal(c.id, sel.value));
+      wrap.appendChild(sel);
+    } else if (c.tipo === 'multiselect') {
+      const box = el('div', { class: 'checks' });
+      const arr = Array.isArray(cur) ? cur.slice() : [];
+      (c.opciones || []).forEach(o => {
+        const on = arr.includes(o);
+        const chip = el('label', { class: 'chk' + (on ? ' on' : '') });
+        const cb = el('input', { type: 'checkbox' });
+        cb.checked = on;
+        cb.addEventListener('change', () => {
+          const a = Array.isArray(state.values[c.id]) ? state.values[c.id].slice() : [];
+          if (cb.checked) { if (!a.includes(o)) a.push(o); chip.classList.add('on'); }
+          else { const i = a.indexOf(o); if (i >= 0) a.splice(i, 1); chip.classList.remove('on'); }
+          setVal(c.id, a);
+        });
+        chip.appendChild(cb);
+        chip.appendChild(document.createTextNode(o));
+        box.appendChild(chip);
+      });
+      wrap.appendChild(box);
+    } else if (c.tipo === 'archivo') {
+      const row = el('div', { class: 'file-row' });
+      const inp = el('input', { type: 'file', id: 'f_' + c.id, style: 'display:none', multiple: c.multiple ? 'true' : '' });
+      const btn = el('label', { class: 'file-btn', for: 'f_' + c.id }, '⬆ Subir archivo' + (c.multiple ? '(s)' : ''));
+      const list = el('ul', { class: 'file-list' });
+      const refresh = () => {
+        list.innerHTML = '';
+        (state.files[c.id] || []).forEach((f, idx) => {
+          const li = el('li');
+          li.appendChild(document.createTextNode('📎 ' + f.name + ' (' + Math.round(f.size / 1024) + ' KB)'));
+          const rm = el('span', { class: 'rm' }, '✕');
+          rm.addEventListener('click', () => { state.files[c.id].splice(idx, 1); refresh(); });
+          li.appendChild(rm);
+          list.appendChild(li);
+        });
+      };
+      inp.addEventListener('change', () => {
+        state.files[c.id] = (state.files[c.id] || []).concat(Array.from(inp.files));
+        inp.value = '';
+        refresh();
+      });
+      row.appendChild(btn);
+      wrap.appendChild(row);
+      wrap.appendChild(list);
+    } else {
+      const type = ({ email:'email', tel:'tel', url:'url', number:'number' })[c.tipo] || 'text';
+      const inp = el('input', { type, id: 'f_' + c.id });
+      if (cur) inp.value = cur;
+      inp.addEventListener('input', () => setVal(c.id, inp.value));
+      wrap.appendChild(inp);
+    }
+
+    if (c.ayuda) wrap.appendChild(el('p', { class: 'help' }, esc(c.ayuda)));
+    return wrap;
+  }
+
+  function render() {
+    const main = document.getElementById('main');
+    main.innerHTML = '';
+    main.appendChild(el('p', { class: 'intro' },
+      'Completá lo que puedas — se guarda solo a medida que escribís, podés volver más tarde. ' +
+      'Lo marcado con <span class="req">*</span> es lo importante para arrancar. ' +
+      '<strong>Cuanto más detalle nos des sobre tu cliente ideal y más archivos subas, mejor vamos a filtrar a quién contactar.</strong>'));
+
+    SECCIONES.forEach((s, i) => {
+      const sec = el('div', { class: 'section' });
+      const head = el('div', { class: 'section-head' });
+      head.appendChild(el('div', { class: 'section-num' }, 'Sección ' + (i + 1)));
+      head.appendChild(el('div', { class: 'section-title' }, esc(s.titulo)));
+      if (s.descripcion) head.appendChild(el('p', { class: 'section-desc' }, esc(s.descripcion)));
+      sec.appendChild(head);
+      s.campos.forEach(c => sec.appendChild(renderField(c)));
+      main.appendChild(sec);
+    });
+
+    const row = el('div', { class: 'submit-row' });
+    const btn = el('button', { class: 'cta', id: 'submitBtn' }, 'Enviar relevamiento');
+    btn.addEventListener('click', submit);
+    row.appendChild(btn);
+    row.appendChild(el('span', { class: 'save-note' }, '✓ Guardado automático en este dispositivo'));
+    main.appendChild(row);
+    main.appendChild(el('div', { class: 'err', id: 'errBox', style: 'display:none' }));
+    updateProgress();
+  }
+
+  function missingRequired() {
+    const miss = [];
+    SECCIONES.forEach(s => s.campos.forEach(c => {
+      if (!c.oblig || c.tipo === 'archivo') return;
+      const v = state.values[c.id];
+      const empty = Array.isArray(v) ? v.length === 0 : (v == null || String(v).trim() === '');
+      if (empty) miss.push(c.label);
+    }));
+    return miss;
+  }
+
+  async function submit() {
+    const errBox = document.getElementById('errBox');
+    errBox.style.display = 'none';
+    const miss = missingRequired();
+    if (miss.length) {
+      errBox.style.display = 'block';
+      errBox.textContent = 'Faltan campos obligatorios: ' + miss.slice(0, 6).join(', ') + (miss.length > 6 ? '…' : '');
+      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      return;
+    }
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true; btn.textContent = 'Enviando…';
+
+    const fd = new FormData();
+    fd.append('payload', JSON.stringify({ values: state.values, extra: [], meta: { slug: SLUG } }));
+    // Cada archivo viaja con su campo en el nombre: "<campo>::<nombre real>".
+    Object.keys(state.files).forEach(campo => {
+      (state.files[campo] || []).forEach(f => {
+        fd.append('archivos', new File([f], campo + '::' + f.name, { type: f.type }));
+      });
+    });
+
+    try {
+      const res = await fetch(API + '/public/intake/' + encodeURIComponent(SLUG), { method: 'POST', body: fd });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.detail || ('Error ' + res.status));
+      }
+      localStorage.removeItem(LS_KEY);
+      showDone();
+    } catch (e) {
+      btn.disabled = false; btn.textContent = 'Enviar relevamiento';
+      errBox.style.display = 'block';
+      errBox.textContent = 'No se pudo enviar: ' + e.message + '. Probá de nuevo en un momento.';
+    }
+  }
+
+  function showDone() {
+    document.querySelector('.progress-wrap').style.display = 'none';
+    const main = document.getElementById('main');
+    main.innerHTML =
+      '<div class="done">' +
+      '<svg class="iso" viewBox="0 0 100 100"><g stroke="#43577B" fill="#43577B">' +
+      '<line x1="50" y1="52" x2="22" y2="24" stroke-width="2.5"/><line x1="50" y1="52" x2="82" y2="22" stroke-width="2.5"/>' +
+      '<line x1="50" y1="52" x2="76" y2="78" stroke-width="2.5"/><circle cx="22" cy="24" r="5.5" stroke="none"/>' +
+      '<circle cx="82" cy="22" r="5.5" stroke="none"/><circle cx="76" cy="78" r="5.5" stroke="none"/>' +
+      '<circle cx="24" cy="74" r="5.5" stroke="none"/><circle cx="50" cy="52" r="13" stroke="none" fill="#F5B23D"/></g></svg>' +
+      '<h2>¡Listo, recibimos todo! 🎉</h2>' +
+      '<p>Gracias por completar el relevamiento. Lo vamos a analizar y nos ponemos en contacto para los próximos pasos. ' +
+      'Si querés sumar algo más, escribinos cuando quieras.</p>' +
+      '</div>';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function boot() {
+    try {
+      const [schemaRes, metaRes] = await Promise.all([
+        fetch(API + '/public/intake-schema'),
+        fetch(API + '/public/intake/' + encodeURIComponent(SLUG)),
+      ]);
+      const schema = await schemaRes.json();
+      SECCIONES = schema.secciones || [];
+      if (metaRes.ok) {
+        const meta = await metaRes.json();
+        document.getElementById('brandSub').textContent = 'Relevamiento · ' + (meta.nombre || SLUG);
+      }
+      render();
+    } catch (e) {
+      document.getElementById('main').innerHTML =
+        '<div class="loading">No se pudo cargar el formulario. Verificá el link o probá de nuevo más tarde.</div>';
+    }
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
