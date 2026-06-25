@@ -125,25 +125,25 @@ export default function Tokens() {
             ))}
           </div>
 
-          {/* Costo por día + Histórico mensual, misma fila */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-            <div className="bg-card border border-line rounded-2xl p-5 flex flex-col">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Costo por día</h2>
-                <div className="flex items-center gap-3 text-[11px] text-muted">
-                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: '#2F4068' }} />mensajes</span>
-                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: '#ef4444' }} />errores</span>
-                </div>
+          {/* Costo por día — barras apiladas (mensajes + errores) */}
+          <div className="bg-card border border-line rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Costo por día</h2>
+              <div className="flex items-center gap-3 text-[11px] text-muted">
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: '#F5B23D' }} />mensajes</span>
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: '#ef4444' }} />errores</span>
               </div>
-              {dias.length === 0 ? <p className="text-sm text-muted">Sin datos.</p> : <BarrasDia dias={dias} />}
             </div>
-            <div className="bg-card border border-line rounded-2xl p-5 flex flex-col">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Histórico mensual</h2>
-                <span className="text-[11px] text-muted">pasá el mouse por un mes</span>
-              </div>
-              {meses.length === 0 ? <p className="text-sm text-muted">Sin histórico todavía.</p> : <LineaMensual meses={meses} hover={hoverMes} setHover={setHoverMes} />}
+            {dias.length === 0 ? <p className="text-sm text-muted">Sin datos.</p> : <BarrasDia dias={dias} />}
+          </div>
+
+          {/* Histórico mensual */}
+          <div className="bg-card border border-line rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Histórico mensual</h2>
+              <span className="text-[11px] text-muted">pasá el mouse por un mes</span>
             </div>
+            {meses.length === 0 ? <p className="text-sm text-muted">Sin histórico todavía.</p> : <LineaMensual meses={meses} hover={hoverMes} setHover={setHoverMes} />}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
@@ -198,46 +198,60 @@ function niceMax(v: number): number {
 
 function BarrasDia({ dias }: { dias: DiaTrend[] }) {
   const [hi, setHi] = useState<number | null>(null)
-  const max = niceMax(Math.max(0.001, ...dias.map((d) => d.costo_usd)))
+  const W = 900, H = 300, padL = 56, padR = 14, padT = 28, padB = 50
+  const top = niceMax(Math.max(0.001, ...dias.map((d) => d.costo_usd)))
+  const n = dias.length
+  const slot = (W - padL - padR) / n
+  const bw = Math.min(36, slot * 0.6)
+  const xc = (i: number) => padL + slot * i + slot / 2
+  const y = (c: number) => (H - padB) - (c / top) * (H - padT - padB)
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * top)
   const h = hi != null ? dias[hi] : null
   return (
-    <div className="flex-1 flex flex-col">
-      <div className="relative" style={{ height: 168 }}>
-        {h && (
-          <div className="absolute -top-1 left-1/2 -translate-x-1/2 bg-app border border-line rounded-lg px-3 py-2 text-xs z-10 shadow whitespace-nowrap">
-            <div className="font-semibold text-ink mb-0.5">{h.fecha}</div>
-            <div className="text-muted">Total: <span className="text-ink font-medium">{usd3(h.costo_usd)}</span></div>
-            <div className="text-muted">Mensajes: <span className="font-medium" style={{ color: '#2F4068' }}>{usd3(h.costo_mensajes)}</span></div>
-            <div className="text-muted">Errores: <span className="font-medium" style={{ color: '#ef4444' }}>{usd3(h.costo_errores)}</span></div>
-          </div>
-        )}
-        <div className="absolute inset-0 flex items-end gap-[3px]">
-          {dias.map((d, i) => {
-            const errFrac = d.costo_usd > 0 ? d.costo_errores / d.costo_usd : 0
-            return (
-              <div key={d.fecha} className="flex-1 h-full flex items-end" onMouseEnter={() => setHi(i)} onMouseLeave={() => setHi(null)}>
-                <div className="w-full flex flex-col justify-end rounded-md overflow-hidden transition-opacity"
-                  style={{ height: `${Math.max((d.costo_usd / max) * 100, d.costo_usd > 0 ? 3 : 1)}%`, opacity: hi == null || hi === i ? 1 : 0.45 }}>
-                  {errFrac > 0 && <div style={{ height: `${errFrac * 100}%`, background: '#ef4444' }} />}
-                  <div className="flex-1" style={{ background: '#2F4068' }} />
-                </div>
-              </div>
-            )
-          })}
+    <div className="relative">
+      {h && (
+        <div className="absolute top-0 right-2 bg-app border border-line rounded-lg px-3 py-2 text-xs z-10 shadow whitespace-nowrap">
+          <div className="font-semibold text-ink mb-0.5">{h.fecha}</div>
+          <div className="text-muted">Total: <span className="text-ink font-medium">{usd3(h.costo_usd)}</span></div>
+          <div className="text-muted">Mensajes: <span className="font-medium" style={{ color: '#F5B23D' }}>{usd3(h.costo_mensajes)}</span></div>
+          <div className="text-muted">Errores: <span className="font-medium" style={{ color: '#ef4444' }}>{usd3(h.costo_errores)}</span></div>
         </div>
-      </div>
-      <div className="flex gap-[3px] mt-1.5">
-        {dias.map((d, i) => (
-          <span key={d.fecha} className="flex-1 text-center text-[9px] text-muted">{i % 2 === 0 ? Number(d.fecha.slice(8)) : ''}</span>
+      )}
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 320 }}>
+        {ticks.map((tk, i) => (
+          <g key={i}>
+            <line x1={padL} y1={y(tk)} x2={W - padR} y2={y(tk)} stroke="#94a3b8" strokeOpacity={0.18} strokeWidth={1} />
+            <text x={padL - 8} y={y(tk) + 3} textAnchor="end" fontSize={10} fill="#94a3b8">{usd(tk)}</text>
+          </g>
         ))}
-      </div>
+        <line x1={padL} y1={H - padB} x2={W - padR} y2={H - padB} stroke="#94a3b8" strokeOpacity={0.4} strokeWidth={1} />
+        {dias.map((d, i) => {
+          const hMsg = (H - padB) - y(d.costo_mensajes)
+          const hErr = (H - padB) - y(d.costo_errores)
+          const yTop = y(d.costo_usd)
+          const op = hi == null || hi === i ? 1 : 0.4
+          return (
+            <g key={d.fecha} onMouseEnter={() => setHi(i)} onMouseLeave={() => setHi(null)} style={{ cursor: 'pointer', opacity: op }}>
+              {/* mensajes (ámbar, abajo) */}
+              {d.costo_mensajes > 0 && <rect x={xc(i) - bw / 2} y={(H - padB) - hMsg} width={bw} height={hMsg} fill="#F5B23D" rx={2} />}
+              {/* errores (rojo, arriba) */}
+              {d.costo_errores > 0 && <rect x={xc(i) - bw / 2} y={yTop} width={bw} height={hErr} fill="#ef4444" rx={2} />}
+              {/* total arriba */}
+              {d.costo_usd > 0 && <text x={xc(i)} y={yTop - 6} textAnchor="middle" fontSize={10.5} fontWeight={700} fill="currentColor" className="text-ink">{usd(d.costo_usd)}</text>}
+              {/* fecha rotada */}
+              <text x={xc(i)} y={H - padB + 14} textAnchor="end" fontSize={10} fill="#94a3b8" transform={`rotate(-40 ${xc(i)} ${H - padB + 14})`}>{d.fecha.slice(5)}</text>
+              <rect x={xc(i) - slot / 2} y={padT} width={slot} height={H - padT - padB} fill="transparent" />
+            </g>
+          )
+        })}
+      </svg>
     </div>
   )
 }
 
 function LineaMensual({ meses, hover, setHover }: { meses: MesTrend[]; hover: number | null; setHover: (i: number | null) => void }) {
-  const W = 440, H = 220
-  const padL = 46, padR = 16, padT = 26, padB = 26
+  const W = 900, H = 260
+  const padL = 56, padR = 16, padT = 28, padB = 30
   const top = niceMax(Math.max(0.001, ...meses.map((m) => m.costo_usd)))
   const x = (i: number) => meses.length <= 1 ? (padL + W - padR) / 2 : padL + (i * (W - padL - padR)) / (meses.length - 1)
   const y = (c: number) => (H - padB) - (c / top) * (H - padT - padB)
@@ -256,7 +270,7 @@ function LineaMensual({ meses, hover, setHover }: { meses: MesTrend[]; hover: nu
           <div className="text-muted">Prom. $/conv.: <span className="text-ink font-medium">{usd3(h.costo_por_conversacion)}</span></div>
         </div>
       )}
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" preserveAspectRatio="xMidYMid meet" style={{ maxHeight: 220 }}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 300 }}>
         <defs>
           <linearGradient id="areaTok" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#F5B23D" stopOpacity={0.35} />
