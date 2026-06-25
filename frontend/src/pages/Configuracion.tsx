@@ -169,6 +169,9 @@ export default function Configuracion() {
 
       {/* ── Notificaciones push (#38) ── */}
       <NotificacionesPush />
+
+      {/* ── Inicializar prueba de Camila (Etiguel) ── */}
+      <InicializarPrueba />
       </div>
     </div>
   )
@@ -248,6 +251,106 @@ function NotificacionesPush() {
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+// ── Inicializar prueba de Camila (Etiguel) ───────────────────────────────────
+// Borra todo rastro de un número de teléfono de prueba (espejo en la DB de
+// Prospia + memoria local de Camila vía el webhook) para re-testear desde cero.
+const TELEFONO_PRUEBA_DEFAULT = '+5491123146373'
+
+type ResetNumeroPruebaOut = {
+  telefono: string
+  digits: string
+  db_borrado: { mirrors: number; mensajes: number }
+  webhook_ok: boolean
+  webhook_respuesta: Record<string, unknown> | null
+  webhook_error: string | null
+}
+
+function InicializarPrueba() {
+  const [confirmando, setConfirmando] = useState(false)
+  const [telefono, setTelefono] = useState(TELEFONO_PRUEBA_DEFAULT)
+  const [enviando, setEnviando] = useState(false)
+  const [resultado, setResultado] = useState<{ ok: boolean; text: string } | null>(null)
+
+  function abrir() {
+    setTelefono(TELEFONO_PRUEBA_DEFAULT)
+    setResultado(null)
+    setConfirmando(true)
+  }
+
+  async function confirmar() {
+    setEnviando(true)
+    setResultado(null)
+    try {
+      const r = await api.post<ResetNumeroPruebaOut>('/admin/etiguel/reset-numero-prueba', {
+        telefono,
+      })
+      const { mirrors, mensajes } = r.db_borrado
+      const partesDb = `DB: ${mirrors} espejo${mirrors === 1 ? '' : 's'} y ${mensajes} mensaje${mensajes === 1 ? '' : 's'}`
+      const partesWebhook = r.webhook_ok
+        ? 'Memoria de Camila limpiada.'
+        : `Webhook NO limpió la memoria (${r.webhook_error ?? 'error desconocido'}).`
+      setResultado({ ok: r.webhook_ok, text: `${partesDb}. ${partesWebhook}` })
+      setConfirmando(false)
+    } catch (e) {
+      setResultado({ ok: false, text: e instanceof Error ? e.message : 'Error al inicializar la prueba.' })
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <div className="bg-card border border-line rounded-2xl p-6 space-y-4">
+      <div>
+        <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Inicializar prueba</h2>
+        <p className="text-xs text-muted mt-1">
+          Borra todo rastro de un número de prueba (espejo en la app + memoria de Camila) para volver a testear desde cero.
+        </p>
+      </div>
+
+      {!confirmando && (
+        <button type="button" onClick={abrir} className={btnCls}>
+          Inicializar prueba
+        </button>
+      )}
+
+      {confirmando && (
+        <div className="border border-line rounded-xl p-4 space-y-3">
+          <p className="text-sm text-ink-soft">
+            Esto va a borrar el espejo y la memoria de Camila para este número. Confirmá el teléfono a limpiar:
+          </p>
+          <div>
+            <label className={labelCls}>Teléfono de prueba</label>
+            <input
+              value={telefono}
+              onChange={(e) => setTelefono(e.target.value)}
+              autoCapitalize="none"
+              autoCorrect="off"
+              className={inputCls}
+            />
+          </div>
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={confirmar} disabled={enviando} className={btnCls}>
+              {enviando ? 'Limpiando…' : 'Confirmar y limpiar'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmando(false)}
+              disabled={enviando}
+              className="border border-line text-ink rounded-lg px-4 py-2 text-sm font-medium hover:bg-app disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {resultado && (
+        <p className={`text-sm ${resultado.ok ? 'text-emerald-500' : 'text-red-500'}`}>{resultado.text}</p>
+      )}
     </div>
   )
 }

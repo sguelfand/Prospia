@@ -368,3 +368,20 @@ class ImpersonateOut(BaseModel):
     """Token para 'ver como cliente': sesión del usuario nivel 2 de ese tenant."""
     access_token: str
     cliente: str              # nombre del cliente que se está viendo
+
+
+class ResetNumeroPruebaIn(BaseModel):
+    """Pedido para reiniciar una prueba de Camila: borrar todo rastro de un número
+    de teléfono de prueba (espejo en la DB de Prospia + memoria local del webhook)."""
+    telefono: str
+
+
+class ResetNumeroPruebaOut(BaseModel):
+    """Resumen de qué se limpió al reiniciar la prueba (best-effort: el webhook
+    puede fallar pero igual reportamos lo que se borró de la DB)."""
+    telefono: str
+    digits: str                       # los últimos 10 dígitos usados para el match
+    db_borrado: dict[str, int]        # {"mirrors": N, "mensajes": M}
+    webhook_ok: bool                  # si el POST /reset-numero-prueba respondió ok
+    webhook_respuesta: dict | None = None   # cuerpo de la respuesta del webhook
+    webhook_error: str | None = None        # error si el webhook falló
