@@ -21,18 +21,6 @@ La sección de control ("quién completa") queda fuera de la config."""
 
 SECCIONES = [
     {
-        "id": "quien_completa",
-        "titulo": "Quién completa este formulario",
-        "descripcion": "Para volver a vos si nos falta algún dato.",
-        "en_config": False,
-        "campos": [
-            {"id": "qc_nombre", "label": "Nombre y apellido", "tipo": "text", "oblig": True},
-            {"id": "qc_rol", "label": "Rol en la empresa", "tipo": "text", "oblig": True, "ayuda": "Ej: dueño, comercial, marketing"},
-            {"id": "qc_email", "label": "Email de contacto", "tipo": "email", "oblig": True},
-            {"id": "qc_whatsapp", "label": "WhatsApp directo", "tipo": "tel", "oblig": True, "ayuda": "Por si necesitamos repreguntar algo rápido"},
-        ],
-    },
-    {
         "id": "empresa",
         "titulo": "La empresa",
         "descripcion": "Datos generales del negocio.",
@@ -155,8 +143,7 @@ SECCIONES = [
             {"id": "deriva_nombre", "label": "Cuando alguien se interesa, ¿a quién se le pasa?", "tipo": "text", "oblig": True, "ayuda": "Nombre de la persona que sigue el lead"},
             {"id": "deriva_whatsapp", "label": "WhatsApp de esa persona", "tipo": "tel", "oblig": True},
             {"id": "deriva_email", "label": "Email de esa persona", "tipo": "email", "oblig": False},
-            {"id": "notif_canal", "label": "¿Por dónde querés recibir el aviso de \"interesado\"?", "tipo": "select", "oblig": True, "opciones": ["WhatsApp", "Email"]},
-            {"id": "notif_destino", "label": "Destino del aviso (número o mail)", "tipo": "text", "oblig": True},
+            {"id": "notif_canal", "label": "¿Por dónde le avisamos cuando hay un interesado?", "tipo": "select", "oblig": True, "opciones": ["WhatsApp", "Email"], "ayuda": "Le mandamos el aviso al WhatsApp o email de arriba, según lo que elijas"},
             {"id": "info_para_seguir", "label": "¿Qué info necesita esa persona para seguir el lead?", "tipo": "textarea", "oblig": False},
             {"id": "horario_contacto", "label": "Horario en que se puede contactar prospects", "tipo": "text", "oblig": False, "ayuda": "Ej: 10 a 18 hs"},
             {"id": "crm", "label": "¿Usás algún CRM hoy?", "tipo": "text", "oblig": False, "ayuda": "Monday, HubSpot, Excel…"},
@@ -180,16 +167,10 @@ SECCIONES = [
     },
     {
         "id": "operativa",
-        "titulo": "Operativa y observaciones",
-        "descripcion": "No pongas acá contraseñas ni claves de API: eso lo coordinamos por un canal seguro aparte.",
+        "titulo": "Algo más",
+        "descripcion": "Cualquier cosa que debamos saber antes de arrancar.",
         "en_config": True,
         "campos": [
-            {"id": "wa_dedicado", "label": "¿Tienen un número de WhatsApp dedicado para esto?", "tipo": "select", "oblig": True, "opciones": ["Sí, ya tengo uno", "Hay que conseguir uno"]},
-            {"id": "numero_bot", "label": "Número de WhatsApp del bot (si ya lo tienen)", "tipo": "tel", "oblig": False},
-            {"id": "apis_propias", "label": "¿Tienen cuenta propia de las APIs (Apify / Anthropic)?", "tipo": "select", "oblig": False, "opciones": ["Sí", "No, las ponen ustedes"]},
-            {"id": "email_login", "label": "Email para el login a la plataforma Prospia", "tipo": "email", "oblig": True, "ayuda": "La contraseña la generamos nosotros y te la pasamos aparte"},
-            {"id": "responsable_tecnico", "label": "Responsable técnico del lado del cliente", "tipo": "text", "oblig": False},
-            {"id": "volumen_diario", "label": "Volumen de contactos diario deseado", "tipo": "number", "oblig": False, "ayuda": "Por defecto 20/día"},
             {"id": "observaciones", "label": "Observaciones / cualquier cosa que debamos saber", "tipo": "textarea", "oblig": False},
         ],
     },
