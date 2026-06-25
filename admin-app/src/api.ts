@@ -354,27 +354,33 @@ export const setMonitoreoIntervalo = (token: string, intervalSeconds: number) =>
     token,
   );
 
-// ── Tokens: auditor de consumo de Camila ─────────────────────────────────────
+// ── Tokens: auditor de consumo de Camila (por conversación) ──────────────────
 export interface TokenSource { id: string; nombre: string }
 export interface TokenTotales {
   input: number; output: number; cacheRead: number; cacheWrite: number; total: number;
-  llamadas: number; costo_usd: number; errores: number; timeouts: number; compactaciones: number;
+  llamadas: number; costo_usd: number; costo_mensajes: number; costo_errores: number;
+  errores: number; timeouts: number; compactaciones: number;
 }
 export interface TokenConv {
-  sesion: string; agente: string; tokens: number; costo_usd: number;
-  llamadas: number; timeouts: number; errores: number; ejemplo: string | null;
+  telefono: string; tokens: number; costo_usd: number; llamadas: number;
+  timeouts: number; errores: number; ejemplo: string | null; es_sistema: boolean;
 }
 export interface TokenOportunidad {
-  tipo: string; severidad: "alta" | "media" | "baja"; titulo: string; detalle: string; sesion?: string;
+  id: number; tipo: string; clave: string; severidad: "alta" | "media" | "baja";
+  titulo: string; detalle: string; estado: string; primera_vez: string | null;
 }
 export interface TokenAgg { tokens: number; costo_usd: number; llamadas: number }
 export interface TokenUltimo {
-  fecha: string; totales: TokenTotales;
-  por_agente: Record<string, TokenAgg>; por_modelo: Record<string, TokenAgg>;
-  top_conversaciones: TokenConv[]; oportunidades: TokenOportunidad[];
+  fecha: string; totales: TokenTotales; por_modelo: Record<string, TokenAgg>;
+  top_conversaciones: TokenConv[]; n_conversaciones: number;
 }
-export interface TokenTrend { fecha: string; costo_usd: number; total_tokens: number; errores: number; oportunidades: number }
-export interface TokenAudit { source: string; ultimo: TokenUltimo | null; tendencia: TokenTrend[] }
+export interface TokenDiaTrend { fecha: string; costo_usd: number; costo_mensajes: number; costo_errores: number }
+export interface TokenMesTrend { mes: string; costo_usd: number; conversaciones: number; llamadas: number; costo_por_conversacion: number }
+export interface TokenAudit {
+  source: string; ultimo: TokenUltimo | null; tendencia: TokenDiaTrend[];
+  serie_mensual: TokenMesTrend[]; por_modelo_mes: Record<string, TokenAgg>;
+  mes_actual: string; oportunidades: TokenOportunidad[];
+}
 
 export const getTokenSources = (token: string) =>
   request<TokenSource[]>("/admin/tokens/sources", {}, token);
