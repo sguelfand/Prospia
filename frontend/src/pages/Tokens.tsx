@@ -199,30 +199,56 @@ export default function Tokens() {
   )
 }
 
+function niceMax(v: number): number {
+  if (v <= 0) return 1
+  const pow = Math.pow(10, Math.floor(Math.log10(v)))
+  const n = v / pow
+  const step = n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10
+  return step * pow
+}
+
 function LineaMensual({ meses, hover, setHover }: { meses: MesTrend[]; hover: number | null; setHover: (i: number | null) => void }) {
-  const W = 640, H = 180, pad = 30
-  const maxC = Math.max(0.001, ...meses.map((m) => m.costo_usd))
-  const x = (i: number) => meses.length <= 1 ? W / 2 : pad + (i * (W - 2 * pad)) / (meses.length - 1)
-  const y = (c: number) => H - pad - (c / maxC) * (H - 2 * pad)
+  const W = 660, H = 240
+  const padL = 52, padR = 18, padT = 26, padB = 30  // padT deja lugar al monto arriba del punto
+  const top = niceMax(Math.max(0.001, ...meses.map((m) => m.costo_usd)))
+  const x = (i: number) => meses.length <= 1 ? (padL + W - padR) / 2 : padL + (i * (W - padL - padR)) / (meses.length - 1)
+  const y = (c: number) => (H - padB) - (c / top) * (H - padT - padB)
   const pts = meses.map((m, i) => `${x(i)},${y(m.costo_usd)}`).join(' ')
   const h = hover != null ? meses[hover] : null
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * top)
   return (
     <div className="relative">
       {h && (
-        <div className="absolute -top-1 left-1/2 -translate-x-1/2 bg-app border border-line rounded-lg px-3 py-2 text-xs z-10 shadow">
+        <div className="absolute top-0 right-2 bg-app border border-line rounded-lg px-3 py-2 text-xs z-10 shadow">
           <div className="font-semibold text-ink mb-0.5">{h.mes}</div>
           <div className="text-muted">Total: <span className="text-ink font-medium">{usd(h.costo_usd)}</span></div>
           <div className="text-muted">Conversaciones: <span className="text-ink font-medium">{fmt(h.conversaciones)}</span></div>
           <div className="text-muted">Prom. $/conversación: <span className="text-ink font-medium">{usd3(h.costo_por_conversacion)}</span></div>
         </div>
       )}
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 200 }}>
-        <polyline points={pts} fill="none" stroke="#F5B23D" strokeWidth={2} />
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 260 }}>
+        {/* grilla + eje Y con $ */}
+        {ticks.map((tk, i) => {
+          const yy = y(tk)
+          return (
+            <g key={i}>
+              <line x1={padL} y1={yy} x2={W - padR} y2={yy} stroke="#E3E9F3" strokeOpacity={0.25} strokeWidth={1} />
+              <text x={padL - 8} y={yy + 3} textAnchor="end" fontSize={10} fill="#64748B">{usd(tk)}</text>
+            </g>
+          )
+        })}
+        {/* eje Y (vertical) y eje X (horizontal) */}
+        <line x1={padL} y1={padT} x2={padL} y2={H - padB} stroke="#64748B" strokeWidth={1} />
+        <line x1={padL} y1={H - padB} x2={W - padR} y2={H - padB} stroke="#64748B" strokeWidth={1} />
+        {/* línea de costo */}
+        <polyline points={pts} fill="none" stroke="#F5B23D" strokeWidth={2.5} />
         {meses.map((m, i) => (
           <g key={m.mes} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} style={{ cursor: 'pointer' }}>
+            {/* monto arriba del punto */}
+            <text x={x(i)} y={y(m.costo_usd) - 10} textAnchor="middle" fontSize={11} fontWeight={600} fill="currentColor" className="text-ink">{usd(m.costo_usd)}</text>
             <circle cx={x(i)} cy={y(m.costo_usd)} r={hover === i ? 6 : 4} fill="#F5B23D" />
-            <rect x={x(i) - 16} y={0} width={32} height={H} fill="transparent" />
-            <text x={x(i)} y={H - 8} textAnchor="middle" fontSize={10} fill="#64748B">{m.mes.slice(2)}</text>
+            <rect x={x(i) - 18} y={padT} width={36} height={H - padT - padB} fill="transparent" />
+            <text x={x(i)} y={H - 10} textAnchor="middle" fontSize={10} fill="#64748B">{m.mes}</text>
           </g>
         ))}
       </svg>
