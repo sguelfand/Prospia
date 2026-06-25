@@ -53,6 +53,13 @@ export default function EtiguelMirrorDetailScreen({ route, navigation }: Etiguel
         {item.estado ? <Text style={styles.meta}>Estado: {item.estado}</Text> : null}
         {item.telefono ? <IconText name="phone" text={item.telefono} size={14} textStyle={{ fontSize: 13, marginTop: 4 }} /> : null}
         {item.email ? <IconText name="mail" text={item.email} size={14} textStyle={{ fontSize: 13, marginTop: 4 }} /> : null}
+        <IconText
+          name="calendar"
+          text={item.prox_contacto ? `Próximo contacto: ${item.prox_contacto}` : "Próximo contacto: sin agendar"}
+          size={14}
+          color={item.prox_contacto ? colors.primary : colors.textDim}
+          textStyle={{ fontSize: 13, marginTop: 4 }}
+        />
       </View>
 
       <CollapsibleSection title="Conversación con Camila" count={mensajes.length}>
