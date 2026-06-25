@@ -181,17 +181,130 @@ def _check_apify():
     return _reachable("https://api.apify.com/v2")
 
 
-# slug, nombre (= proveedor, para identificar rápido), descripcion (al lado), grupo, critico, fn
+# ── salud interna de Camila (/camila-health) ────────────────────────────────
+#
+# Un solo HTTP a /camila-health del webhook devuelve memoria/contexto/modelo/
+# liveness de la sesión de Camila. Lo llamamos UNA vez por corrida (cacheado en
+# un dict por los 4 checks que derivan de él) en lugar de pegarle 4 veces.
+
+_camila_health_cache: dict = {}  # {"ts": monotonic, "data": dict|None, "error": str|None}
+_CAMILA_HEALTH_TTL = 20  # s — todos los checks de una misma corrida comparten el fetch
+
+
+def _fetch_camila_health() -> tuple[dict | None, str | None]:
+    """Devuelve (data, error). Cachea por _CAMILA_HEALTH_TTL para que los 4
+    checks de Camila compartan una sola llamada HTTP por corrida del monitor."""
+    now = time.monotonic()
+    c = _camila_health_cache
+    if c and (now - c.get("ts", 0)) < _CAMILA_HEALTH_TTL:
+        return c.get("data"), c.get("error")
+
+    token = _etiguel_token()
+    if not token:
+        data, err = None, "Token de Etiguel no configurado (monitor_settings / env)"
+    else:
+        try:
+            r, _ms = _timed_get(_ETIGUEL + "/camila-health",
+                                headers={"User-Agent": _UA, "X-Deploy-Token": token})
+            if r.status_code in _TUNNEL_DOWN_CODES:
+                data, err = None, (f"no verificable (tunnel Cloudflare caído: HTTP "
+                                   f"{r.status_code}); Camila puede estar OK")
+            elif r.status_code != 200:
+                data, err = None, f"camila-health HTTP {r.status_code}"
+            else:
+                try:
+                    data, err = r.json(), None
+                except Exception:
+                    data, err = None, "camila-health no devolvió JSON"
+        except Exception as e:
+            data, err = None, (f"no verificable (webhook/tunnel inalcanzable, "
+                               f"Camila puede estar OK): {type(e).__name__}")
+
+    _camila_health_cache.clear()
+    _camila_health_cache.update({"ts": now, "data": data, "error": err})
+    return data, err
+
+
+def _check_camila_responde():
+    """liveness.ok==True → up; ==False (stuck/overflow/stall) → down; null/no
+    verificable → unknown. Lee señales del gateway, no gasta tokens."""
+    data, err = _fetch_camila_health()
+    if data is None:
+        return "unknown", None, err
+    lv = data.get("liveness") or {}
+    ok = lv.get("ok")
+    detalle = f"stall {round((lv.get('stall_max_ms') or 0) / 1000)}s / stuck {lv.get('stuck', 0)}"
+    if lv.get("overflow"):
+        detalle += f" / overflow {lv.get('overflow')}"
+    if ok is True:
+        return "up", None, None
+    if ok is False:
+        return "down", None, detalle
+    return "unknown", None, "liveness sin datos"
+
+
+def _check_camila_memoria():
+    """memoria.pct>=85 → warn (avisa antes de quedarse sin RAM y tirar el
+    túnel/webhook); <85 → up."""
+    data, err = _fetch_camila_health()
+    if data is None:
+        return "unknown", None, err
+    mem = data.get("memoria") or {}
+    pct = mem.get("pct")
+    if pct is None:
+        return "unknown", None, "memoria sin datos"
+    detalle = f"{round(pct)}% ({mem.get('used_mb', '?')}/{mem.get('max_mb', '?')} MB)"
+    return ("warn" if pct >= 85 else "up"), None, detalle
+
+
+def _check_camila_contexto():
+    """contexto.cargado==True → warn (la conversación acumuló mucho contexto y
+    puede dejar de responder); False → up."""
+    data, err = _fetch_camila_health()
+    if data is None:
+        return "unknown", None, err
+    ctx = data.get("contexto") or {}
+    cargado = ctx.get("cargado")
+    if cargado is None:
+        return "unknown", None, "contexto sin datos"
+    detalle = f"trajectory {ctx.get('trajectory_mb', '?')} MB"
+    return ("warn" if cargado else "up"), None, detalle
+
+
+def _check_camila_modelo():
+    """modelo.esperado_ok==True → up; False → down (algo cambió el modelo de
+    Camila respecto del esperado)."""
+    data, err = _fetch_camila_health()
+    if data is None:
+        return "unknown", None, err
+    mod = data.get("modelo") or {}
+    esperado_ok = mod.get("esperado_ok")
+    actual = mod.get("actual") or {}
+    primary = actual.get("primary") or actual.get("model") or actual.get("name") or "?"
+    detalle = str(primary)[:120]
+    if esperado_ok is True:
+        return "up", None, detalle
+    if esperado_ok is False:
+        return "down", None, f"modelo inesperado: {detalle}"
+    return "unknown", None, "modelo sin datos"
+
+
+# slug, nombre (= proveedor, para identificar rápido), descripcion (etiqueta corta
+# al lado del nombre), tooltip (explicación al pasar el mouse), grupo, critico, fn
 CHECKS: list[dict] = [
-    {"slug": "etiguel_webhook", "nombre": "Cloudflare", "descripcion": "Webhook Etiguel", "grupo": "Etiguel (MyClaw)", "critico": True, "fn": _check_etiguel_webhook},
-    {"slug": "camila_gateway", "nombre": "OpenClaw", "descripcion": "Gateway de Camila", "grupo": "Etiguel (MyClaw)", "critico": True, "fn": _check_camila_gateway},
-    {"slug": "prospia_web", "nombre": "Coolify", "descripcion": "prospia.app (web)", "grupo": "Prospia (Hetzner)", "critico": True, "fn": _check_prospia_web},
-    {"slug": "prospia_api", "nombre": "Coolify", "descripcion": "API Prospia", "grupo": "Prospia (Hetzner)", "critico": True, "fn": _check_prospia_api},
-    {"slug": "varen_app", "nombre": "Coolify", "descripcion": "varen.prospia.app", "grupo": "Prospia (Hetzner)", "critico": True, "fn": _check_varen_app},
-    {"slug": "database", "nombre": "PostgreSQL", "descripcion": "Base de datos", "grupo": "Prospia (Hetzner)", "critico": True, "fn": _check_database},
-    {"slug": "monday", "nombre": "Monday", "descripcion": "API de leads", "grupo": "Externos", "critico": False, "fn": _check_monday},
-    {"slug": "anthropic", "nombre": "Anthropic", "descripcion": "Modelo de Camila", "grupo": "Externos", "critico": False, "fn": _check_anthropic},
-    {"slug": "apify", "nombre": "Apify", "descripcion": "Scraping", "grupo": "Externos", "critico": False, "fn": _check_apify},
+    {"slug": "etiguel_webhook", "nombre": "Cloudflare", "descripcion": "Webhook Etiguel", "tooltip": "Túnel Cloudflare + webhook de Etiguel. Es la puerta por la que pasan los contactos de Camila; si se cae, Camila queda incomunicada.", "grupo": "Etiguel (MyClaw)", "critico": True, "fn": _check_etiguel_webhook},
+    {"slug": "camila_gateway", "nombre": "OpenClaw", "descripcion": "Gateway de Camila", "tooltip": "Gateway de OpenClaw que corre el agente Camila. Si está caído, Camila no atiende WhatsApp.", "grupo": "Etiguel (MyClaw)", "critico": True, "fn": _check_camila_gateway},
+    {"slug": "camila_responde", "nombre": "Camila responde", "descripcion": "Liveness", "tooltip": "Verifica que Camila no esté trabada/en loop (lee señales del gateway, sin gastar tokens).", "grupo": "Etiguel (MyClaw)", "critico": True, "fn": _check_camila_responde},
+    {"slug": "camila_memoria", "nombre": "Memoria del servidor de Camila", "descripcion": "RAM", "tooltip": "Si se llena, se caen los servicios de Camila (lo que pasó el 25/6: se quedó sin memoria y tiró el túnel y el webhook). Avisa antes.", "grupo": "Etiguel (MyClaw)", "critico": True, "alerta_warn": True, "fn": _check_camila_memoria},
+    {"slug": "camila_contexto", "nombre": "Contexto de Camila", "descripcion": "Conversación", "tooltip": "Cuánto contexto acumuló la conversación de Camila. Si se llena, deja de responder. Avisa antes de que reviente.", "grupo": "Etiguel (MyClaw)", "critico": True, "alerta_warn": True, "fn": _check_camila_contexto},
+    {"slug": "camila_modelo", "nombre": "Modelo de Camila", "descripcion": "Modelo IA", "tooltip": "Verifica que Camila siga en su modelo correcto (sonnet-4.6 + fallbacks). Si algo lo cambia, se avisa.", "grupo": "Etiguel (MyClaw)", "critico": True, "fn": _check_camila_modelo},
+    {"slug": "prospia_web", "nombre": "Coolify", "descripcion": "prospia.app (web)", "tooltip": "La web de Prospia (prospia.app) que ves en el navegador. Servida por Coolify en el server de Hetzner.", "grupo": "Prospia (Hetzner)", "critico": True, "fn": _check_prospia_web},
+    {"slug": "prospia_api", "nombre": "Coolify", "descripcion": "API Prospia", "tooltip": "La API del backend de Prospia. Si se cae, la web y la app móvil dejan de funcionar.", "grupo": "Prospia (Hetzner)", "critico": True, "fn": _check_prospia_api},
+    {"slug": "varen_app", "nombre": "Coolify", "descripcion": "varen.prospia.app", "tooltip": "La app interna de Varen Home (varen.prospia.app), corre en el mismo server de Prospia.", "grupo": "Prospia (Hetzner)", "critico": True, "fn": _check_varen_app},
+    {"slug": "database", "nombre": "PostgreSQL", "descripcion": "Base de datos", "tooltip": "La base de datos PostgreSQL de Prospia: guarda prospects, contactos, pendientes y todo el estado. Si se cae, no anda nada.", "grupo": "Prospia (Hetzner)", "critico": True, "fn": _check_database},
+    {"slug": "monday", "nombre": "Monday", "descripcion": "API de leads", "tooltip": "API de Monday.com, donde Etiguel lleva los leads y prospects. Si no responde, no se cargan ni actualizan leads.", "grupo": "Externos", "critico": False, "fn": _check_monday},
+    {"slug": "anthropic", "nombre": "Anthropic", "descripcion": "Modelo de Camila", "tooltip": "API de Anthropic (Claude), el cerebro de Camila. Si está caída, Camila no puede pensar las respuestas.", "grupo": "Externos", "critico": False, "fn": _check_anthropic},
+    {"slug": "apify", "nombre": "Apify", "descripcion": "Scraping", "tooltip": "API de Apify, que usa el scraper para juntar prospects. Si se cae, no se consiguen contactos nuevos.", "grupo": "Externos", "critico": False, "fn": _check_apify},
 ]
 _BY_SLUG = {c["slug"]: c for c in CHECKS}
 
@@ -244,12 +357,20 @@ def _persist_and_alert(results: list[tuple]):
                 row.last_ok = ahora
             row.estado = estado
 
-            # Transiciones que disparan push (solo servicios críticos)
+            # Transiciones que disparan push (solo servicios críticos).
+            # Por defecto solo down↔up alerta (un "warn" = lento no molesta).
+            # Algunos checks (memoria/contexto de Camila) usan `warn` como su
+            # estado de aviso real ("avisar antes de reventar"): para esos,
+            # marcados con alerta_warn=True, un warn cuenta como caída.
             if entry["critico"]:
-                if estado == "down" and prev in ("up", "warn"):
+                alerta_warn = entry.get("alerta_warn", False)
+                malo = ("down", "warn") if alerta_warn else ("down",)
+                ahora_malo = estado in malo
+                antes_malo = prev in malo
+                if ahora_malo and not antes_malo and prev != "unknown":
                     alertas.append(("servicio_caido",
                                     f"🔴 {entry['nombre']} caído"))
-                elif estado == "up" and prev == "down":
+                elif estado == "up" and antes_malo:
                     alertas.append(("servicio_recuperado",
                                     f"🟢 {entry['nombre']} se recuperó"))
         db.commit()
@@ -301,6 +422,7 @@ def _service_dict(row) -> dict:
         "slug": row.slug,
         "nombre": row.nombre,
         "descripcion": entry.get("descripcion"),
+        "tooltip": entry.get("tooltip"),
         "grupo": row.grupo,
         "estado": row.estado,
         "last_check": row.last_check,

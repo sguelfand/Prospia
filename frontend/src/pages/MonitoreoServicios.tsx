@@ -1,4 +1,4 @@
-import { RefreshCw } from 'lucide-react'
+import { HelpCircle, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 
@@ -8,6 +8,7 @@ type Servicio = {
   slug: string
   nombre: string
   descripcion: string | null
+  tooltip: string | null
   grupo: string
   estado: Estado
   last_check: string | null
@@ -171,7 +172,11 @@ export default function MonitoreoServicios() {
               .map((s) => {
                 const info = ESTADO_INFO[s.estado]
                 return (
-                  <div key={s.slug} className="flex items-center gap-3 px-4 py-3 border-t border-line first:border-t-0">
+                  <div
+                    key={s.slug}
+                    className="flex items-center gap-3 px-4 py-3 border-t border-line first:border-t-0"
+                    title={s.tooltip ?? undefined}
+                  >
                     <span
                       className="h-2.5 w-2.5 rounded-full shrink-0"
                       style={{ backgroundColor: info.color }}
@@ -181,6 +186,11 @@ export default function MonitoreoServicios() {
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold text-ink truncate">{s.nombre}</span>
                         {s.descripcion && <span className="text-xs text-muted truncate">{s.descripcion}</span>}
+                        {s.tooltip && (
+                          <span title={s.tooltip} className="shrink-0 cursor-help leading-none">
+                            <HelpCircle size={13} className="text-muted hover:text-primary" />
+                          </span>
+                        )}
                         <span
                           className="text-[11px] font-medium px-1.5 py-0.5 rounded border"
                           style={{ color: info.color, borderColor: info.color + '55', backgroundColor: info.color + '18' }}

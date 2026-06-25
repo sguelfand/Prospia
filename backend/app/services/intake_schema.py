@@ -171,6 +171,7 @@ SECCIONES = [
         "descripcion": "Cualquier cosa que debamos saber antes de arrancar.",
         "en_config": True,
         "campos": [
+            {"id": "numero_bot", "label": "Número de WhatsApp del bot (si ya lo tienen)", "tipo": "tel", "oblig": False, "ayuda": "Si todavía no tienen uno dedicado, lo dejás vacío"},
             {"id": "observaciones", "label": "Observaciones / cualquier cosa que debamos saber", "tipo": "textarea", "oblig": False},
         ],
     },
