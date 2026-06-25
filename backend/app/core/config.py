@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     # monitoreo para consultar /camila-config/diag y saber si el gateway de
     # Camila está vivo. Si queda vacío, ese check queda en "unknown".
     ETIGUEL_DEPLOY_TOKEN: str = ""
+    # Key de Anthropic para los asistentes IA del relevamiento (Haiku). Fallback
+    # si monitor_settings.anthropic_api_key está vacío. Se setea por DB en prod.
+    ANTHROPIC_API_KEY: str = ""
 
     class Config:
         env_file = ".env"

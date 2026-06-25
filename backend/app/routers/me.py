@@ -22,6 +22,7 @@ from app.database import get_db
 from app.models.intake_submission import IntakeSubmission
 from app.models.tenant import TenantConfig
 from app.models.user import User
+from app.services import intake_ai
 from app.services.intake_schema import secciones_config
 
 router = APIRouter(prefix="/me", tags=["me"])
@@ -30,6 +31,10 @@ router = APIRouter(prefix="/me", tags=["me"])
 class InfoNegocioUpdate(BaseModel):
     values: dict = {}
     extra: list = []
+
+
+class AsistirBody(BaseModel):
+    texto: str = ""
 
 
 def _config_del_usuario(db: Session, user: User) -> TenantConfig:
@@ -91,6 +96,20 @@ def put_info_negocio(
     cfg.info_negocio = prev
     db.commit()
     return {"ok": True, "updated_at": prev["updated_at"]}
+
+
+@router.post("/info-negocio/asistir")
+def asistir_info_negocio(
+    body: AsistirBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Toma el texto libre que escribió el cliente en "Agregar información" y, con
+    IA (Haiku), propone cómo repartirlo en los casilleros. NO guarda nada: devuelve
+    la propuesta para que el cliente la revise/confirme antes de guardar."""
+    cfg = _config_del_usuario(db, user)
+    valores = (cfg.info_negocio or {}).get("values", {})
+    return intake_ai.clasificar_texto(body.texto, secciones_config(), valores)
 
 
 @router.get("/archivo/{archivo_id}")

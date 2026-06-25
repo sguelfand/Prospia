@@ -1,4 +1,4 @@
-import { Download, Eye, EyeOff, Plus, Trash2 } from 'lucide-react'
+import { Download, Eye, EyeOff, Plus, Sparkles, Trash2, X } from 'lucide-react'
 import { FormEvent, useEffect, useState } from 'react'
 import { api } from '../api/client'
 
@@ -417,12 +417,23 @@ async function descargarArchivo(a: ArchivoMeta) {
   URL.revokeObjectURL(url)
 }
 
+type Asignacion = { campo: string; label: string; tipo: string; valor: string; accion: 'completar' | 'agregar'; valor_actual: string | null }
+type PropuestaAsistir = { asignaciones: Asignacion[]; nota_libre: string; error?: string }
+
 function InfoNegocio() {
   const [data, setData] = useState<InfoNegocioResp | null>(null)
   const [values, setValues] = useState<Record<string, unknown>>({})
   const [extra, setExtra] = useState<{ label: string; valor: string }[]>([])
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  // ── "Agregar información": modal con IA que reparte texto libre en campos ──
+  const [asistirOpen, setAsistirOpen] = useState(false)
+  const [asistirTexto, setAsistirTexto] = useState('')
+  const [asistirLoading, setAsistirLoading] = useState(false)
+  const [propuesta, setPropuesta] = useState<PropuestaAsistir | null>(null)
+  const [sel, setSel] = useState<Record<number, boolean>>({})
+  const [asistirErr, setAsistirErr] = useState<string | null>(null)
 
   useEffect(() => {
     api
@@ -450,6 +461,56 @@ function InfoNegocio() {
     } finally {
       setSaving(false)
     }
+  }
+
+  function abrirAsistir() {
+    setAsistirTexto('')
+    setPropuesta(null)
+    setSel({})
+    setAsistirErr(null)
+    setAsistirOpen(true)
+  }
+
+  async function correrAsistir() {
+    if (!asistirTexto.trim()) return
+    setAsistirLoading(true)
+    setAsistirErr(null)
+    try {
+      const p = await api.post<PropuestaAsistir>('/me/info-negocio/asistir', { texto: asistirTexto })
+      setPropuesta(p)
+      // Por defecto todas las asignaciones seleccionadas para aplicar.
+      setSel(Object.fromEntries((p.asignaciones || []).map((_, i) => [i, true])))
+      if ((!p.asignaciones || p.asignaciones.length === 0) && !p.nota_libre) {
+        setAsistirErr('No pude identificar datos para cargar. Probá escribiendo un poco más de detalle.')
+      }
+    } catch (err: unknown) {
+      setAsistirErr(err instanceof Error ? err.message : 'No se pudo procesar el texto')
+    } finally {
+      setAsistirLoading(false)
+    }
+  }
+
+  function aplicarPropuesta() {
+    if (!propuesta) return
+    const asigns = propuesta.asignaciones.filter((_, i) => sel[i])
+    setValues((prev) => {
+      const next = { ...prev }
+      for (const a of asigns) {
+        const actual = next[a.campo]
+        if (a.accion === 'agregar' && typeof actual === 'string' && actual.trim()) {
+          const sep = a.tipo === 'textarea' ? '\n' : ', '
+          next[a.campo] = `${actual}${sep}${a.valor}`
+        } else {
+          next[a.campo] = a.valor
+        }
+      }
+      return next
+    })
+    if (propuesta.nota_libre.trim()) {
+      setExtra((prev) => [...prev, { label: 'Información adicional', valor: propuesta.nota_libre }])
+    }
+    setAsistirOpen(false)
+    setMsg({ ok: true, text: 'Información agregada. Revisá y tocá "Guardar información".' })
   }
 
   if (!data) return null
@@ -546,9 +607,18 @@ function InfoNegocio() {
               : 'Lo que sabemos de tu negocio. Editá, ampliá o agregá lo que quieras — lo usamos para encontrar mejores clientes.'}
           </p>
         </div>
-        {data.updated_at && (
-          <span className="text-xs text-muted">Última edición: {new Date(data.updated_at).toLocaleDateString('es-AR')}</span>
-        )}
+        <div className="flex items-center gap-3">
+          {data.updated_at && (
+            <span className="text-xs text-muted">Última edición: {new Date(data.updated_at).toLocaleDateString('es-AR')}</span>
+          )}
+          <button
+            type="button"
+            onClick={abrirAsistir}
+            className="flex items-center gap-2 text-sm font-medium bg-primary/10 text-primary border border-primary/30 rounded-lg px-3 py-2 hover:bg-primary/15"
+          >
+            <Sparkles size={16} /> Agregar información
+          </button>
+        </div>
       </div>
 
       {data.secciones.map((s) => (
@@ -604,6 +674,91 @@ function InfoNegocio() {
         </button>
         {msg && <span className={`text-sm ${msg.ok ? 'text-emerald-500' : 'text-red-500'}`}>{msg.text}</span>}
       </div>
+
+      {/* ── Modal "Agregar información" (IA reparte el texto en los campos) ── */}
+      {asistirOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setAsistirOpen(false)} />
+          <div className="relative z-10 w-full max-w-xl bg-card border border-line rounded-2xl shadow-xl max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-line">
+              <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
+                <Sparkles size={16} className="text-primary" /> Agregar información
+              </h3>
+              <button type="button" onClick={() => setAsistirOpen(false)} className="text-muted hover:text-ink">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="px-6 py-4 overflow-auto space-y-4">
+              {!propuesta ? (
+                <>
+                  <p className="text-sm text-ink-soft">
+                    Escribí libremente lo que quieras contar de tu negocio. Lo acomodamos solo en el lugar que corresponde.
+                  </p>
+                  <textarea
+                    autoFocus
+                    value={asistirTexto}
+                    onChange={(e) => setAsistirTexto(e.target.value)}
+                    rows={6}
+                    placeholder="Ej: También entregamos en Rosario y Córdoba. Aceptamos cheques a 30 días. Nuestro WhatsApp de ventas es el 11 5555-1234…"
+                    className={`${inputCls} resize-y`}
+                  />
+                  {asistirErr && <p className="text-sm text-red-500">{asistirErr}</p>}
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-ink-soft">Encontré esto. Destildá lo que no quieras agregar:</p>
+                  {propuesta.asignaciones.length === 0 && !propuesta.nota_libre && (
+                    <p className="text-sm text-muted">No identifiqué datos concretos.</p>
+                  )}
+                  {propuesta.asignaciones.map((a, i) => (
+                    <label key={i} className="flex items-start gap-3 border border-line rounded-xl p-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!!sel[i]}
+                        onChange={(e) => setSel((prev) => ({ ...prev, [i]: e.target.checked }))}
+                        className="h-4 w-4 accent-primary mt-0.5"
+                      />
+                      <div className="min-w-0">
+                        <p className="text-xs text-muted uppercase tracking-wide">{a.label}</p>
+                        <p className="text-sm text-ink break-words">{a.valor}</p>
+                        {a.accion === 'agregar' && (
+                          <p className="text-xs text-amber-600 mt-0.5">Se suma a lo que ya había</p>
+                        )}
+                      </div>
+                    </label>
+                  ))}
+                  {propuesta.nota_libre && (
+                    <div className="border border-line rounded-xl p-3">
+                      <p className="text-xs text-muted uppercase tracking-wide">Información adicional (nota)</p>
+                      <p className="text-sm text-ink break-words">{propuesta.nota_libre}</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-line">
+              <button
+                type="button"
+                onClick={() => setAsistirOpen(false)}
+                className="text-sm text-ink border border-line rounded-lg px-4 py-2 hover:bg-app"
+              >
+                Cancelar
+              </button>
+              {!propuesta ? (
+                <button type="button" onClick={correrAsistir} disabled={asistirLoading || !asistirTexto.trim()} className={btnCls}>
+                  {asistirLoading ? 'Procesando…' : 'Procesar'}
+                </button>
+              ) : (
+                <button type="button" onClick={aplicarPropuesta} className={btnCls}>
+                  Agregar a mi información
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -115,6 +115,45 @@
 
   footer { text-align:center; color:var(--ink-soft); font-size:12px; padding:0 24px 40px; }
   footer .iso-mini { width:14px; height:14px; vertical-align:-2px; opacity:.7; }
+
+  /* ── Chat de ayuda (burbuja flotante) ── */
+  .help-fab {
+    position:fixed; right:20px; bottom:20px; z-index:50;
+    display:flex; align-items:center; gap:9px; cursor:pointer;
+    background:var(--navy); color:var(--fog); border:none;
+    border-radius:999px; padding:13px 18px; font-family:var(--font-display);
+    font-size:14px; font-weight:600; box-shadow:0 8px 24px rgba(12,23,48,.28);
+  }
+  .help-fab:hover { filter:brightness(1.08); }
+  .help-fab svg { width:18px; height:18px; }
+  .help-panel {
+    position:fixed; right:20px; bottom:20px; z-index:51;
+    width:min(380px, calc(100vw - 32px)); height:min(560px, calc(100vh - 40px));
+    background:#fff; border:1px solid var(--border); border-radius:16px;
+    box-shadow:0 16px 48px rgba(12,23,48,.28); display:none; flex-direction:column; overflow:hidden;
+  }
+  .help-panel.open { display:flex; }
+  .help-head { background:var(--navy); color:var(--fog); padding:14px 16px; display:flex; align-items:center; gap:10px; }
+  .help-head .iso { width:22px; height:22px; }
+  .help-head .ht { font-weight:600; font-size:14px; }
+  .help-head .hs { font-size:11px; color:var(--fog-muted); }
+  .help-head .close { margin-left:auto; cursor:pointer; color:var(--fog-muted); background:none; border:none; font-size:18px; }
+  .help-body { flex:1; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:10px; background:var(--paper); }
+  .msg { max-width:85%; padding:9px 12px; border-radius:12px; font-size:13.5px; line-height:1.45; white-space:pre-wrap; word-wrap:break-word; }
+  .msg.bot { background:#fff; border:1px solid var(--border); color:var(--ink); align-self:flex-start; border-bottom-left-radius:4px; }
+  .msg.user { background:var(--navy); color:var(--fog); align-self:flex-end; border-bottom-right-radius:4px; }
+  .msg.typing { color:var(--ink-soft); font-style:italic; }
+  .help-input { display:flex; gap:8px; padding:12px; border-top:1px solid var(--border); background:#fff; }
+  .help-input textarea {
+    flex:1; resize:none; font-family:var(--font-display); font-size:13.5px; color:var(--ink);
+    border:1px solid var(--border); border-radius:10px; padding:9px 11px; outline:none; max-height:90px;
+  }
+  .help-input textarea:focus { border-color:var(--amber); box-shadow:0 0 0 3px rgba(245,178,61,.18); }
+  .help-input button {
+    background:var(--amber); color:var(--navy); border:none; border-radius:10px;
+    padding:0 16px; font-weight:600; cursor:pointer; font-size:13.5px;
+  }
+  .help-input button:disabled { opacity:.5; cursor:default; }
 </style>
 </head>
 <body>
@@ -394,6 +433,105 @@
   }
 
   boot();
+})();
+</script>
+
+<!-- ── Chat de ayuda flotante ── -->
+<button class="help-fab" id="helpFab" aria-label="Ayuda para completar">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+  ¿Dudas? Te ayudo
+</button>
+
+<div class="help-panel" id="helpPanel" aria-live="polite">
+  <div class="help-head">
+    <svg class="iso" viewBox="0 0 100 100" aria-hidden="true"><g stroke="#EEF3FB" fill="#EEF3FB"><line x1="50" y1="52" x2="22" y2="24" stroke-width="3"/><line x1="50" y1="52" x2="82" y2="22" stroke-width="3"/><circle cx="22" cy="24" r="6" stroke="none"/><circle cx="82" cy="22" r="6" stroke="none"/><circle cx="50" cy="52" r="14" stroke="none" fill="#F5B23D"/></g></svg>
+    <div>
+      <div class="ht">Asistente de Prospia</div>
+      <div class="hs">Te ayudo a completar el formulario</div>
+    </div>
+    <button class="close" id="helpClose" aria-label="Cerrar">✕</button>
+  </div>
+  <div class="help-body" id="helpBody"></div>
+  <div class="help-input">
+    <textarea id="helpText" rows="1" placeholder="Escribí tu duda…"></textarea>
+    <button id="helpSend">Enviar</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  const params = new URLSearchParams(location.search);
+  const SLUG = params.get('c') || 'alan';
+  const API = '/api';
+  const fab = document.getElementById('helpFab');
+  const panel = document.getElementById('helpPanel');
+  const body = document.getElementById('helpBody');
+  const input = document.getElementById('helpText');
+  const sendBtn = document.getElementById('helpSend');
+  const history = []; // {role, content}
+  let busy = false, greeted = false;
+
+  function addMsg(role, text, cls) {
+    const div = document.createElement('div');
+    div.className = 'msg ' + (cls || (role === 'user' ? 'user' : 'bot'));
+    div.textContent = text;
+    body.appendChild(div);
+    body.scrollTop = body.scrollHeight;
+    return div;
+  }
+
+  function openPanel() {
+    panel.classList.add('open');
+    fab.style.display = 'none';
+    if (!greeted) {
+      greeted = true;
+      addMsg('bot', '¡Hola! Soy el asistente de Prospia. Si no sabés qué poner en algún campo, preguntame y te ayudo. 😊');
+    }
+    setTimeout(() => input.focus(), 50);
+  }
+  function closePanel() { panel.classList.remove('open'); fab.style.display = ''; }
+
+  fab.addEventListener('click', openPanel);
+  document.getElementById('helpClose').addEventListener('click', closePanel);
+
+  async function send() {
+    const text = input.value.trim();
+    if (!text || busy) return;
+    input.value = '';
+    input.style.height = 'auto';
+    addMsg('user', text);
+    history.push({ role: 'user', content: text });
+    busy = true; sendBtn.disabled = true;
+    const typing = addMsg('bot', 'Escribiendo…', 'bot typing');
+    try {
+      const res = await fetch(API + '/public/intake/' + encodeURIComponent(SLUG) + '/ayuda', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mensajes: history }),
+      });
+      typing.remove();
+      if (res.status === 429) { addMsg('bot', 'Estás escribiendo muy seguido 😅 Esperá un momentito y volvé a preguntar.'); return; }
+      if (!res.ok) { addMsg('bot', 'Uy, no pude responder ahora. Probá de nuevo en un momento.'); return; }
+      const data = await res.json();
+      const r = (data.respuesta || '').trim() || 'No tengo una respuesta para eso, ¿lo reformulás?';
+      addMsg('bot', r);
+      history.push({ role: 'assistant', content: r });
+    } catch (e) {
+      typing.remove();
+      addMsg('bot', 'Hubo un problema de conexión. Probá de nuevo.');
+    } finally {
+      busy = false; sendBtn.disabled = false; input.focus();
+    }
+  }
+
+  sendBtn.addEventListener('click', send);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  });
+  input.addEventListener('input', () => {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 90) + 'px';
+  });
 })();
 </script>
 </body>

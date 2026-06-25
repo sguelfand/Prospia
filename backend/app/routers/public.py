@@ -16,15 +16,16 @@ import re
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile, status
 from fastapi import Depends
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.intake_submission import IntakeSubmission
 from app.models.tenant import Tenant, TenantConfig
-from app.services import push
-from app.services.intake_schema import secciones_publicas
+from app.services import intake_ai, push
+from app.services.intake_schema import secciones_config, secciones_publicas
 
 router = APIRouter(prefix="/public", tags=["public"])
 
@@ -150,3 +151,39 @@ async def intake_submit(
     )
 
     return {"ok": True, "submission_id": sub.id, "recibido_at": datetime.now(timezone.utc).isoformat()}
+
+
+class AyudaMsg(BaseModel):
+    role: str = "user"
+    content: str = ""
+
+
+class AyudaBody(BaseModel):
+    mensajes: list[AyudaMsg] = []
+
+
+@router.post("/intake/{slug}/ayuda")
+def intake_ayuda(slug: str, body: AyudaBody, request: Request, db: Session = Depends(get_db)):
+    """Chat de ayuda del formulario (público): responde dudas del cliente sobre
+    qué poner en cada campo. Acotado al formulario y con rate-limit por IP para
+    que el endpoint abierto no se abuse."""
+    tenant = db.query(Tenant).filter(Tenant.slug == slug).first()
+    if not tenant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cliente no encontrado")
+
+    ip = (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+          or (request.client.host if request.client else "anon"))
+    if not intake_ai.rate_limit_ok(ip):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Demasiadas consultas seguidas. Probá de nuevo en un rato.",
+        )
+
+    mensajes = [{"role": m.role, "content": m.content} for m in body.mensajes]
+    respuesta = intake_ai.ayuda_chat(mensajes, secciones_config(), empresa=tenant.nombre)
+    if respuesta is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="El asistente no está disponible en este momento.",
+        )
+    return {"respuesta": respuesta}

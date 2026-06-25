@@ -44,6 +44,10 @@ class MonitorSettings(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=300)
     etiguel_deploy_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # API key de Anthropic para los asistentes IA de la plataforma (clasificar el
+    # texto libre del relevamiento + chat de ayuda del formulario). Se guarda acá
+    # —no en Coolify— para setearla por SQL; fallback a settings.ANTHROPIC_API_KEY.
+    anthropic_api_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

@@ -117,6 +117,11 @@ def run_migrations():
         conn.execute(text(
             "ALTER TABLE agent_errors ADD COLUMN IF NOT EXISTS estado VARCHAR(20) NOT NULL DEFAULT 'nuevo'"
         ))
+
+        # ── monitor_settings: key de Anthropic para los asistentes IA del relevamiento ──
+        conn.execute(text(
+            "ALTER TABLE monitor_settings ADD COLUMN IF NOT EXISTS anthropic_api_key VARCHAR(255)"
+        ))
         # backfill: los ya resueltos pasan a 'fixed' (idempotente)
         conn.execute(text(
             "UPDATE agent_errors SET estado = 'fixed' WHERE resuelto = true AND estado = 'nuevo'"
