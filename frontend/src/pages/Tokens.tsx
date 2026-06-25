@@ -125,25 +125,25 @@ export default function Tokens() {
             ))}
           </div>
 
-          {/* Costo por día — barras apiladas (mensajes + errores) */}
-          <div className="bg-card border border-line rounded-2xl p-5">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Costo por día</h2>
-              <div className="flex items-center gap-3 text-[11px] text-muted">
-                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: '#F5B23D' }} />mensajes</span>
-                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: '#ef4444' }} />errores</span>
+          {/* Costo por día + Histórico mensual, misma fila */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+            <div className="bg-card border border-line rounded-2xl p-5">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Costo por día</h2>
+                <div className="flex items-center gap-3 text-[11px] text-muted">
+                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: '#F5B23D' }} />mensajes</span>
+                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: '#ef4444' }} />errores</span>
+                </div>
               </div>
+              {dias.length === 0 ? <p className="text-sm text-muted">Sin datos.</p> : <BarrasDia dias={dias} />}
             </div>
-            {dias.length === 0 ? <p className="text-sm text-muted">Sin datos.</p> : <BarrasDia dias={dias} />}
-          </div>
-
-          {/* Histórico mensual */}
-          <div className="bg-card border border-line rounded-2xl p-5">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Histórico mensual</h2>
-              <span className="text-[11px] text-muted">pasá el mouse por un mes</span>
+            <div className="bg-card border border-line rounded-2xl p-5">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Histórico mensual</h2>
+                <span className="text-[11px] text-muted">pasá el mouse por un mes</span>
+              </div>
+              {meses.length === 0 ? <p className="text-sm text-muted">Sin histórico todavía.</p> : <LineaMensual meses={meses} hover={hoverMes} setHover={setHoverMes} />}
             </div>
-            {meses.length === 0 ? <p className="text-sm text-muted">Sin histórico todavía.</p> : <LineaMensual meses={meses} hover={hoverMes} setHover={setHoverMes} />}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
