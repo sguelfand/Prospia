@@ -82,7 +82,11 @@ def ingest_etiguel_mirror(
             ))
             agregado = True
 
-    # Cuántos mensajes 'in' tiene este lead (para distinguir primera respuesta).
+    # Cuántos mensajes 'in' tenía este lead ANTES del que acabamos de agregar.
+    # OJO: SessionLocal usa autoflush=False y el db.add() de arriba todavía NO se
+    # flusheó (el commit recién pasa abajo), así que este count NO incluye el
+    # mensaje actual → es el conteo de inbounds PREVIOS. Por eso "primera
+    # respuesta" = no había ninguno antes = n_in == 0.
     n_in = (
         db.query(EtiguelMirrorMensaje)
         .filter(EtiguelMirrorMensaje.mirror_id == mirror.id, EtiguelMirrorMensaje.direccion == "in")
@@ -94,8 +98,11 @@ def ingest_etiguel_mirror(
     # ── Push diferenciado de Etiguel (#44), respetando los toggles por cliente ──
     try:
         # Mensaje entrante nuevo: el 1° 'in' = primera respuesta; los siguientes = mensaje entrante.
+        # n_in cuenta los inbounds PREVIOS (no el actual), así que primera
+        # respuesta ⇔ n_in == 0. Usar <= 1 disparaba "respuesta" también en el
+        # 2° mensaje (n_in==1) → push duplicado.
         if agregado and body.direccion == "in":
-            evento = "respuesta" if n_in <= 1 else "mensaje_entrante"
+            evento = "respuesta" if n_in == 0 else "mensaje_entrante"
             push.notificar_evento_etiguel_async(evento, nombre_lead or "un lead", body.texto)
         # Transición de estado a "interesado".
         nuevo = (body.estado or "")
