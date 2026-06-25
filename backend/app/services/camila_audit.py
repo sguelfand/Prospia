@@ -1,19 +1,20 @@
-"""Auditor diario de consumo de Camila (tokens/costo/errores + oportunidades).
+"""Auditor de consumo de Camila — por CONVERSACIÓN (teléfono).
 
-Corre en el backend de Prospia (que controlamos) y lee las trajectories de
-OpenClaw de cada cliente vía sus endpoints /fs. Parsea los eventos
-`model.completed` (que traen `usage`, modelo, timeouts/errores), agrega el
-consumo del día, estima el costo y detecta oportunidades de mejora por REGLAS
-(timeouts, fallback a modelo caro, caché ineficiente, compactaciones,
-conversaciones caras, gasto del agente `main` sin uso). Cuando hay
-oportunidades, manda un push para que Sebi entre a revisarlas. NO auto-aplica
-nada: las soluciones se charlan.
+Corre en el backend de Prospia. Lee las trajectories de OpenClaw vía /fs, parsea
+los `model.completed` (traen `usage` con tokens reales + el teléfono de la charla
+en el runtime-context) y agrega el consumo **por número de teléfono** (conversación),
+por modelo y por día/mes. El costo es ESTIMADO (tokens reales × precios de
+referencia de Anthropic; myclaw no expone su precio → reporta 0).
 
-Multi-cliente: `SOURCES` mapea cada cliente a su gateway. Hoy solo 'etiguel';
-los próximos clientes se suman como una entrada más (su base + token)."""
+- Oportunidades de mejora: FIJAS (tabla camila_oportunidad). Se acumulan y quedan
+  abiertas hasta que se marcan resueltas; NO cambian en cada recálculo.
+- Daily: costo partido en mensajes vs errores (para barras apiladas).
+- Mensual: rollup por mes (gráfico histórico) + por_modelo del mes actual.
+- Multi-cliente: SOURCES (hoy 'etiguel'; extensible)."""
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -21,10 +22,10 @@ from datetime import datetime, timedelta, timezone
 import requests
 
 _UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
-_BA = timezone(timedelta(hours=-3))  # Buenos Aires
+_BA = timezone(timedelta(hours=-3))
 
-# Precios estimados USD por TOKEN (Anthropic ref; myclaw puede facturar distinto
-# → el costo es una ESTIMACIÓN). [input, output, cacheRead, cacheWrite]
+# Precios estimados USD/token [input, output, cacheRead, cacheWrite]. myclaw
+# reporta costo 0, así que estimamos con precios de referencia de Anthropic.
 _PRICES = {
     "claude-sonnet-4.6": (3e-6, 15e-6, 0.3e-6, 3.75e-6),
     "claude-opus-4.6":   (15e-6, 75e-6, 1.5e-6, 18.75e-6),
@@ -39,9 +40,13 @@ def _price_for(model_id: str):
         return _PRICES["claude-opus-4.6"]
     if "haiku" in m:
         return _PRICES["claude-haiku"]
-    if "sonnet" in m:
-        return _PRICES["claude-sonnet-4.6"]
     return _PRICE_DEFAULT
+
+
+def _usage_cost(model_id: str, u: dict) -> float:
+    pi, po, pcr, pcw = _price_for(model_id)
+    return (u.get("input", 0) * pi + u.get("output", 0) * po
+            + u.get("cacheRead", 0) * pcr + u.get("cacheWrite", 0) * pcw)
 
 
 def _etiguel_token() -> str:
@@ -61,8 +66,6 @@ def _etiguel_token() -> str:
     return settings.ETIGUEL_DEPLOY_TOKEN or ""
 
 
-# Cada source: cómo alcanzar las trajectories de ese cliente.
-# fetch headers/base por cliente; agentes a auditar dentro del container.
 SOURCES: dict[str, dict] = {
     "etiguel": {
         "nombre": "Etiguel (Camila)",
@@ -72,272 +75,431 @@ SOURCES: dict[str, dict] = {
     },
 }
 
+_PHONE_RE = re.compile(r'"(?:chat_id|sender_id)"\s*:\s*"([^"]+)"')
 
-# ── recolección de eventos del día ───────────────────────────────────────────
 
-def _fs_get(base: str, token: str, path: str, max_bytes: int = 10_000_000):
-    if path.startswith("LIST:"):
-        r = requests.get(f"{base}/fs/list", params={"path": path[5:]},
-                         headers={"User-Agent": _UA, "X-Deploy-Token": token}, timeout=20)
-    else:
-        r = requests.get(f"{base}/fs/read", params={"path": path, "max_bytes": max_bytes},
-                         headers={"User-Agent": _UA, "X-Deploy-Token": token}, timeout=30)
+def _extract_phone(mc: dict) -> str | None:
+    for m in mc.get("data", {}).get("messagesSnapshot", []):
+        if not isinstance(m, dict):
+            continue
+        c = m.get("content")
+        txt = c if isinstance(c, str) else json.dumps(c, ensure_ascii=False)
+        hit = _PHONE_RE.search(txt)
+        if hit:
+            return hit.group(1)
+    return None
+
+
+# ── recolección ──────────────────────────────────────────────────────────────
+
+def _fs_list(base, token, path):
+    r = requests.get(f"{base}/fs/list", params={"path": path},
+                     headers={"User-Agent": _UA, "X-Deploy-Token": token}, timeout=20)
     r.raise_for_status()
     return r.json()
 
 
-def _collect_events(source: str, fecha: str) -> list[dict]:
-    """Devuelve los eventos model.completed cuyo ts cae en `fecha` (YYYY-MM-DD BA),
-    de todos los agentes del source. Cada item: {agente, sesion, ts, modelId, data}."""
+def _fs_read(base, token, path, max_bytes=10_000_000):
+    r = requests.get(f"{base}/fs/read", params={"path": path, "max_bytes": max_bytes},
+                     headers={"User-Agent": _UA, "X-Deploy-Token": token}, timeout=40)
+    r.raise_for_status()
+    return r.json()
+
+
+def _iter_model_events(content: str, agente: str, sesion: str):
+    """Itera por cada model.completed de una trajectory, con teléfono adjunto."""
+    for line in content.splitlines():
+        line = line.strip()
+        if not line or '"model.completed"' not in line:
+            continue
+        try:
+            o = json.loads(line)
+        except Exception:
+            continue
+        if o.get("type") != "model.completed":
+            continue
+        ts = o.get("ts") or ""
+        try:
+            tsd = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        except Exception:
+            continue
+        if tsd.tzinfo is None:
+            tsd = tsd.replace(tzinfo=timezone.utc)
+        yield {
+            "agente": agente, "sesion": sesion, "ts": tsd,
+            "modelId": o.get("modelId"), "data": o.get("data") or {},
+            "telefono": _extract_phone(o),
+        }
+
+
+def _collect_events(source: str, since: datetime):
+    """Eventos model.completed de todos los agentes con ts >= since. Lee cada
+    trajectory tocada desde `since` una sola vez."""
     cfg = SOURCES[source]
     base, token = cfg["base"], cfg["token_fn"]()
     if not token:
         raise RuntimeError("token del source no configurado")
-    # ventana del día en UTC (los ts de las trajectories son UTC/Z)
-    day_start = datetime.strptime(fecha, "%Y-%m-%d").replace(tzinfo=_BA)
-    day_end = day_start + timedelta(days=1)
-    eventos: list[dict] = []
+    eventos = []
     for agente in cfg["agentes"]:
         sdir = f".openclaw/agents/{agente}/sessions"
         try:
-            listing = _fs_get(base, token, "LIST:" + sdir)
+            listing = _fs_list(base, token, sdir)
         except Exception:
             continue
         for e in listing.get("entries", []):
-            name = e.get("name", "")
-            if not name.endswith(".trajectory.jsonl"):
+            if not e.get("name", "").endswith(".trajectory.jsonl"):
                 continue
-            # Solo archivos tocados desde el inicio del día (tienen eventos del día)
             mt = e.get("mtime") or ""
             try:
-                if mt and datetime.fromisoformat(mt.replace("Z", "+00:00")) < day_start - timedelta(hours=1):
+                if mt and datetime.fromisoformat(mt.replace("Z", "+00:00")) < since - timedelta(hours=2):
                     continue
             except Exception:
                 pass
             try:
-                doc = _fs_get(base, token, f"{sdir}/{name}")
-                content = doc.get("content", "")
+                doc = _fs_read(base, token, f"{sdir}/{e['name']}")
             except Exception:
                 continue
-            sesion = name.replace(".trajectory.jsonl", "")
-            for line in content.splitlines():
-                line = line.strip()
-                if not line or '"model.completed"' not in line:
-                    continue
-                try:
-                    o = json.loads(line)
-                except Exception:
-                    continue
-                if o.get("type") != "model.completed":
-                    continue
-                ts = o.get("ts") or ""
-                try:
-                    tsd = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                except Exception:
-                    continue
-                if tsd.tzinfo is None:
-                    tsd = tsd.replace(tzinfo=timezone.utc)
-                # day_start/day_end son BA-aware; la comparación cross-tz es correcta
-                if not (day_start <= tsd < day_end):
-                    continue
-                eventos.append({
-                    "agente": agente, "sesion": sesion, "ts": ts,
-                    "modelId": o.get("modelId"), "data": o.get("data") or {},
-                })
+            sesion = e["name"].replace(".trajectory.jsonl", "")
+            for ev in _iter_model_events(doc.get("content", ""), agente, sesion):
+                if ev["ts"] >= since:
+                    eventos.append(ev)
     return eventos
 
 
-# ── agregación + costo + oportunidades ───────────────────────────────────────
+# ── agregación ───────────────────────────────────────────────────────────────
 
-def _usage_cost(model_id: str, u: dict) -> float:
-    pi, po, pcr, pcw = _price_for(model_id)
-    return (u.get("input", 0) * pi + u.get("output", 0) * po
-            + u.get("cacheRead", 0) * pcr + u.get("cacheWrite", 0) * pcw)
+def _blank_tot():
+    return {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "total": 0,
+            "llamadas": 0, "costo_usd": 0.0, "costo_mensajes": 0.0, "costo_errores": 0.0,
+            "errores": 0, "timeouts": 0, "compactaciones": 0}
 
 
-def _aggregate(source: str, fecha: str, eventos: list[dict]) -> dict:
-    tot = {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "total": 0,
-           "llamadas": 0, "costo_usd": 0.0, "errores": 0, "timeouts": 0, "compactaciones": 0}
-    por_agente: dict[str, dict] = {}
-    por_modelo: dict[str, dict] = {}
-    por_sesion: dict[str, dict] = {}
+def _new_acc():
+    return {"totales": _blank_tot(), "por_modelo": {}, "por_conversacion": {}}
 
+
+def _fold(acc: dict, ev: dict):
+    d = ev["data"]; u = d.get("usage") or {}
+    model = ev["modelId"] or "?"
+    costo = _usage_cost(model, u)
+    timed_out = bool(d.get("timedOut") or d.get("idleTimedOut") or d.get("timedOutDuringCompaction"))
+    error = d.get("promptErrorSource") is not None
+    bad = timed_out or error
+    comp = int(d.get("compactionCount") or 0)
+    es_sistema = ev["agente"] == "main"
+    tel = ev["telefono"] or ("(sistema)" if es_sistema else "(sin teléfono)")
+
+    t = acc["totales"]
+    for k in ("input", "output", "cacheRead", "cacheWrite", "total"):
+        t[k] += u.get(k, 0)
+    t["llamadas"] += 1; t["costo_usd"] += costo
+    t["errores"] += 1 if error else 0; t["timeouts"] += 1 if timed_out else 0
+    t["compactaciones"] += comp
+    t["costo_errores" if bad else "costo_mensajes"] += costo
+
+    m = acc["por_modelo"].setdefault(model, {"tokens": 0, "costo_usd": 0.0, "llamadas": 0})
+    m["tokens"] += u.get("total", 0); m["costo_usd"] += costo; m["llamadas"] += 1
+
+    cv = acc["por_conversacion"].setdefault(tel, {
+        "telefono": tel, "tokens": 0, "costo_usd": 0.0, "llamadas": 0,
+        "timeouts": 0, "errores": 0, "ejemplo": None, "es_sistema": es_sistema})
+    cv["tokens"] += u.get("total", 0); cv["costo_usd"] += costo; cv["llamadas"] += 1
+    cv["timeouts"] += 1 if timed_out else 0; cv["errores"] += 1 if error else 0
+    if not cv["ejemplo"]:
+        txt = (d.get("finalPromptText") or "").strip().replace("\n", " ")
+        if txt:
+            cv["ejemplo"] = txt[:120]
+
+
+def _aggregate_day(source: str, fecha: str, eventos: list) -> dict:
+    acc = _new_acc()
     for ev in eventos:
-        d = ev["data"]
-        u = d.get("usage") or {}
-        model = ev["modelId"] or "?"
-        costo = _usage_cost(model, u)
-        timed_out = bool(d.get("timedOut") or d.get("idleTimedOut") or d.get("timedOutDuringCompaction"))
-        error = d.get("promptErrorSource") is not None
-        comp = int(d.get("compactionCount") or 0)
-
-        tot["input"] += u.get("input", 0); tot["output"] += u.get("output", 0)
-        tot["cacheRead"] += u.get("cacheRead", 0); tot["cacheWrite"] += u.get("cacheWrite", 0)
-        tot["total"] += u.get("total", 0); tot["llamadas"] += 1
-        tot["costo_usd"] += costo
-        tot["errores"] += 1 if error else 0
-        tot["timeouts"] += 1 if timed_out else 0
-        tot["compactaciones"] += comp
-
-        a = por_agente.setdefault(ev["agente"], {"tokens": 0, "costo_usd": 0.0, "llamadas": 0})
-        a["tokens"] += u.get("total", 0); a["costo_usd"] += costo; a["llamadas"] += 1
-        m = por_modelo.setdefault(model, {"tokens": 0, "costo_usd": 0.0, "llamadas": 0})
-        m["tokens"] += u.get("total", 0); m["costo_usd"] += costo; m["llamadas"] += 1
-
-        s = por_sesion.setdefault(ev["sesion"], {
-            "sesion": ev["sesion"], "agente": ev["agente"], "tokens": 0, "costo_usd": 0.0,
-            "llamadas": 0, "timeouts": 0, "errores": 0, "ejemplo": None})
-        s["tokens"] += u.get("total", 0); s["costo_usd"] += costo; s["llamadas"] += 1
-        s["timeouts"] += 1 if timed_out else 0; s["errores"] += 1 if error else 0
-        if not s["ejemplo"]:
-            txt = (d.get("finalPromptText") or "").strip().replace("\n", " ")
-            if txt:
-                s["ejemplo"] = txt[:120]
-
-    top = sorted(por_sesion.values(), key=lambda x: x["costo_usd"], reverse=True)[:10]
-    oportunidades = _detectar_oportunidades(tot, por_modelo, por_agente, por_sesion)
-
+        _fold(acc, ev)
+    convs = sorted(acc["por_conversacion"].values(), key=lambda x: x["costo_usd"], reverse=True)
     return {
         "source": source, "fecha": fecha,
-        "totales": tot,
-        "por_agente": por_agente,
-        "por_modelo": por_modelo,
-        "top_conversaciones": top,
-        "oportunidades": oportunidades,
+        "totales": acc["totales"],
+        "por_modelo": acc["por_modelo"],
+        "top_conversaciones": convs[:15],
+        "n_conversaciones": sum(1 for c in convs if not c["es_sistema"]),
     }
 
 
-def _detectar_oportunidades(tot, por_modelo, por_agente, por_sesion) -> list[dict]:
-    ops: list[dict] = []
-    if tot["timeouts"] > 0:
-        ops.append({"tipo": "timeouts", "severidad": "alta",
-                    "titulo": f"{tot['timeouts']} llamada(s) con timeout/idle",
-                    "detalle": "Gastaron tokens sin producir respuesta útil. Revisar modelo/fallbacks/timeout del provider."})
-    if tot["errores"] > 0:
-        ops.append({"tipo": "errores", "severidad": "alta",
-                    "titulo": f"{tot['errores']} llamada(s) con error",
-                    "detalle": "Llamadas que fallaron (promptErrorSource). Revisar causa para no re-gastar."})
-    # Fallback a modelo caro
-    caros = {m: v for m, v in por_modelo.items() if ("opus" in m.lower() or "gpt" in m.lower())}
+# ── oportunidades FIJAS ──────────────────────────────────────────────────────
+
+def _detectar(resumen: dict) -> list[dict]:
+    t = resumen["totales"]; ops = []
+    if t["timeouts"] > 0:
+        ops.append({"tipo": "timeouts", "clave": "", "severidad": "alta",
+                    "titulo": f"{t['timeouts']} llamada(s) con timeout/idle",
+                    "detalle": "Gastan tokens sin respuesta útil. Revisar modelo/fallbacks/timeout del provider."})
+    if t["errores"] > 0:
+        ops.append({"tipo": "errores", "clave": "", "severidad": "alta",
+                    "titulo": f"{t['errores']} llamada(s) con error",
+                    "detalle": "Fallaron (promptErrorSource). Revisar causa para no re-gastar."})
+    caros = {m: v for m, v in resumen["por_modelo"].items() if ("opus" in m.lower() or "gpt" in m.lower())}
     if caros:
         n = sum(v["llamadas"] for v in caros.values())
-        costo = sum(v["costo_usd"] for v in caros.values())
-        ops.append({"tipo": "modelo_caro", "severidad": "media",
+        ops.append({"tipo": "modelo_caro", "clave": "", "severidad": "media",
                     "titulo": f"{n} llamada(s) en modelo caro (fallback)",
-                    "detalle": f"Modelos: {', '.join(caros)}. ~${costo:.2f}. Si el primario falla seguido, conviene revisar por qué cae al fallback."})
-    # Caché ineficiente: se reescribe más de lo que se lee
-    if tot["cacheWrite"] > max(tot["cacheRead"], 1) * 0.8 and tot["cacheWrite"] > 100_000:
-        ops.append({"tipo": "cache", "severidad": "media",
+                    "detalle": f"Modelos: {', '.join(caros)}. Revisar por qué cae al fallback."})
+    if t["cacheWrite"] > max(t["cacheRead"], 1) * 0.8 and t["cacheWrite"] > 100_000:
+        ops.append({"tipo": "cache", "clave": "", "severidad": "media",
                     "titulo": "Caché ineficiente (mucho cacheWrite)",
-                    "detalle": f"cacheWrite={tot['cacheWrite']:,} vs cacheRead={tot['cacheRead']:,}. El prompt/contexto cambia mucho entre llamadas → se reescribe la caché en vez de reusarla."})
-    if tot["compactaciones"] > 2:
-        ops.append({"tipo": "compactacion", "severidad": "media",
-                    "titulo": f"{tot['compactaciones']} compactaciones de contexto",
-                    "detalle": "El contexto crece y se compacta seguido (caro). Revisar reset de sesión / tamaño del system prompt."})
-    # Gasto del agente main (system/cron) sin interacción de cliente
-    main = por_agente.get("main")
-    if main and main["costo_usd"] >= 0.20:
-        ops.append({"tipo": "main_sin_uso", "severidad": "media",
-                    "titulo": f"agent:main consumió ~${main['costo_usd']:.2f} (sistema, sin cliente)",
-                    "detalle": f"{main['llamadas']} llamadas del agente interno (crons/heartbeat/mantenimiento). Revisar si hay tareas LLM evitables."})
-    # Conversación cara (muy por encima del promedio del día)
-    sesiones = [s for s in por_sesion.values() if s["agente"] != "main"]
-    if sesiones:
-        prom = sum(s["costo_usd"] for s in sesiones) / len(sesiones)
-        cara = max(sesiones, key=lambda s: s["costo_usd"])
+                    "detalle": f"cacheWrite={t['cacheWrite']:,} vs cacheRead={t['cacheRead']:,}. El contexto cambia mucho entre llamadas."})
+    if t["compactaciones"] > 2:
+        ops.append({"tipo": "compactacion", "clave": "", "severidad": "media",
+                    "titulo": f"{t['compactaciones']} compactaciones de contexto",
+                    "detalle": "Contexto grande que se compacta seguido. Revisar reset de sesión / system prompt."})
+    convs = [c for c in resumen["top_conversaciones"] if not c.get("es_sistema")]
+    if convs:
+        prom = sum(c["costo_usd"] for c in convs) / len(convs)
+        cara = convs[0]
         if cara["costo_usd"] > max(prom * 3, 0.30):
-            ops.append({"tipo": "conversacion_cara", "severidad": "baja",
-                        "titulo": f"Conversación cara: ~${cara['costo_usd']:.2f}",
-                        "detalle": f"{cara['llamadas']} llamadas. {('“' + cara['ejemplo'] + '”') if cara['ejemplo'] else ''}",
-                        "sesion": cara["sesion"]})
+            ops.append({"tipo": "conversacion_cara", "clave": cara["telefono"], "severidad": "baja",
+                        "titulo": f"Conversación cara: {cara['telefono']} (~${cara['costo_usd']:.2f})",
+                        "detalle": f"{cara['llamadas']} llamadas. {('“'+cara['ejemplo']+'”') if cara['ejemplo'] else ''}"})
     return ops
 
 
-# ── persistencia + push ──────────────────────────────────────────────────────
+def _upsert_oportunidades(source: str, ops: list[dict]) -> int:
+    """Acumula oportunidades (no las borra). Devuelve cuántas se abrieron nuevas
+    (insertadas o re-abiertas) para decidir el push."""
+    from app.models.camila_audit import CamilaOportunidad
+    from app.database import SessionLocal
+    ahora = datetime.now(timezone.utc)
+    nuevas = 0
+    db = SessionLocal()
+    try:
+        for o in ops:
+            row = (db.query(CamilaOportunidad)
+                   .filter(CamilaOportunidad.source == source,
+                           CamilaOportunidad.tipo == o["tipo"],
+                           CamilaOportunidad.clave == o.get("clave", "")).first())
+            if row:
+                row.severidad = o["severidad"]; row.titulo = o["titulo"]
+                row.detalle = o["detalle"]; row.ultima_vez = ahora
+                if row.estado == "resuelta":
+                    row.estado = "abierta"; row.resuelta_at = None; nuevas += 1
+            else:
+                db.add(CamilaOportunidad(source=source, tipo=o["tipo"], clave=o.get("clave", ""),
+                                         severidad=o["severidad"], titulo=o["titulo"],
+                                         detalle=o["detalle"], estado="abierta",
+                                         primera_vez=ahora, ultima_vez=ahora))
+                nuevas += 1
+        db.commit()
+    finally:
+        db.close()
+    return nuevas
+
+
+def get_oportunidades(source: str, incluir_resueltas: bool = False) -> list[dict]:
+    from app.models.camila_audit import CamilaOportunidad
+    from app.database import SessionLocal
+    db = SessionLocal()
+    try:
+        q = db.query(CamilaOportunidad).filter(CamilaOportunidad.source == source)
+        if not incluir_resueltas:
+            q = q.filter(CamilaOportunidad.estado == "abierta")
+        sev = {"alta": 0, "media": 1, "baja": 2}
+        rows = q.all()
+        rows.sort(key=lambda r: (sev.get(r.severidad, 9),
+                                 r.primera_vez or datetime.min.replace(tzinfo=timezone.utc)))
+        return [{"id": r.id, "tipo": r.tipo, "clave": r.clave, "severidad": r.severidad,
+                 "titulo": r.titulo, "detalle": r.detalle, "estado": r.estado,
+                 "primera_vez": r.primera_vez.isoformat() if r.primera_vez else None,
+                 "ultima_vez": r.ultima_vez.isoformat() if r.ultima_vez else None}
+                for r in rows]
+    finally:
+        db.close()
+
+
+def resolver_oportunidad(op_id: int, resolver: bool = True) -> bool:
+    from app.models.camila_audit import CamilaOportunidad
+    from app.database import SessionLocal
+    db = SessionLocal()
+    try:
+        row = db.get(CamilaOportunidad, op_id)
+        if not row:
+            return False
+        row.estado = "resuelta" if resolver else "abierta"
+        row.resuelta_at = datetime.now(timezone.utc) if resolver else None
+        db.commit()
+        return True
+    finally:
+        db.close()
+
+
+# ── persistencia diaria ──────────────────────────────────────────────────────
 
 def run_audit(source: str, fecha: str, notify: bool = True) -> dict:
-    """Computa la auditoría de `source` para `fecha` (YYYY-MM-DD BA), la persiste
-    y (si notify) manda push si hay oportunidades nuevas. Devuelve el resumen."""
     if source not in SOURCES:
         raise ValueError(f"source desconocido: {source}")
-    eventos = _collect_events(source, fecha)
-    resumen = _aggregate(source, fecha, eventos)
+    day_start = datetime.strptime(fecha, "%Y-%m-%d").replace(tzinfo=_BA)
+    day_end = day_start + timedelta(days=1)
+    eventos = [e for e in _collect_events(source, day_start) if day_start <= e["ts"] < day_end]
+    resumen = _aggregate_day(source, fecha, eventos)
 
     from app.models.camila_audit import CamilaAudit
     from app.database import SessionLocal
     db = SessionLocal()
     try:
-        row = db.query(CamilaAudit).filter(
-            CamilaAudit.source == source, CamilaAudit.fecha == fecha).first()
-        ops_antes = 0
-        if row:
-            try:
-                ops_antes = len(json.loads(row.data).get("oportunidades", []))
-            except Exception:
-                ops_antes = 0
-        else:
+        row = db.query(CamilaAudit).filter(CamilaAudit.source == source, CamilaAudit.fecha == fecha).first()
+        if not row:
             row = CamilaAudit(source=source, fecha=fecha)
             db.add(row)
-        tot = resumen["totales"]
-        row.total_tokens = tot["total"]
-        row.costo_usd = round(tot["costo_usd"], 4)
-        row.llamadas = tot["llamadas"]
-        row.errores = tot["errores"]
-        row.oportunidades = len(resumen["oportunidades"])
+        t = resumen["totales"]
+        row.total_tokens = t["total"]; row.costo_usd = round(t["costo_usd"], 4)
+        row.llamadas = t["llamadas"]; row.errores = t["errores"]
         row.data = json.dumps(resumen, ensure_ascii=False)
         row.generated_at = datetime.now(timezone.utc)
+        nuevas = _upsert_oportunidades(source, _detectar(resumen))
+        row.oportunidades = len(get_oportunidades(source))
         db.commit()
-        nuevas = row.oportunidades > ops_antes
     finally:
         db.close()
 
-    if notify and resumen["oportunidades"] and nuevas:
+    if notify and nuevas > 0:
         try:
             from app.services import push
-            nombre = SOURCES[source]["nombre"]
-            n = len(resumen["oportunidades"])
-            altas = sum(1 for o in resumen["oportunidades"] if o.get("severidad") == "alta")
-            push.notificar_global(
-                "tokens_oportunidad",
-                f"💡 {nombre}: {n} oportunidad(es) de mejora",
-                f"{fecha} · ~${tot['costo_usd']:.2f} · {altas} de prioridad alta. Entrá a Monitoreo → Tokens.",
-                {"tipo": "tokens", "source": source, "fecha": fecha},
-            )
+            push.notificar_global("tokens_oportunidad",
+                                   f"💡 {SOURCES[source]['nombre']}: {nuevas} oportunidad(es) nueva(s)",
+                                   "Entrá a Monitoreo → Tokens para revisarlas.",
+                                   {"tipo": "tokens", "source": source})
         except Exception as e:
-            print(f"[CAMILA-AUDIT] no se pudo notificar: {type(e).__name__}: {e}")
+            print(f"[CAMILA-AUDIT] push: {type(e).__name__}: {e}")
     return resumen
 
 
-# ── lectura ──────────────────────────────────────────────────────────────────
+# ── rollup mensual (gráfico histórico) ───────────────────────────────────────
+
+def backfill_mensual(source: str, meses: int = 6, max_files: int = 500) -> dict:
+    """Barrido único de trajectories → rollup por mes (camila_audit_mensual).
+    Lee cada archivo una vez; cap de archivos (loguea si recorta)."""
+    if source not in SOURCES:
+        raise ValueError("source desconocido")
+    cfg = SOURCES[source]
+    base, token = cfg["base"], cfg["token_fn"]()
+    if not token:
+        raise RuntimeError("token del source no configurado")
+    desde = datetime.now(_BA).replace(hour=0, minute=0, second=0, microsecond=0, day=1) \
+        - timedelta(days=31 * (meses - 1))
+
+    files_all = []
+    for agente in cfg["agentes"]:
+        sdir = f".openclaw/agents/{agente}/sessions"
+        try:
+            listing = _fs_list(base, token, sdir)
+        except Exception:
+            continue
+        for e in listing.get("entries", []):
+            if e.get("name", "").endswith(".trajectory.jsonl"):
+                files_all.append((agente, sdir, e))
+    files_all.sort(key=lambda x: x[2].get("mtime") or "", reverse=True)
+    recortados = max(0, len(files_all) - max_files)
+
+    by_month: dict[str, dict] = {}
+    for agente, sdir, e in files_all[:max_files]:
+        mt = e.get("mtime") or ""
+        try:
+            if mt and datetime.fromisoformat(mt.replace("Z", "+00:00")) < desde - timedelta(days=2):
+                continue
+        except Exception:
+            pass
+        try:
+            doc = _fs_read(base, token, f"{sdir}/{e['name']}")
+        except Exception:
+            continue
+        sesion = e["name"].replace(".trajectory.jsonl", "")
+        for ev in _iter_model_events(doc.get("content", ""), agente, sesion):
+            tsl = ev["ts"].astimezone(_BA)
+            if tsl < desde:
+                continue
+            mes = tsl.strftime("%Y-%m")
+            mb = by_month.setdefault(mes, {"acc": _new_acc(), "phones": set()})
+            _fold(mb["acc"], ev)
+            if ev["agente"] != "main":
+                mb["phones"].add(ev["telefono"] or "(sin teléfono)")
+
+    from app.models.camila_audit import CamilaAuditMensual
+    from app.database import SessionLocal
+    db = SessionLocal()
+    try:
+        for mes, mb in by_month.items():
+            t = mb["acc"]["totales"]
+            data = {"totales": t, "por_modelo": mb["acc"]["por_modelo"],
+                    "conversaciones": len(mb["phones"])}
+            row = db.query(CamilaAuditMensual).filter(
+                CamilaAuditMensual.source == source, CamilaAuditMensual.mes == mes).first()
+            if not row:
+                row = CamilaAuditMensual(source=source, mes=mes); db.add(row)
+            row.costo_usd = round(t["costo_usd"], 4)
+            row.conversaciones = len(mb["phones"])
+            row.llamadas = t["llamadas"]
+            row.data = json.dumps(data, ensure_ascii=False)
+            row.generated_at = datetime.now(timezone.utc)
+        db.commit()
+    finally:
+        db.close()
+    if recortados:
+        print(f"[CAMILA-AUDIT] backfill mensual: {recortados} archivos no leídos (cap {max_files})")
+    return {"meses": sorted(by_month), "files_recortados": recortados}
+
+
+# ── lectura para la UI ───────────────────────────────────────────────────────
 
 def get_sources() -> list[dict]:
     return [{"id": k, "nombre": v["nombre"]} for k, v in SOURCES.items()]
 
 
-def get_audits(source: str, days: int = 14) -> dict:
-    """Devuelve la última auditoría (detalle completo) + la tendencia de los
-    últimos `days` días (para el gráfico)."""
-    from app.models.camila_audit import CamilaAudit
+def _mes_actual() -> str:
+    return datetime.now(_BA).strftime("%Y-%m")
+
+
+def get_audit(source: str, days: int = 14) -> dict:
+    from app.models.camila_audit import CamilaAudit, CamilaAuditMensual
     from app.database import SessionLocal
     db = SessionLocal()
     try:
         rows = (db.query(CamilaAudit).filter(CamilaAudit.source == source)
                 .order_by(CamilaAudit.fecha.desc()).limit(max(1, days)).all())
-        tendencia = [{"fecha": r.fecha, "costo_usd": r.costo_usd, "total_tokens": r.total_tokens,
-                      "errores": r.errores, "oportunidades": r.oportunidades}
-                     for r in reversed(rows)]
-        ultimo = None
-        if rows:
+        tendencia = []
+        for r in reversed(rows):
             try:
-                ultimo = json.loads(rows[0].data)
+                t = json.loads(r.data).get("totales", {})
             except Exception:
-                ultimo = None
-        return {"source": source, "ultimo": ultimo, "tendencia": tendencia}
+                t = {}
+            tendencia.append({"fecha": r.fecha, "costo_usd": r.costo_usd,
+                              "costo_mensajes": round(t.get("costo_mensajes", 0.0), 4),
+                              "costo_errores": round(t.get("costo_errores", 0.0), 4)})
+        ultimo = json.loads(rows[0].data) if rows else None
+
+        mensual = (db.query(CamilaAuditMensual).filter(CamilaAuditMensual.source == source)
+                   .order_by(CamilaAuditMensual.mes.asc()).all())
+        serie_mensual = []
+        por_modelo_mes = {}
+        mes_actual = _mes_actual()
+        for r in mensual:
+            convs = r.conversaciones or 0
+            serie_mensual.append({
+                "mes": r.mes, "costo_usd": r.costo_usd, "conversaciones": convs, "llamadas": r.llamadas,
+                "costo_por_conversacion": round(r.costo_usd / convs, 4) if convs else 0.0,
+            })
+            if r.mes == mes_actual:
+                try:
+                    por_modelo_mes = json.loads(r.data).get("por_modelo", {})
+                except Exception:
+                    por_modelo_mes = {}
+        return {
+            "source": source, "ultimo": ultimo, "tendencia": tendencia,
+            "serie_mensual": serie_mensual, "por_modelo_mes": por_modelo_mes,
+            "mes_actual": mes_actual, "oportunidades": get_oportunidades(source),
+        }
     finally:
         db.close()
 
 
-# ── loop diario ───────────────────────────────────────────────────────────────
+# ── loops ─────────────────────────────────────────────────────────────────────
 
 def _hoy_ba() -> str:
     return datetime.now(_BA).strftime("%Y-%m-%d")
@@ -348,29 +510,29 @@ def _ayer_ba() -> str:
 
 
 def start():
-    """Una corrida diaria: audita el día completo anterior (y refresca el día en
-    curso) para cada source. Best-effort; los errores no tumban el loop."""
     def loop():
-        time.sleep(120)  # espera inicial
+        time.sleep(120)
         last_day = None
+        first = True
         while True:
             hoy = _hoy_ba()
-            try:
-                for source in SOURCES:
-                    # refresca el día en curso (sin push para no spamear)
+            for source in SOURCES:
+                try:
+                    run_audit(source, hoy, notify=False)
+                except Exception as e:
+                    print(f"[CAMILA-AUDIT] {source} hoy: {type(e).__name__}: {e}")
+                if last_day != hoy:
                     try:
-                        run_audit(source, hoy, notify=False)
+                        run_audit(source, _ayer_ba(), notify=True)
                     except Exception as e:
-                        print(f"[CAMILA-AUDIT] {source} hoy: {type(e).__name__}: {e}")
-                    # al cambiar de día, cierra el día anterior CON push
-                    if last_day != hoy:
-                        try:
-                            run_audit(source, _ayer_ba(), notify=True)
-                        except Exception as e:
-                            print(f"[CAMILA-AUDIT] {source} ayer: {type(e).__name__}: {e}")
-                last_day = hoy
-            except Exception as e:
-                print(f"[CAMILA-AUDIT ERROR] {type(e).__name__}: {e}")
-            time.sleep(6 * 3600)  # cada 6h (refresca el día en curso; cierra ayer 1 vez)
+                        print(f"[CAMILA-AUDIT] {source} ayer: {type(e).__name__}: {e}")
+                if first or last_day != hoy:
+                    try:
+                        backfill_mensual(source, meses=6)
+                    except Exception as e:
+                        print(f"[CAMILA-AUDIT] {source} mensual: {type(e).__name__}: {e}")
+            last_day = hoy
+            first = False
+            time.sleep(6 * 3600)
 
     threading.Thread(target=loop, daemon=True, name="camila-audit").start()

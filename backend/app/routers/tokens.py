@@ -1,12 +1,12 @@
 """Endpoints del auditor de consumo de Camila (solo super-admin).
 
-Alimenta la pantalla Monitoreo → Tokens: consumo/costo del día y tendencia, top
-conversaciones, errores y oportunidades de mejora, por cliente (source)."""
+Alimenta Monitoreo → Tokens: costo por conversación (teléfono), barras diarias
+(mensajes vs errores), serie mensual, por_modelo del mes y oportunidades FIJAS."""
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.deps import get_superadmin
-# Importar el modelo al tope registra la tabla en Base.metadata (create_all).
-from app.models.camila_audit import CamilaAudit  # noqa: F401
+# Importar los modelos al tope registra las tablas en Base.metadata (create_all).
+from app.models.camila_audit import CamilaAudit, CamilaAuditMensual, CamilaOportunidad  # noqa: F401
 from app.services import camila_audit
 
 router = APIRouter(prefix="/admin/tokens", tags=["tokens"],
@@ -21,10 +21,11 @@ def sources():
 
 @router.get("/audit")
 def audit(source: str = Query("etiguel"), days: int = Query(14, ge=1, le=90)):
-    """Última auditoría (detalle) + tendencia de los últimos N días."""
+    """Día más reciente (por conversación) + tendencia diaria (mensajes/errores) +
+    serie mensual + por_modelo del mes + oportunidades abiertas."""
     if source not in camila_audit.SOURCES:
         raise HTTPException(status_code=404, detail="source desconocido")
-    return camila_audit.get_audits(source, days)
+    return camila_audit.get_audit(source, days)
 
 
 @router.post("/recompute")
@@ -37,3 +38,23 @@ def recompute(source: str = Query("etiguel"), fecha: str | None = Query(None)):
         return camila_audit.run_audit(source, f, notify=False)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/backfill")
+def backfill(source: str = Query("etiguel"), meses: int = Query(6, ge=1, le=12)):
+    """Recalcula el rollup mensual barriendo las trajectories (histórico)."""
+    if source not in camila_audit.SOURCES:
+        raise HTTPException(status_code=404, detail="source desconocido")
+    try:
+        return camila_audit.backfill_mensual(source, meses=meses)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/oportunidades/{op_id}/resolver")
+def resolver(op_id: int, abrir: bool = Query(False)):
+    """Marca una oportunidad como resuelta (o la re-abre con abrir=true)."""
+    ok = camila_audit.resolver_oportunidad(op_id, resolver=not abrir)
+    if not ok:
+        raise HTTPException(status_code=404, detail="oportunidad no encontrada")
+    return {"ok": True, "id": op_id, "estado": "abierta" if abrir else "resuelta"}
