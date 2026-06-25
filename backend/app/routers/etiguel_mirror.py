@@ -93,6 +93,7 @@ def ingest_etiguel_mirror(
         .count()
     )
     nombre_lead = mirror.nombre
+    mirror_id = mirror.id  # para el deep-link de la push (abrir este lead)
     db.commit()
 
     # ── Push diferenciado de Etiguel (#44), respetando los toggles por cliente ──
@@ -103,11 +104,11 @@ def ingest_etiguel_mirror(
         # 2° mensaje (n_in==1) → push duplicado.
         if agregado and body.direccion == "in":
             evento = "respuesta" if n_in == 0 else "mensaje_entrante"
-            push.notificar_evento_etiguel_async(evento, nombre_lead or "un lead", body.texto)
+            push.notificar_evento_etiguel_async(evento, nombre_lead or "un lead", body.texto, mirror_id=mirror_id)
         # Transición de estado a "interesado".
         nuevo = (body.estado or "")
         if nuevo and "interes" in nuevo.lower() and "interes" not in (estado_anterior or "").lower():
-            push.notificar_evento_etiguel_async("interesado", nombre_lead or "un lead", None)
+            push.notificar_evento_etiguel_async("interesado", nombre_lead or "un lead", None, mirror_id=mirror_id)
     except Exception:
         pass
 

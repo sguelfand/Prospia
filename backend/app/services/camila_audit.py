@@ -365,7 +365,7 @@ def run_audit(source: str, fecha: str, notify: bool = True) -> dict:
             push.notificar_global("tokens_oportunidad",
                                    f"💡 {SOURCES[source]['nombre']}: {nuevas} oportunidad(es) nueva(s)",
                                    "Entrá a Monitoreo → Tokens para revisarlas.",
-                                   {"tipo": "tokens", "source": source})
+                                   {"tipo": "tokens", "source": source, "nav": "tokens"})
         except Exception as e:
             print(f"[CAMILA-AUDIT] push: {type(e).__name__}: {e}")
     return resumen

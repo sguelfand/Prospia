@@ -251,6 +251,12 @@ def _prospect_de_tenant(db: Session, tenant_id: int, prospect_id: int) -> Prospe
     return prospect
 
 
+@router.get("/clientes/{tenant_id}/prospects/{prospect_id}")
+def prospect_detalle(tenant_id: int, prospect_id: int, db: Session = Depends(get_db)):
+    """Un prospect enriquecido (deep-link desde una push → abrir su ficha)."""
+    return _enrich(_prospect_de_tenant(db, tenant_id, prospect_id))
+
+
 @router.get(
     "/clientes/{tenant_id}/prospects/{prospect_id}/mensajes",
     response_model=list[MensajeOut],

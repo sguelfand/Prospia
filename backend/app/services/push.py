@@ -123,11 +123,13 @@ def _textos_evento(evento: str, cliente: str, nombre: str, detalle: str | None) 
 
 
 def _enviar_evento_filtrado(db, evento: str, title: str, body: str, tenant_id: int,
-                            cliente: str | None = None, prospect_id: int | None = None) -> int:
+                            cliente: str | None = None, prospect_id: int | None = None,
+                            extra: dict | None = None) -> int:
     """Manda un push de evento de cliente (interesado/respuesta/mensaje_entrante)
     respetando el toggle GLOBAL por evento (#38) Y el toggle POR CLIENTE (#44).
-    Sirve para Plataforma y para Etiguel (tenant -1). Persiste aviso. Devuelve
-    a cuántos devices se mandó."""
+    Sirve para Plataforma y para Etiguel (tenant -1). Persiste aviso. `extra` se
+    mergea en el `data` de la push (deep-link: nav + ids). Devuelve a cuántos
+    devices se mandó."""
     from app.models.device import Device
     permitidos = set(_tokens_para_evento(db, evento))
     tokens = [
@@ -136,7 +138,10 @@ def _enviar_evento_filtrado(db, evento: str, title: str, body: str, tenant_id: i
     ]
     # Persistir el aviso ANTES de enviar para incluir su id en la push (deep-link).
     aviso_id = _log_aviso(db, evento, title, body, tenant_id=tenant_id, cliente=cliente, prospect_id=prospect_id) if tokens else None
-    _enviar(tokens, title, body, {"tenant_id": tenant_id, "prospect_id": prospect_id, "evento": evento, "aviso_id": aviso_id})
+    data = {"tenant_id": tenant_id, "prospect_id": prospect_id, "evento": evento, "aviso_id": aviso_id}
+    if extra:
+        data.update(extra)
+    _enviar(tokens, title, body, data)
     return len(tokens)
 
 
@@ -155,7 +160,9 @@ def _notificar_evento(prospect_id: int, tipo: str, detalle: str | None) -> None:
         tenant = db.get(Tenant, prospect.tenant_id)
         cliente = tenant.nombre if tenant else "Cliente"
         title, body = _textos_evento(evento, cliente, prospect.nombre, detalle)
-        _enviar_evento_filtrado(db, evento, title, body, prospect.tenant_id, cliente=cliente, prospect_id=prospect_id)
+        # deep-link: abrir la ficha del prospect (ProspectDetail) al tocar
+        _enviar_evento_filtrado(db, evento, title, body, prospect.tenant_id, cliente=cliente,
+                                prospect_id=prospect_id, extra={"nav": "prospect", "cliente": cliente})
     except Exception as e:
         print(f"[PUSH] error armando notificación: {type(e).__name__}: {e}")
     finally:
@@ -176,23 +183,27 @@ ETIGUEL_TENANT_ID = -1
 ETIGUEL_NOMBRE = "Etiguel"
 
 
-def _notificar_evento_etiguel(evento: str, nombre: str, detalle: str | None) -> None:
+def _notificar_evento_etiguel(evento: str, nombre: str, detalle: str | None, mirror_id: int | None) -> None:
     from app.database import SessionLocal
     db = SessionLocal()
     try:
         title, body = _textos_evento(evento, ETIGUEL_NOMBRE, nombre or "un lead", detalle)
-        _enviar_evento_filtrado(db, evento, title, body, ETIGUEL_TENANT_ID, cliente=ETIGUEL_NOMBRE)
+        # deep-link: abrir el detalle del lead de Etiguel (EtiguelMirrorDetail) por id
+        _enviar_evento_filtrado(db, evento, title, body, ETIGUEL_TENANT_ID, cliente=ETIGUEL_NOMBRE,
+                                extra={"nav": "etiguel_lead", "mirror_id": mirror_id})
     except Exception as e:
         print(f"[PUSH] error armando evento Etiguel: {type(e).__name__}: {e}")
     finally:
         db.close()
 
 
-def notificar_evento_etiguel_async(evento: str, nombre: str, detalle: str | None = None) -> None:
+def notificar_evento_etiguel_async(evento: str, nombre: str, detalle: str | None = None,
+                                   mirror_id: int | None = None) -> None:
     """Push de un evento de Etiguel (interesado / respuesta / mensaje_entrante),
     respetando los mismos toggles (global + por cliente con tenant -1) que la
-    Plataforma. Lo dispara el espejo de Etiguel (#44 diferenciado)."""
-    threading.Thread(target=_notificar_evento_etiguel, args=(evento, nombre, detalle), daemon=True).start()
+    Plataforma. Lo dispara el espejo de Etiguel (#44 diferenciado). `mirror_id` =
+    id del registro en etiguel_mirror, para abrir ese lead al tocar la push."""
+    threading.Thread(target=_notificar_evento_etiguel, args=(evento, nombre, detalle, mirror_id), daemon=True).start()
 
 
 def _notificar_error(error_id: int, fuente: str, contenido: str) -> None:
@@ -207,7 +218,7 @@ def _notificar_error(error_id: int, fuente: str, contenido: str) -> None:
         # Alerta global, pero respeta el toggle de evento "error_camila" (#38).
         tokens = _tokens_para_evento(db, "error_camila")
         aviso_id = _log_aviso(db, "error_camila", title, body) if tokens else None
-        _enviar(tokens, title, body, {"tipo": "agent_error", "error_id": error_id, "aviso_id": aviso_id})
+        _enviar(tokens, title, body, {"tipo": "agent_error", "error_id": error_id, "aviso_id": aviso_id, "nav": "error"})
     except Exception as e:
         print(f"[PUSH] error armando alerta de error: {type(e).__name__}: {e}")
     finally:

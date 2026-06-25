@@ -12,6 +12,7 @@ import React, { useEffect } from "react";
 import { View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
+import { getEtiguelMirror, getProspect } from "./src/api";
 import { AuthProvider, useAuth } from "./src/auth";
 import DrawerContent from "./src/components/DrawerContent";
 import { ProspiaMark } from "./src/components/Logo";
@@ -101,19 +102,44 @@ function Routes() {
   // Al tocar una notificación, ir al feed de Avisos.
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data as { tenant_id?: number; tipo?: string; aviso_id?: number };
+      const data = response.notification.request.content.data as {
+        tenant_id?: number; tipo?: string; aviso_id?: number; nav?: string;
+        prospect_id?: number; mirror_id?: number; cliente?: string; evento?: string;
+      };
       if (!navigationRef.isReady()) return;
-      if (data?.tipo === "agent_error") {
-        navigationRef.navigate("Errores");
-      } else if (data?.aviso_id != null) {
-        // Abrir directamente ESE aviso en Avisos (deep-link).
-        navigationRef.navigate("Avisos", { avisoId: data.aviso_id });
-      } else if (data?.tenant_id != null) {
-        navigationRef.navigate("Avisos");
-      }
+      const { nav, evento } = data ?? {};
+      const avisosFallback = () =>
+        data?.aviso_id != null ? navigationRef.navigate("Avisos", { avisoId: data.aviso_id }) : navigationRef.navigate("Avisos");
+
+      // Deep-link: cada push abre la pantalla/registro donde vive lo notificado.
+      (async () => {
+        try {
+          if (nav === "error" || data?.tipo === "agent_error") {
+            navigationRef.navigate("Errores");
+          } else if (nav === "tokens" || data?.tipo === "tokens" || evento === "tokens_oportunidad") {
+            navigationRef.navigate("Tokens");
+          } else if (nav === "monitoreo_servicios" || evento === "servicio_caido" || evento === "servicio_recuperado") {
+            navigationRef.navigate("Monitoreo");
+          } else if (nav === "pendientes" || evento === "standby" || evento === "cola_terminada" || evento === "necesita_autorizacion") {
+            navigationRef.navigate("Pendientes");
+          } else if ((nav === "etiguel_lead" || data?.tenant_id === -1) && data?.mirror_id != null && token) {
+            const items = await getEtiguelMirror(token);
+            const item = items.find((i) => i.id === data.mirror_id);
+            if (item) navigationRef.navigate("EtiguelMirrorDetail", { item });
+            else avisosFallback();
+          } else if (nav === "prospect" && data?.prospect_id != null && data?.tenant_id != null && token) {
+            const prospect = await getProspect(token, data.tenant_id, data.prospect_id);
+            navigationRef.navigate("ProspectDetail", { tenantId: data.tenant_id, clienteNombre: data.cliente ?? "Cliente", prospect });
+          } else {
+            avisosFallback();
+          }
+        } catch {
+          avisosFallback();
+        }
+      })();
     });
     return () => sub.remove();
-  }, []);
+  }, [token]);
 
   if (loading) return <Loader />;
   if (token && locked) return <LockScreen />;
