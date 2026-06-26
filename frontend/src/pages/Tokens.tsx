@@ -7,8 +7,16 @@ type Totales = {
   costo_mensajes: number; costo_errores: number; errores: number; timeouts: number
   cacheRead: number; cacheWrite: number
 }
-type Conv = { telefono: string; tokens: number; costo_usd: number; llamadas: number; timeouts: number; errores: number; ejemplo: string | null; es_sistema: boolean }
-type Ultimo = { fecha: string; totales: Totales; por_modelo: Record<string, { tokens: number; costo_usd: number; llamadas: number }>; top_conversaciones: Conv[]; n_conversaciones: number }
+type ConvModelo = { llamadas: number; costo_usd: number }
+type Conv = {
+  telefono: string; tokens: number; costo_usd: number; llamadas: number
+  input?: number; output?: number; cacheRead?: number; cacheWrite?: number
+  timeouts: number; errores: number; compactaciones?: number
+  por_modelo?: Record<string, ConvModelo>; primer_ts?: string | null; ultimo_ts?: string | null
+  ejemplo: string | null; es_sistema: boolean
+}
+type DiaDetalle = { fecha: string; totales: Totales; por_modelo: Record<string, { tokens: number; costo_usd: number; llamadas: number }>; conversaciones?: Conv[]; top_conversaciones?: Conv[]; n_conversaciones: number }
+type Ultimo = DiaDetalle
 type DiaTrend = { fecha: string; costo_usd: number; costo_mensajes: number; costo_errores: number }
 type MesTrend = { mes: string; costo_usd: number; conversaciones: number; llamadas: number; costo_por_conversacion: number }
 type Oportunidad = { id: number; tipo: string; clave: string; severidad: 'alta' | 'media' | 'baja'; titulo: string; detalle: string; estado: string; primera_vez: string | null }
@@ -30,6 +38,7 @@ function haceDias(iso: string | null): string {
   const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
   return d <= 0 ? 'hoy' : d === 1 ? 'hace 1 día' : `hace ${d} días`
 }
+const hhmm = (iso?: string | null) => iso ? new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : ''
 
 export default function Tokens() {
   const [sources, setSources] = useState<Source[]>([])
@@ -38,6 +47,10 @@ export default function Tokens() {
   const [error, setError] = useState<string | null>(null)
   const [recomputando, setRecomputando] = useState(false)
   const [hoverMes, setHoverMes] = useState<number | null>(null)
+  const [diaSel, setDiaSel] = useState<string | null>(null)   // fecha del día abierto (null = último)
+  const [diaData, setDiaData] = useState<DiaDetalle | null>(null)
+  const [diaLoading, setDiaLoading] = useState(false)
+  const [convAbierta, setConvAbierta] = useState<string | null>(null)
 
   useEffect(() => { api.get<Source[]>('/admin/tokens/sources').then(setSources).catch(() => {}) }, [])
   const cargar = useCallback(async () => {
@@ -45,6 +58,19 @@ export default function Tokens() {
     catch (e) { setError(e instanceof Error ? e.message : 'Error al cargar') }
   }, [source])
   useEffect(() => { cargar() }, [cargar])
+  useEffect(() => { setDiaSel(null); setDiaData(null); setConvAbierta(null) }, [source])
+
+  // Al abrir un día distinto del último, traer su detalle completo
+  useEffect(() => {
+    if (!diaSel || diaSel === data?.ultimo?.fecha) { setDiaData(null); return }
+    let vivo = true
+    setDiaLoading(true)
+    api.get<DiaDetalle>(`/admin/tokens/dia?source=${source}&fecha=${diaSel}`)
+      .then((d) => { if (vivo) setDiaData(d) })
+      .catch(() => { if (vivo) setDiaData(null) })
+      .finally(() => { if (vivo) setDiaLoading(false) })
+    return () => { vivo = false }
+  }, [diaSel, source, data?.ultimo?.fecha])
 
   async function recomputar() {
     setRecomputando(true)
@@ -53,11 +79,15 @@ export default function Tokens() {
   }
 
   const u = data?.ultimo
-  const t = u?.totales
   const dias = data?.tendencia ?? []
   const meses = data?.serie_mensual ?? []
-  const convs = (u?.top_conversaciones ?? []).filter((c) => !c.es_sistema)
-  const sistema = (u?.top_conversaciones ?? []).find((c) => c.es_sistema)
+  // Día mostrado: el último por defecto; o el que el usuario clickeó en el gráfico.
+  const verUltimo = !diaSel || diaSel === u?.fecha
+  const det: DiaDetalle | null = verUltimo ? (u ?? null) : diaData
+  const t = det?.totales
+  const convsAll = (det?.conversaciones ?? det?.top_conversaciones ?? [])
+  const convs = convsAll.filter((c) => !c.es_sistema)
+  const sistema = convsAll.find((c) => c.es_sistema)
 
   return (
     <div className="space-y-6">
@@ -76,7 +106,7 @@ export default function Tokens() {
         </div>
       </div>
       {error && <p className="text-sm text-red-500">{error}</p>}
-      <p className="text-xs text-muted -mt-2">Costo estimado (tokens reales × precios de referencia de Anthropic; myclaw no expone su precio real).</p>
+      <p className="text-xs text-muted -mt-2">Costo real = tokens reales × tarifa MyClaw (10% off el precio oficial). Tocá un día del gráfico para ver sus conversaciones.</p>
 
       {/* Oportunidades FIJAS */}
       <div className="bg-card border border-line rounded-2xl p-6 space-y-3">
@@ -104,19 +134,23 @@ export default function Tokens() {
         )}
       </div>
 
-      {!u || !t ? (
+      {!u ? (
         <div className="bg-card border border-line rounded-2xl p-6 text-sm text-muted">Sin datos del día todavía. Tocá “Recalcular hoy”.</div>
       ) : (
         <>
-          {/* KPIs del día */}
-          <p className="text-xs text-muted -mb-2">Día {u.fecha}</p>
+          {/* KPIs del día seleccionado */}
+          <div className="flex items-center gap-2 -mb-2">
+            <p className="text-xs text-muted">Día <span className="font-medium text-ink-soft">{det?.fecha ?? diaSel}</span>{verUltimo ? ' (último)' : ''}</p>
+            {diaLoading && <RefreshCw size={12} className="animate-spin text-muted" />}
+            {!verUltimo && <button onClick={() => setDiaSel(null)} className="text-xs text-primary hover:underline">← volver al último</button>}
+          </div>
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             {[
-              { l: 'Costo estimado', v: usd(t.costo_usd), alert: false },
-              { l: 'Conversaciones', v: fmt(u.n_conversaciones), alert: false },
-              { l: 'Llamadas', v: fmt(t.llamadas), alert: false },
-              { l: 'Errores', v: fmt(t.errores), alert: t.errores > 0 },
-              { l: 'Timeouts', v: fmt(t.timeouts), alert: t.timeouts > 0 },
+              { l: 'Costo del día', v: usd(t?.costo_usd ?? 0), alert: false },
+              { l: 'Conversaciones', v: fmt(det?.n_conversaciones ?? 0), alert: false },
+              { l: 'Llamadas', v: fmt(t?.llamadas ?? 0), alert: false },
+              { l: 'Errores', v: fmt(t?.errores ?? 0), alert: (t?.errores ?? 0) > 0 },
+              { l: 'Timeouts', v: fmt(t?.timeouts ?? 0), alert: (t?.timeouts ?? 0) > 0 },
             ].map((k) => (
               <div key={k.l} className="bg-card border border-line rounded-2xl p-4">
                 <div className={`text-2xl font-semibold ${k.alert ? 'text-red-500' : 'text-ink'}`}>{k.v}</div>
@@ -129,13 +163,13 @@ export default function Tokens() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
             <div className="bg-card border border-line rounded-2xl p-5">
               <div className="flex items-center justify-between mb-2">
-                <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Costo por día</h2>
+                <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Costo por día <span className="text-[11px] normal-case text-muted font-normal">· tocá un día</span></h2>
                 <div className="flex items-center gap-3 text-[11px] text-muted">
                   <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: '#F5B23D' }} />mensajes</span>
                   <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: '#ef4444' }} />errores</span>
                 </div>
               </div>
-              {dias.length === 0 ? <p className="text-sm text-muted">Sin datos.</p> : <BarrasDia dias={dias} />}
+              {dias.length === 0 ? <p className="text-sm text-muted">Sin datos.</p> : <BarrasDia dias={dias} sel={det?.fecha} onSelect={(f) => { setDiaSel(f); setConvAbierta(null) }} />}
             </div>
             <div className="bg-card border border-line rounded-2xl p-5">
               <div className="flex items-center justify-between mb-2">
@@ -147,21 +181,55 @@ export default function Tokens() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-            {/* Conversaciones más caras (por teléfono) */}
+            {/* Conversaciones del día (clic = detalle) */}
             <div className="bg-card border border-line rounded-2xl p-6">
-              <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-3">Conversaciones más caras (día)</h2>
-              {convs.length === 0 ? <p className="text-sm text-muted">Sin conversaciones.</p> : (
-                <div className="space-y-2">
-                  {convs.slice(0, 10).map((c) => (
-                    <div key={c.telefono} className="border border-line rounded-xl p-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-medium text-ink flex items-center gap-1.5"><Phone size={13} className="text-muted" />{c.telefono}</span>
-                        <span className="text-sm font-semibold text-ink">{usd3(c.costo_usd)}</span>
+              <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-3">Conversaciones del día <span className="text-[11px] normal-case text-muted font-normal">· {convs.length} · tocá una para el detalle</span></h2>
+              {convs.length === 0 ? <p className="text-sm text-muted">{diaLoading ? 'Cargando…' : 'Sin conversaciones.'}</p> : (
+                <div className="space-y-2 max-h-[28rem] overflow-y-auto pr-1">
+                  {convs.map((c) => {
+                    const abierta = convAbierta === c.telefono
+                    return (
+                      <div key={c.telefono} className="border border-line rounded-xl overflow-hidden">
+                        <button onClick={() => setConvAbierta(abierta ? null : c.telefono)}
+                          className="w-full text-left p-3 hover:bg-app/50 transition-colors">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-medium text-ink flex items-center gap-1.5"><Phone size={13} className="text-muted" />{c.telefono}</span>
+                            <span className="text-sm font-semibold text-ink">{usd3(c.costo_usd)}</span>
+                          </div>
+                          <div className="text-xs text-muted mt-0.5">
+                            {c.llamadas} llamadas · {fmt(c.tokens)} tok
+                            {Object.keys(c.por_modelo ?? {}).length > 0 && <span> · {Object.keys(c.por_modelo!).map((m) => m.replace('claude-', '')).join(', ')}</span>}
+                            {c.timeouts > 0 && <span className="text-red-400"> · {c.timeouts} timeout</span>}
+                            {c.errores > 0 && <span className="text-red-400"> · {c.errores} error</span>}
+                          </div>
+                          {!abierta && c.ejemplo && <p className="text-xs text-muted mt-1 truncate">“{c.ejemplo}”</p>}
+                        </button>
+                        {abierta && (
+                          <div className="px-3 pb-3 pt-1 border-t border-line/60 bg-app/30 space-y-2">
+                            {/* split por modelo */}
+                            <div className="space-y-1">
+                              {Object.entries(c.por_modelo ?? {}).sort((a, b) => b[1].costo_usd - a[1].costo_usd).map(([m, v]) => (
+                                <div key={m} className="flex items-center justify-between text-xs">
+                                  <span className="text-ink-soft">{m}</span>
+                                  <span className="text-muted">{usd3(v.costo_usd)} · {v.llamadas} ll</span>
+                                </div>
+                              ))}
+                            </div>
+                            {/* tokens detallados */}
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-muted">
+                              <span>Input: <span className="text-ink-soft">{fmt(c.input ?? 0)}</span></span>
+                              <span>Output: <span className="text-ink-soft">{fmt(c.output ?? 0)}</span></span>
+                              <span>Cache read: <span className="text-ink-soft">{fmt(c.cacheRead ?? 0)}</span></span>
+                              <span>Cache write: <span className="text-ink-soft">{fmt(c.cacheWrite ?? 0)}</span></span>
+                              {(c.compactaciones ?? 0) > 0 && <span>Compactaciones: <span className="text-amber-400">{c.compactaciones}</span></span>}
+                              {c.primer_ts && <span>Horario: <span className="text-ink-soft">{hhmm(c.primer_ts)}–{hhmm(c.ultimo_ts)}</span></span>}
+                            </div>
+                            {c.ejemplo && <p className="text-xs text-muted italic">“{c.ejemplo}”</p>}
+                          </div>
+                        )}
                       </div>
-                      <div className="text-xs text-muted mt-0.5">{c.llamadas} llamadas · {fmt(c.tokens)} tok{c.timeouts > 0 && <span className="text-red-400"> · {c.timeouts} timeout</span>}{c.errores > 0 && <span className="text-red-400"> · {c.errores} error</span>}</div>
-                      {c.ejemplo && <p className="text-xs text-muted mt-1 truncate">“{c.ejemplo}”</p>}
-                    </div>
-                  ))}
+                    )
+                  })}
                   {sistema && <p className="text-xs text-muted pt-1">+ sistema (crons/mantenimiento): {usd3(sistema.costo_usd)}</p>}
                 </div>
               )}
@@ -196,7 +264,7 @@ function niceMax(v: number): number {
   return step * pow
 }
 
-function BarrasDia({ dias }: { dias: DiaTrend[] }) {
+function BarrasDia({ dias, sel, onSelect }: { dias: DiaTrend[]; sel?: string; onSelect?: (f: string) => void }) {
   const [hi, setHi] = useState<number | null>(null)
   const W = 900, H = 300, padL = 56, padR = 14, padT = 28, padB = 50
   const top = niceMax(Math.max(0.001, ...dias.map((d) => d.costo_usd)))
@@ -229,13 +297,17 @@ function BarrasDia({ dias }: { dias: DiaTrend[] }) {
           const hMsg = (H - padB) - y(d.costo_mensajes)
           const hErr = (H - padB) - y(d.costo_errores)
           const yTop = y(d.costo_usd)
-          const op = hi == null || hi === i ? 1 : 0.4
+          const isSel = sel === d.fecha
+          const op = isSel ? 1 : (hi == null || hi === i ? 1 : 0.4)
           return (
-            <g key={d.fecha} onMouseEnter={() => setHi(i)} onMouseLeave={() => setHi(null)} style={{ cursor: 'pointer', opacity: op }}>
+            <g key={d.fecha} onMouseEnter={() => setHi(i)} onMouseLeave={() => setHi(null)} onClick={() => onSelect?.(d.fecha)} style={{ cursor: 'pointer', opacity: op }}>
+              {/* resaltado del día abierto */}
+              {isSel && <rect x={xc(i) - slot / 2 + 2} y={padT} width={slot - 4} height={H - padT - padB} fill="#F5B23D" fillOpacity={0.08} rx={4} />}
               {/* mensajes (ámbar, abajo) */}
               {d.costo_mensajes > 0 && <rect x={xc(i) - bw / 2} y={(H - padB) - hMsg} width={bw} height={hMsg} fill="#F5B23D" rx={2} />}
               {/* errores (rojo, arriba) */}
               {d.costo_errores > 0 && <rect x={xc(i) - bw / 2} y={yTop} width={bw} height={hErr} fill="#ef4444" rx={2} />}
+              {isSel && <rect x={xc(i) - bw / 2 - 1.5} y={yTop - 1.5} width={bw + 3} height={(H - padB) - yTop + 1.5} fill="none" stroke="#F5B23D" strokeWidth={1.5} rx={3} />}
               {/* total arriba */}
               {d.costo_usd > 0 && <text x={xc(i)} y={yTop - 6} textAnchor="middle" fontSize={10.5} fontWeight={700} fill="currentColor" className="text-ink">{usd(d.costo_usd)}</text>}
               {/* fecha rotada */}

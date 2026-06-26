@@ -430,6 +430,69 @@ function CompBarChart({ title, sub, data, color, pct, onPick }: {
   )
 }
 
+// Gastos por cliente (mes actual + serie mensual) — fuente /admin/tokens/clientes.
+type ClienteCosto = {
+  id: string; nombre: string; mes_actual: string
+  gasto_mes_actual: number; llamadas_mes: number
+  serie_mensual: { mes: string; costo_usd: number; conversaciones: number }[]
+}
+const COSTO_COLORS = ['#f59e0b', '#3b82f6', '#22c55e', '#8b5cf6', '#ef4444', '#14b8a6']
+
+function GastosClientes() {
+  const navigate = useNavigate()
+  const [rows, setRows] = useState<ClienteCosto[] | null>(null)
+  useEffect(() => { api.get<ClienteCosto[]>('/admin/tokens/clientes').then(setRows).catch(() => setRows([])) }, [])
+  if (!rows || rows.length === 0) return null
+
+  const meses = Array.from(new Set(rows.flatMap(r => r.serie_mensual.map(m => m.mes)))).sort()
+  const dataset = meses.map(mes => {
+    const o: Record<string, number | string> = { mes }
+    rows.forEach(r => { o[r.id] = r.serie_mensual.find(m => m.mes === mes)?.costo_usd ?? 0 })
+    return o
+  })
+  const total = rows.reduce((a, r) => a + r.gasto_mes_actual, 0)
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="font-semibold text-sm md:text-base">Gastos por cliente <span className="text-xs text-faint font-normal">· costo IA (MyClaw)</span></h2>
+        <button onClick={() => navigate('/monitoreo/tokens')} className="text-xs text-accent hover:underline">ver detalle →</button>
+      </div>
+      {/* cards del mes actual */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        {rows.map((r, i) => (
+          <div key={r.id} className="bg-card rounded-xl shadow p-4">
+            <div className="text-2xl font-semibold tabular-nums" style={{ color: COSTO_COLORS[i % COSTO_COLORS.length] }}>${r.gasto_mes_actual.toFixed(2)}</div>
+            <div className="text-xs text-faint mt-1">{r.nombre}</div>
+            <div className="text-[11px] text-faint">{fmt(r.llamadas_mes)} llamadas · mes corriente</div>
+          </div>
+        ))}
+        {rows.length > 1 && (
+          <div className="bg-card rounded-xl shadow p-4 border border-line">
+            <div className="text-2xl font-semibold tabular-nums text-ink">${total.toFixed(2)}</div>
+            <div className="text-xs text-faint mt-1">Total clientes</div>
+          </div>
+        )}
+      </div>
+      {/* gráfico mensual por cliente */}
+      <div className="bg-card rounded-xl shadow p-4 md:p-5">
+        <h3 className="font-semibold mb-1 text-sm">Gasto mensual por cliente (USD)</h3>
+        <ResponsiveContainer width="100%" height={260}>
+          <BarChart data={dataset} margin={{ top: 8, bottom: 5, left: 0, right: 8 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+            <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => '$' + v} width={48} />
+            <Tooltip formatter={(v: number, n: string) => ['$' + Number(v).toFixed(2), rows.find(r => r.id === n)?.nombre ?? n]} />
+            {rows.map((r, i) => (
+              <Bar key={r.id} dataKey={r.id} stackId="g" fill={COSTO_COLORS[i % COSTO_COLORS.length]} radius={[2, 2, 0, 0]} />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  )
+}
+
 function ComparativaDashboard() {
   const [data, setData] = useState<DashboardComparativa | null>(null)
 
@@ -463,6 +526,9 @@ function ComparativaDashboard() {
         <KpiCard label="Interesados"     value={fmt(data.interesados)}      color={ESTADOS.interesado.color} />
         <KpiCard label="Interesados (mes)" value={fmt(data.interesados_mes)} color="#22c55e" />
       </div>
+
+      {/* Gastos por cliente (costo IA) */}
+      <GastosClientes />
 
       {/* Barras comparativas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
