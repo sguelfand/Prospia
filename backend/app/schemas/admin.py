@@ -419,3 +419,20 @@ class ResetNumeroPruebaOut(BaseModel):
     webhook_ok: bool                  # si el POST /reset-numero-prueba respondió ok
     webhook_respuesta: dict | None = None   # cuerpo de la respuesta del webhook
     webhook_error: str | None = None        # error si el webhook falló
+
+
+class ResetNumeroPruebaTenantOut(BaseModel):
+    """Reset per-cliente (tenant). Igual que el de Etiguel pero tenant-aware:
+    limpia los datos del número en la DB scopeados al tenant y, SI el tenant tiene
+    su webhook de bot configurado, le pega para limpiar la memoria local del bot.
+    Si el bot todavía no está conectado, `webhook_estado` = 'no_conectado' y solo
+    se limpia la DB (la infra queda lista para cuando se conecte)."""
+    tenant_id: int
+    cliente: str
+    telefono: str
+    digits: str
+    db_borrado: dict[str, int]        # {"prospects": N, "mensajes": M}
+    # ok | error | no_conectado (sin webhook configurado en el tenant)
+    webhook_estado: str
+    webhook_respuesta: dict | None = None
+    webhook_error: str | None = None

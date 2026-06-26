@@ -76,7 +76,12 @@ class TenantConfig(Base):
     openclaw_gateway_url: Mapped[str | None] = mapped_column(String(255))
     openclaw_session_id: Mapped[str | None] = mapped_column(String(120))
     openclaw_gateway_token: Mapped[str | None] = mapped_column(String(255))  # por tenant (cierra G1)
-    webhook_token: Mapped[str | None] = mapped_column(String(255))           # por tenant (cierra G1)
+    webhook_token: Mapped[str | None] = mapped_column(String(255))           # INBOUND: X-Mirror-Token del bot → Prospia
+    # OUTBOUND: el webhook del bot del cliente (estilo webhook.etiguel.net) que
+    # Prospia llama para operar sobre la memoria del bot (ej. /reset-numero-prueba).
+    # Vacío = bot todavía no conectado → las acciones que dependen de él se saltean.
+    webhook_url: Mapped[str | None] = mapped_column(String(255))
+    webhook_deploy_token: Mapped[str | None] = mapped_column(String(255))     # X-Deploy-Token de ese webhook
     bot_tono: Mapped[str | None] = mapped_column(Text)
     bot_datos_negocio: Mapped[dict] = mapped_column(JSONB, default=dict, server_default=text("'{}'::jsonb"))
     deriva_nombre: Mapped[str | None] = mapped_column(String(120))           # la "Delfina" del cliente

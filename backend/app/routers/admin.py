@@ -70,6 +70,7 @@ from app.schemas.admin import (
     ResetPasswordOut,
     ResetNumeroPruebaIn,
     ResetNumeroPruebaOut,
+    ResetNumeroPruebaTenantOut,
 )
 from app.models.intake_submission import IntakeSubmission
 from app.schemas.dashboard import DashboardStats
@@ -637,6 +638,97 @@ def reset_numero_prueba(body: ResetNumeroPruebaIn, db: Session = Depends(get_db)
         digits=digits,
         db_borrado=db_borrado,
         webhook_ok=webhook_ok,
+        webhook_respuesta=webhook_respuesta,
+        webhook_error=webhook_error,
+    )
+
+
+@router.post("/clientes/{tenant_id}/reset-numero-prueba", response_model=ResetNumeroPruebaTenantOut)
+def reset_numero_prueba_cliente(tenant_id: int, body: ResetNumeroPruebaIn, db: Session = Depends(get_db)):
+    """Reinicia una prueba del bot de un CLIENTE (tenant): borra todo rastro de un
+    número de prueba. Tenant-aware:
+      (a) Borra de la DB de Prospia los prospects de ESE tenant cuyo teléfono o
+          whatsapp matchee por los últimos 10 dígitos + sus mensajes e historial.
+      (b) Si el tenant tiene su webhook de bot configurado (webhook_url +
+          webhook_deploy_token), le pega POST {webhook_url}/reset-numero-prueba
+          para limpiar la memoria local del bot. Si el bot todavía NO está
+          conectado → solo DB, estado 'no_conectado' (la infra queda lista para
+          cuando se conecte; ver implementador, paso 11)."""
+    tenant = db.get(Tenant, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No existe ese cliente.")
+
+    digits = "".join(c for c in (body.telefono or "") if c.isdigit())[-10:]
+    if len(digits) < 10:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Teléfono inválido: se necesitan al menos 10 dígitos.",
+        )
+
+    # (a) Borrar del tenant: prospects (match por últimos 10 dígitos en telefono o
+    #     whatsapp) + sus mensajes e historial (FKs a prospects.id).
+    def _match(p) -> bool:
+        for campo in (p.telefono, p.whatsapp):
+            if campo and "".join(c for c in campo if c.isdigit()).endswith(digits):
+                return True
+        return False
+
+    prospects = [
+        p for p in db.query(Prospect).filter(Prospect.tenant_id == tenant_id).all() if _match(p)
+    ]
+    mensajes_borrados = 0
+    for p in prospects:
+        mensajes_borrados += (
+            db.query(ProspectMensaje)
+            .filter(ProspectMensaje.prospect_id == p.id)
+            .delete(synchronize_session=False)
+        )
+        db.query(ProspectHistorial).filter(
+            ProspectHistorial.prospect_id == p.id
+        ).delete(synchronize_session=False)
+        db.delete(p)
+    db.commit()
+    db_borrado = {"prospects": len(prospects), "mensajes": mensajes_borrados}
+
+    # (b) Limpiar la memoria local del bot vía su webhook (solo si está conectado).
+    cfg = tenant.config
+    url = (cfg.webhook_url or "").strip() if cfg else ""
+    token = (cfg.webhook_deploy_token or "").strip() if cfg else ""
+    webhook_estado = "no_conectado"
+    webhook_respuesta: dict | None = None
+    webhook_error: str | None = None
+    if url and token:
+        try:
+            r = requests.post(
+                url.rstrip("/") + "/reset-numero-prueba",
+                headers={
+                    "X-Deploy-Token": token,
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+                    "Content-Type": "application/json",
+                },
+                json={"telefono": body.telefono},
+                timeout=15,
+            )
+            if r.status_code == 200:
+                try:
+                    webhook_respuesta = r.json()
+                except Exception:
+                    webhook_respuesta = {"raw": r.text[:500]}
+                webhook_estado = "ok"
+            else:
+                webhook_estado = "error"
+                webhook_error = f"HTTP {r.status_code}: {r.text[:300]}"
+        except Exception as e:
+            webhook_estado = "error"
+            webhook_error = f"{type(e).__name__}: {e}"
+
+    return ResetNumeroPruebaTenantOut(
+        tenant_id=tenant_id,
+        cliente=tenant.nombre,
+        telefono=body.telefono,
+        digits=digits,
+        db_borrado=db_borrado,
+        webhook_estado=webhook_estado,
         webhook_respuesta=webhook_respuesta,
         webhook_error=webhook_error,
     )

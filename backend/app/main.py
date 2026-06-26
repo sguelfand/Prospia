@@ -76,6 +76,8 @@ def run_migrations():
             "openclaw_session_id VARCHAR(120)",
             "openclaw_gateway_token VARCHAR(255)",
             "webhook_token VARCHAR(255)",
+            "webhook_url VARCHAR(255)",
+            "webhook_deploy_token VARCHAR(255)",
             "bot_tono TEXT",
             "bot_datos_negocio JSONB NOT NULL DEFAULT '{}'::jsonb",
             "deriva_nombre VARCHAR(120)",

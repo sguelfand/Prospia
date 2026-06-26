@@ -59,6 +59,107 @@ function autoPayload(c: ClienteConfig) {
   }
 }
 
+// ── Inicializar prueba (per-cliente) ─────────────────────────────────────────
+// Borra todo rastro de un número de prueba para ESE cliente: prospects + mensajes
+// en la DB de Prospia, y —si el bot del cliente ya está conectado— su memoria local
+// vía el webhook del cliente. Si el bot no está conectado, limpia solo la DB.
+type ResetTenantOut = {
+  db_borrado: { prospects: number; mensajes: number }
+  webhook_estado: string // ok | error | no_conectado
+  webhook_error: string | null
+}
+
+function InicializarPruebaCliente({ tenantId, nombre }: { tenantId: number; nombre: string }) {
+  const [confirmando, setConfirmando] = useState(false)
+  const [telefono, setTelefono] = useState('+5491123146373')
+  const [enviando, setEnviando] = useState(false)
+  const [resultado, setResultado] = useState<{ ok: boolean; text: string } | null>(null)
+
+  async function confirmar() {
+    setEnviando(true)
+    setResultado(null)
+    try {
+      const r = await api.post<ResetTenantOut>(`/admin/clientes/${tenantId}/reset-numero-prueba`, { telefono })
+      const { prospects, mensajes } = r.db_borrado
+      const db = `DB: ${prospects} prospect${prospects === 1 ? '' : 's'} y ${mensajes} mensaje${mensajes === 1 ? '' : 's'}.`
+      let bot: string
+      let ok = true
+      if (r.webhook_estado === 'ok') bot = 'Memoria del bot limpiada.'
+      else if (r.webhook_estado === 'no_conectado') bot = 'El bot todavía no está conectado — se limpió solo la DB.'
+      else {
+        bot = `El bot NO limpió su memoria (${r.webhook_error ?? 'error'}).`
+        ok = false
+      }
+      setResultado({ ok, text: `${db} ${bot}` })
+      setConfirmando(false)
+    } catch (e) {
+      setResultado({ ok: false, text: e instanceof Error ? e.message : 'Error al inicializar la prueba.' })
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <div className="bg-card border border-line rounded-2xl p-6 space-y-4">
+      <div>
+        <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Inicializar prueba</h2>
+        <p className="text-xs text-muted mt-1">
+          Borra todo rastro de un número de prueba (prospects + mensajes en la app, y la memoria del bot si está
+          conectado) para volver a testear desde cero.
+        </p>
+      </div>
+
+      {!confirmando && (
+        <button
+          type="button"
+          onClick={() => {
+            setResultado(null)
+            setConfirmando(true)
+          }}
+          className={btnCls}
+        >
+          Inicializar prueba
+        </button>
+      )}
+
+      {confirmando && (
+        <div className="border border-line rounded-xl p-4 space-y-3">
+          <p className="text-sm text-ink-soft">
+            Esto va a borrar todo lo de este número para <strong>{nombre}</strong>. Confirmá el teléfono a limpiar:
+          </p>
+          <div>
+            <label className={labelCls}>Teléfono de prueba</label>
+            <input
+              value={telefono}
+              onChange={(e) => setTelefono(e.target.value)}
+              autoCapitalize="none"
+              autoCorrect="off"
+              className={inputCls}
+            />
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={confirmar} disabled={enviando} className={btnCls}>
+              {enviando ? 'Borrando…' : 'Confirmar y borrar'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmando(false)}
+              disabled={enviando}
+              className="border border-line text-ink rounded-lg px-4 py-2 text-sm font-medium hover:bg-app disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {resultado && (
+        <p className={`text-sm ${resultado.ok ? 'text-emerald-500' : 'text-red-500'}`}>{resultado.text}</p>
+      )}
+    </div>
+  )
+}
+
 export default function AdminClientes() {
   const [clientes, setClientes] = useState<ClienteResumen[]>([])
   const [selectedId, setSelectedId] = useState<number | ''>('')
@@ -271,6 +372,9 @@ export default function AdminClientes() {
               {resetMsg && <p className="text-sm text-emerald-500 mt-2">{resetMsg}</p>}
             </div>
           </div>
+
+          {/* Inicializar prueba (per-cliente) */}
+          <InicializarPruebaCliente tenantId={cfg.tenant_id} nombre={cfg.nombre} />
 
           {/* Contacto y envío */}
           <div className="bg-card border border-line rounded-2xl p-6 space-y-4">
