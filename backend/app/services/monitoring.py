@@ -556,6 +556,13 @@ def start():
                 run_all()
             except Exception as e:
                 print(f"[MONITOR ERROR] {type(e).__name__}: {e}")
+            # Verificación de envío real: avisar de WhatsApps que se dieron por
+            # contactados pero nunca se registró el envío real (chat-log 'out').
+            try:
+                from app.services.contact import barrer_envios_sin_confirmar
+                barrer_envios_sin_confirmar()
+            except Exception as e:
+                print(f"[ENVIO SWEEP ERROR] {type(e).__name__}: {e}")
             # releer el intervalo cada vuelta (puede cambiar desde la UI)
             try:
                 from app.database import SessionLocal

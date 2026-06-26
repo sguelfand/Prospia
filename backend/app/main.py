@@ -123,6 +123,14 @@ def run_migrations():
         conn.execute(text(
             "ALTER TABLE monitor_settings ADD COLUMN IF NOT EXISTS anthropic_api_key VARCHAR(255)"
         ))
+
+        # ── prospects: verificación de envío real ("¿salió el WhatsApp?") ──
+        conn.execute(text(
+            "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS envio_pendiente_desde TIMESTAMPTZ"
+        ))
+        conn.execute(text(
+            "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS envio_no_confirmado BOOLEAN NOT NULL DEFAULT false"
+        ))
         # backfill: los ya resueltos pasan a 'fixed' (idempotente)
         conn.execute(text(
             "UPDATE agent_errors SET estado = 'fixed' WHERE resuelto = true AND estado = 'nuevo'"

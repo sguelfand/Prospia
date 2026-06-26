@@ -23,6 +23,7 @@ class ProspectOut(BaseModel):
     clasificacion: str | None           # ALTO | MEDIO | BAJO
     clasificacion_detalle: str | None
     clasificacion_verificada: bool
+    envio_no_confirmado: bool = False   # chip "envío sin confirmar" (verificación WA)
     created_at: datetime
 
     model_config = {"from_attributes": True}

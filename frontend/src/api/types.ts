@@ -17,6 +17,7 @@ export interface Prospect {
   clasificacion: 'ALTO' | 'MEDIO' | 'BAJO' | 'CANCELADO' | null
   clasificacion_detalle: string | null
   clasificacion_verificada: boolean
+  envio_no_confirmado: boolean   // chip "envío sin confirmar" (verificación WA)
   created_at: string
 }
 

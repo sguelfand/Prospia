@@ -460,6 +460,14 @@ function ProspectCard({
             <span className="w-2 h-2 rounded-full shrink-0" style={{ background: estadoInfo?.color ?? '#94a3b8' }} />
             {estadoInfo?.label ?? p.estado}
           </span>
+          {p.envio_no_confirmado && (
+            <span
+              className="inline-flex items-center gap-1 px-1.5 rounded font-medium bg-amber-100 text-amber-700 border border-amber-300"
+              title="Se contactó pero no se registró que el WhatsApp haya salido. Pudo no enviarse — revisá manualmente."
+            >
+              ⚠️ Envío sin confirmar
+            </span>
+          )}
           {p.cant_contactos > 0 && (
             <span>💬 {p.cant_contactos} {p.cant_contactos === 1 ? 'contacto' : 'contactos'}</span>
           )}

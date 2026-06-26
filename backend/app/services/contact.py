@@ -184,6 +184,11 @@ def contactar_prospect(prospect_id: int):
             if wa_enviado:
                 _registrar_historial(db, prospect.id, prospect.tenant_id, "contactado_wa",
                                      f"WA enviado a {wa} (contacto #{contacto_n}): {wa_info}")
+                # Verificación de envío real: el "ok" del gateway no garantiza que
+                # el WhatsApp haya salido. Quedamos esperando el 'out' real (chat-log);
+                # si no llega en la ventana, el barrido avisa. Reset del flag previo.
+                prospect.envio_pendiente_desde = ahora
+                prospect.envio_no_confirmado = False
             if email_enviado:
                 _registrar_historial(db, prospect.id, prospect.tenant_id, "contactado_email",
                                      f"Email a {email} (contacto #{contacto_n}, envío real pendiente)")
@@ -212,3 +217,66 @@ def contactar_prospect(prospect_id: int):
         print(f"[CONTACT ERROR] {e}")
     finally:
         db.close()
+
+
+# Ventana de confirmación de envío: tras contactar por WA esperamos ver el 'out'
+# real (chat-log). Si no llega en este tiempo, avisamos (default 5 min, holgado
+# para no falsear por demoras del agente). Paridad con el webhook de Etiguel.
+WA_CONFIRM_WINDOW_S = int(os.environ.get("WA_CONFIRM_WINDOW_S", "300"))
+
+
+def barrer_envios_sin_confirmar():
+    """Barrido periódico (lo llama el loop de monitoreo). Prospects con un envío
+    de WA pendiente de confirmación que pasó la ventana sin 'out' real → avisar a
+    Sebi (push global) + marcar envio_no_confirmado=True (chip web/app) + historial.
+    Limpia envio_pendiente_desde para no re-avisar."""
+    from app.database import SessionLocal
+    from app.models.prospect import Prospect
+    from app.models.tenant import Tenant
+    from app.services import push
+
+    corte = datetime.now(timezone.utc) - timedelta(seconds=WA_CONFIRM_WINDOW_S)
+    avisos = []
+    db = SessionLocal()
+    try:
+        vencidos = (
+            db.query(Prospect)
+            .filter(Prospect.envio_pendiente_desde.isnot(None))
+            .filter(Prospect.envio_pendiente_desde < corte)
+            .all()
+        )
+        for p in vencidos:
+            p.envio_no_confirmado = True
+            p.envio_pendiente_desde = None
+            _registrar_historial(
+                db, p.id, p.tenant_id, "envio_no_confirmado",
+                f"El WhatsApp a {p.whatsapp or p.telefono or '?'} no se registró como "
+                f"enviado en {WA_CONFIRM_WINDOW_S // 60} min. Pudo no haber salido.",
+            )
+            tenant = db.get(Tenant, p.tenant_id)
+            avisos.append({
+                "prospect_id": p.id,
+                "nombre": p.nombre,
+                "telefono": p.whatsapp or p.telefono or "?",
+                "tenant": (tenant.nombre if tenant else str(p.tenant_id)),
+            })
+        if vencidos:
+            db.commit()
+    except Exception as e:
+        print(f"[CONTACT SWEEP ERROR] {e}")
+        avisos = []
+    finally:
+        db.close()
+
+    # Push fuera de la transacción (best-effort). Solo a Sebi (superadmin/global).
+    for a in avisos:
+        try:
+            push.notificar_global_async(
+                "envio_no_confirmado",
+                "⚠️ WhatsApp no confirmado",
+                f"[{a['tenant']}] Se contactó a {a['nombre']} ({a['telefono']}) pero "
+                f"el envío no se registró en {WA_CONFIRM_WINDOW_S // 60} min. Pudo no haber salido.",
+                {"nav": "prospect_detalle", "prospect_id": a["prospect_id"]},
+            )
+        except Exception as e:
+            print(f"[CONTACT SWEEP] no se pudo avisar prospect {a['prospect_id']}: {e}")

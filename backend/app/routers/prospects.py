@@ -378,6 +378,11 @@ def chat_log(
         fecha=body.fecha or datetime.now(timezone.utc),
     )
     db.add(msg)
+    # Verificación de envío real: un 'out' confirma que el WhatsApp salió → limpiar
+    # el pendiente / flag de no-confirmado del prospect (si los tenía).
+    if body.direccion == "out" and (prospect.envio_pendiente_desde is not None or prospect.envio_no_confirmado):
+        prospect.envio_pendiente_desde = None
+        prospect.envio_no_confirmado = False
     db.commit()
     db.refresh(msg)
     # Push por cada mensaje entrante (#44), respeta el toggle global + por cliente.
