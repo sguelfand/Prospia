@@ -1,6 +1,7 @@
 import { Eye, EyeOff, KeyRound, Plus, Trash2 } from 'lucide-react'
 import { FormEvent, useEffect, useState } from 'react'
 import { api } from '../api/client'
+import InfoNegocio from '../components/InfoNegocio'
 
 type ClienteResumen = { tenant_id: number; nombre: string; fuente: string }
 
@@ -105,15 +106,6 @@ export default function AdminClientes() {
         usuario: cfg.usuario,
         user_nombre: cfg.user_nombre,
         password: newPwd.trim() || null,
-        negocio_nombre: cfg.negocio_nombre,
-        negocio_que_vende: cfg.negocio_que_vende,
-        negocio_propuesta_valor: cfg.negocio_propuesta_valor,
-        negocio_zona: cfg.negocio_zona,
-        pais: cfg.pais,
-        sitio_web: cfg.sitio_web,
-        deriva_nombre: cfg.deriva_nombre,
-        deriva_whatsapp: cfg.deriva_whatsapp,
-        bot_numero_whatsapp: cfg.bot_numero_whatsapp,
         envio_auto_habilitado: cfg.envio_auto_habilitado,
         envio_tope_diario: cfg.envio_tope_diario,
         envio_delay_seg: cfg.envio_delay_seg,
@@ -241,86 +233,6 @@ export default function AdminClientes() {
                 Reset a la default (12345)
               </button>
               {resetMsg && <p className="text-sm text-emerald-500 mt-2">{resetMsg}</p>}
-            </div>
-          </div>
-
-          {/* Negocio / contacto */}
-          <div className="bg-card border border-line rounded-2xl p-6 space-y-4">
-            <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Negocio y contacto</h2>
-            <div>
-              <label className={labelCls}>Negocio (nombre)</label>
-              <input
-                value={cfg.negocio_nombre ?? ''}
-                onChange={(e) => field('negocio_nombre', e.target.value)}
-                className={inputCls}
-              />
-            </div>
-            <div>
-              <label className={labelCls}>Qué vende</label>
-              <textarea
-                value={cfg.negocio_que_vende ?? ''}
-                onChange={(e) => field('negocio_que_vende', e.target.value)}
-                rows={2}
-                className={inputCls}
-              />
-            </div>
-            <div>
-              <label className={labelCls}>Propuesta de valor</label>
-              <textarea
-                value={cfg.negocio_propuesta_valor ?? ''}
-                onChange={(e) => field('negocio_propuesta_valor', e.target.value)}
-                rows={2}
-                className={inputCls}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}>Zona</label>
-                <input
-                  value={cfg.negocio_zona ?? ''}
-                  onChange={(e) => field('negocio_zona', e.target.value)}
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>País</label>
-                <input value={cfg.pais ?? ''} onChange={(e) => field('pais', e.target.value)} className={inputCls} />
-              </div>
-            </div>
-            <div>
-              <label className={labelCls}>Sitio web</label>
-              <input
-                value={cfg.sitio_web ?? ''}
-                onChange={(e) => field('sitio_web', e.target.value)}
-                className={inputCls}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}>Deriva a (nombre)</label>
-                <input
-                  value={cfg.deriva_nombre ?? ''}
-                  onChange={(e) => field('deriva_nombre', e.target.value)}
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>WhatsApp deriva</label>
-                <input
-                  value={cfg.deriva_whatsapp ?? ''}
-                  onChange={(e) => field('deriva_whatsapp', e.target.value)}
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>WhatsApp de Camila (bot)</label>
-                <input
-                  value={cfg.bot_numero_whatsapp ?? ''}
-                  onChange={(e) => field('bot_numero_whatsapp', e.target.value)}
-                  placeholder="Ej: 54911..."
-                  className={inputCls}
-                />
-              </div>
             </div>
           </div>
 
@@ -469,6 +381,10 @@ export default function AdminClientes() {
           </div>
         </form>
       )}
+
+      {/* ── Información del negocio del cliente (relevamiento) — misma fuente que
+           edita el cliente en su Configuración; se actualizan mutuamente ── */}
+      {cfg && <InfoNegocio basePath={`/admin/clientes/${cfg.tenant_id}`} />}
     </div>
   )
 }

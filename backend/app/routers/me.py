@@ -10,7 +10,6 @@ Configuración del cliente.
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
@@ -22,6 +21,7 @@ from app.database import get_db
 from app.models.intake_submission import IntakeSubmission
 from app.models.tenant import TenantConfig
 from app.models.user import User
+from app.services import info_negocio as info_negocio_svc
 from app.services import intake_ai
 from app.services.intake_schema import secciones_config
 
@@ -48,38 +48,13 @@ def _config_del_usuario(db: Session, user: User) -> TenantConfig:
     return cfg
 
 
-def _archivos_del_tenant(db: Session, tenant_id: int) -> list[dict]:
-    """Archivos del último relevamiento del tenant (metadata, sin el path en disco)."""
-    sub = (
-        db.query(IntakeSubmission)
-        .filter(IntakeSubmission.tenant_id == tenant_id)
-        .order_by(IntakeSubmission.created_at.desc())
-        .first()
-    )
-    if not sub or not sub.archivos:
-        return []
-    return [
-        {"id": a.get("id"), "campo": a.get("campo"), "nombre_original": a.get("nombre_original"),
-         "content_type": a.get("content_type"), "size": a.get("size")}
-        for a in sub.archivos
-    ]
-
-
 @router.get("/info-negocio")
 def get_info_negocio(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     cfg = _config_del_usuario(db, user)
-    info = cfg.info_negocio or {}
-    return {
-        "secciones": secciones_config(),
-        "values": info.get("values", {}),
-        "extra": info.get("extra", []),
-        "intake_at": info.get("intake_at"),
-        "updated_at": info.get("updated_at"),
-        "archivos": _archivos_del_tenant(db, user.tenant_id),
-    }
+    return info_negocio_svc.build_response(db, user.tenant_id, cfg)
 
 
 @router.put("/info-negocio")
@@ -89,13 +64,8 @@ def put_info_negocio(
     user: User = Depends(get_current_user),
 ):
     cfg = _config_del_usuario(db, user)
-    prev = dict(cfg.info_negocio or {})
-    prev["values"] = body.values or {}
-    prev["extra"] = body.extra or []
-    prev["updated_at"] = datetime.now(timezone.utc).isoformat()
-    cfg.info_negocio = prev
-    db.commit()
-    return {"ok": True, "updated_at": prev["updated_at"]}
+    updated_at = info_negocio_svc.save(db, cfg, body.values, body.extra)
+    return {"ok": True, "updated_at": updated_at}
 
 
 @router.post("/info-negocio/asistir")

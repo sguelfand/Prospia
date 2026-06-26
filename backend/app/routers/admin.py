@@ -66,11 +66,20 @@ from app.schemas.admin import (
     ResetNumeroPruebaIn,
     ResetNumeroPruebaOut,
 )
+from app.models.intake_submission import IntakeSubmission
 from app.schemas.dashboard import DashboardStats
 from app.schemas.prospect import HistorialOut, MensajeOut, ProspectsPage
 from app.services import etiguel_monday
+from app.services import info_negocio as info_negocio_svc
+from app.services import intake_ai
 from app.services import push
+from app.services.intake_schema import secciones_config
 from app.services.stats import compute_stats
+
+import os
+
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 import logging
 
@@ -406,6 +415,69 @@ def update_cliente_config(
 
     db.commit()
     return get_cliente_config(tenant_id, db)
+
+
+# ── Información del negocio (relevamiento) de un cliente ──────────────────────
+# Mismo schema y storage que /me/info-negocio (el cliente lo edita en su propia
+# Configuración), pero scoped por tenant_id para que el superadmin lo vea/edite
+# desde Admin clientes. Ambos editan el MISMO TenantConfig.info_negocio → se
+# actualizan mutuamente.
+class InfoNegocioUpdate(BaseModel):
+    values: dict = {}
+    extra: list = []
+
+
+class AsistirBody(BaseModel):
+    texto: str = ""
+
+
+@router.get("/clientes/{tenant_id}/info-negocio")
+def get_cliente_info_negocio(tenant_id: int, db: Session = Depends(get_db)):
+    _tenant_prospia(db, tenant_id)
+    cfg = _config_de(db, tenant_id)
+    db.commit()
+    return info_negocio_svc.build_response(db, tenant_id, cfg)
+
+
+@router.put("/clientes/{tenant_id}/info-negocio")
+def put_cliente_info_negocio(
+    tenant_id: int, body: InfoNegocioUpdate, db: Session = Depends(get_db)
+):
+    _tenant_prospia(db, tenant_id)
+    cfg = _config_de(db, tenant_id)
+    updated_at = info_negocio_svc.save(db, cfg, body.values, body.extra)
+    return {"ok": True, "updated_at": updated_at}
+
+
+@router.post("/clientes/{tenant_id}/info-negocio/asistir")
+def asistir_cliente_info_negocio(
+    tenant_id: int, body: AsistirBody, db: Session = Depends(get_db)
+):
+    """IA que reparte el texto libre en los casilleros. No guarda: devuelve propuesta."""
+    _tenant_prospia(db, tenant_id)
+    cfg = _config_de(db, tenant_id)
+    db.commit()
+    valores = (cfg.info_negocio or {}).get("values", {})
+    return intake_ai.clasificar_texto(body.texto, secciones_config(), valores)
+
+
+@router.get("/clientes/{tenant_id}/archivo/{archivo_id}")
+def descargar_cliente_archivo(tenant_id: int, archivo_id: str, db: Session = Depends(get_db)):
+    """Descarga un archivo del relevamiento del cliente (verifica que sea del tenant)."""
+    _tenant_prospia(db, tenant_id)
+    subs = db.query(IntakeSubmission).filter(IntakeSubmission.tenant_id == tenant_id).all()
+    for sub in subs:
+        for a in (sub.archivos or []):
+            if a.get("id") == archivo_id:
+                path = a.get("path")
+                if not path or not os.path.exists(path):
+                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archivo no disponible")
+                return FileResponse(
+                    path,
+                    media_type=a.get("content_type") or "application/octet-stream",
+                    filename=a.get("nombre_original") or "archivo",
+                )
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archivo no encontrado")
 
 
 @router.post("/clientes/{tenant_id}/reset-password", response_model=ResetPasswordOut)
