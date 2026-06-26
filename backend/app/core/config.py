@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     # monitoreo para consultar /camila-config/diag y saber si el gateway de
     # Camila está vivo. Si queda vacío, ese check queda en "unknown".
     ETIGUEL_DEPLOY_TOKEN: str = ""
+    # Base URL del webhook de Etiguel para relayear la respuesta de una consulta a
+    # Camila (POST /responder-consulta, auth X-Deploy-Token = ETIGUEL_DEPLOY_TOKEN).
+    ETIGUEL_WEBHOOK_URL: str = "https://webhook.etiguel.net"
     # Key de Anthropic para los asistentes IA del relevamiento (Haiku). Fallback
     # si monitor_settings.anthropic_api_key está vacío. Se setea por DB en prod.
     ANTHROPIC_API_KEY: str = ""

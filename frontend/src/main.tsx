@@ -9,6 +9,7 @@ import Configuracion from './pages/Configuracion'
 import AdminClientes from './pages/AdminClientes'
 import Pendientes from './pages/Pendientes'
 import Errores from './pages/Errores'
+import Preguntas from './pages/Preguntas'
 import MonitoreoPage from './pages/MonitoreoPage'
 import Tokens from './pages/Tokens'
 import Layout from './components/Layout'
@@ -34,6 +35,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="admin-clientes" element={<AdminClientes />} />
           <Route path="pendientes" element={<Pendientes />} />
           <Route path="errores" element={<Errores />} />
+          <Route path="preguntas" element={<Preguntas />} />
           <Route path="monitoreo" element={<Navigate to="/monitoreo/servicios" replace />} />
           <Route path="monitoreo/servicios" element={<MonitoreoPage />} />
           <Route path="monitoreo/tokens" element={<Tokens />} />

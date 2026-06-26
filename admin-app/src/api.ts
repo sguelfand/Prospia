@@ -306,6 +306,28 @@ export const getAvisos = (token: string) => request<Aviso[]>("/admin/avisos", {}
 export const eliminarAvisos = (token: string, ids: number[]) =>
   request<void>("/admin/avisos/eliminar", { method: "POST", body: JSON.stringify({ ids }) }, token);
 
+// ── Consultas: preguntas que Camila escaló (no supo qué responder) ────────────
+export interface Consulta {
+  id: number;
+  fuente: string;
+  tenant_id: number | null;
+  agente: string | null;
+  telefono: string | null;
+  pregunta: string;
+  respuesta: string | null;
+  estado: "pendiente" | "contestada";
+  fecha: string;
+  fecha_respuesta: string | null;
+}
+
+export const getConsultas = (token: string) => request<Consulta[]>("/admin/consultas", {}, token);
+
+export const responderConsulta = (token: string, id: number, respuesta: string) =>
+  request<Consulta>(`/admin/consultas/${id}/responder`, { method: "POST", body: JSON.stringify({ respuesta }) }, token);
+
+export const eliminarConsultas = (token: string, ids: number[]) =>
+  request<void>("/admin/consultas/eliminar", { method: "POST", body: JSON.stringify({ ids }) }, token);
+
 // ── Monitoreo de servicios ───────────────────────────────────────────────────
 export type EstadoServicio = "up" | "down" | "warn" | "unknown";
 

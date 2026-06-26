@@ -12,10 +12,12 @@ from sqlalchemy import case, extract, func
 from sqlalchemy.orm import Session
 
 from app.core.auth import create_access_token, hash_password
+from app.core.config import settings
 from app.core.deps import get_superadmin
 from app.database import get_db
 from app.models.agent_error import AgentError
 from app.models.aviso import Aviso
+from app.models.consulta import Consulta
 from app.models.device import Device
 from app.models.etiguel_mirror import EtiguelMirror, EtiguelMirrorMensaje
 from app.models.historial import ProspectHistorial
@@ -34,6 +36,9 @@ from app.schemas.admin import (
     AdminOverview,
     AgentErrorOut,
     AgentErrorResolve,
+    ConsultaOut,
+    ConsultaResponder,
+    ConsultasEliminar,
     ClienteComparativa,
     ClienteConfigOut,
     ClienteConfigUpdate,
@@ -688,6 +693,90 @@ def borrar_error(error_id: int, db: Session = Depends(get_db)):
     err = db.get(AgentError, error_id)
     if err:
         db.delete(err)
+        db.commit()
+
+
+# ── Consultas: preguntas que Camila escaló (no supo qué responder) ───────────
+def _relay_respuesta_a_camila(consulta: Consulta) -> None:
+    """Manda la respuesta de Sebi al webhook de Etiguel, que se la pasa a Camila
+    (RESPONDER_CONSULTA|num|texto) para que la reenvíe al cliente. Levanta
+    HTTPException(502) si no se pudo entregar (así la UI avisa y no marca
+    'contestada' algo que no salió)."""
+    if not consulta.telefono:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail="La consulta no tiene teléfono, no se puede entregar la respuesta")
+    if not settings.ETIGUEL_DEPLOY_TOKEN:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail="Falta ETIGUEL_DEPLOY_TOKEN en el backend")
+    url = settings.ETIGUEL_WEBHOOK_URL.rstrip("/") + "/responder-consulta"
+    try:
+        r = requests.post(
+            url,
+            json={"numero": consulta.telefono, "respuesta": consulta.respuesta},
+            headers={
+                "X-Deploy-Token": settings.ETIGUEL_DEPLOY_TOKEN,
+                "Content-Type": "application/json",
+                # El WAF de Cloudflare del webhook rechaza requests sin User-Agent de browser.
+                "User-Agent": "Mozilla/5.0 (Prospia backend)",
+            },
+            timeout=15,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,
+                            detail=f"No se pudo contactar el webhook de Camila: {type(e).__name__}")
+    if r.status_code >= 300:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,
+                            detail=f"El webhook rechazó la respuesta (HTTP {r.status_code})")
+
+
+@router.get("/consultas", response_model=list[ConsultaOut])
+def listar_consultas(
+    estado: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Preguntas que Camila escaló porque no supo qué responder, más reciente
+    arriba. Filtrable por `estado` (pendiente|contestada)."""
+    q = db.query(Consulta)
+    if estado:
+        q = q.filter(Consulta.estado == estado)
+    return q.order_by(Consulta.fecha.desc()).all()
+
+
+@router.post("/consultas/{consulta_id}/responder", response_model=ConsultaOut)
+def responder_consulta(consulta_id: int, body: ConsultaResponder, db: Session = Depends(get_db)):
+    """Sebi contesta una consulta desde la app/web. Guarda la respuesta, la relaya
+    al webhook (que se la pasa a Camila para reenviarla al cliente) y recién si la
+    entrega salió OK la marca 'contestada'. Si la entrega falla, levanta 502 y la
+    consulta queda 'pendiente' (la respuesta tipeada no se pierde, se reintenta)."""
+    c = db.get(Consulta, consulta_id)
+    if not c:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No existe esa consulta")
+    respuesta = (body.respuesta or "").strip()
+    if not respuesta:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="La respuesta está vacía")
+    c.respuesta = respuesta
+    _relay_respuesta_a_camila(c)  # 502 si no se entregó → no marca contestada
+    c.estado = "contestada"
+    c.fecha_respuesta = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(c)
+    return c
+
+
+@router.delete("/consultas/{consulta_id}", status_code=status.HTTP_204_NO_CONTENT)
+def borrar_consulta(consulta_id: int, db: Session = Depends(get_db)):
+    """Borra una consulta desde la app/web (swipe o botón borrar)."""
+    c = db.get(Consulta, consulta_id)
+    if c:
+        db.delete(c)
+        db.commit()
+
+
+@router.post("/consultas/eliminar", status_code=status.HTTP_204_NO_CONTENT)
+def eliminar_consultas(body: ConsultasEliminar, db: Session = Depends(get_db)):
+    """Borra las consultas tildadas (multi-select de la app/web)."""
+    if body.ids:
+        db.query(Consulta).filter(Consulta.id.in_(body.ids)).delete(synchronize_session=False)
         db.commit()
 
 

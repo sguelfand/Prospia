@@ -218,6 +218,40 @@ class AgentErrorResolve(BaseModel):
     resuelto: bool | None = None
 
 
+# ── Consultas: preguntas que Camila escaló porque no supo qué responder ──────
+class ConsultaIn(BaseModel):
+    """Payload del plugin camila-consulta-push al cazar CAMILA_CONSULTA|num|pregunta."""
+    pregunta: str
+    telefono: str | None = None
+    fuente: str = "etiguel"
+    agente: str | None = None
+    tenant_id: int | None = None
+
+
+class ConsultaOut(BaseModel):
+    id: int                  # el "#número"
+    fuente: str
+    tenant_id: int | None
+    agente: str | None
+    telefono: str | None
+    pregunta: str
+    respuesta: str | None
+    estado: str              # pendiente | contestada
+    fecha: datetime
+    fecha_respuesta: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
+class ConsultaResponder(BaseModel):
+    """POST del panel (app/web) cuando Sebi contesta una consulta."""
+    respuesta: str
+
+
+class ConsultasEliminar(BaseModel):
+    ids: list[int]
+
+
 class PendienteIn(BaseModel):
     """Alta de un pendiente desde la app o la web."""
     texto: str

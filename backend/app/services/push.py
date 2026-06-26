@@ -16,6 +16,7 @@ EVENTOS_PUSH: list[tuple[str, str]] = [
     ("respuesta", "Primera respuesta"),
     ("mensaje_entrante", "Cada mensaje entrante"),
     ("error_camila", "Error de Camila"),
+    ("consulta_camila", "Consulta de Camila (no sabe qué responder)"),
     ("standby", "Pendiente en espera (standby)"),
     ("cola_terminada", "Cola de pendientes terminada"),
     ("necesita_autorizacion", "Necesita tu autorización"),
@@ -228,6 +229,35 @@ def _notificar_error(error_id: int, fuente: str, contenido: str) -> None:
 def notificar_error_async(error_id: int, fuente: str, contenido: str) -> None:
     """Dispara el push de alerta de error en background (no bloquea el ingest)."""
     threading.Thread(target=_notificar_error, args=(error_id, fuente, contenido), daemon=True).start()
+
+
+def _notificar_consulta(consulta_id: int, fuente: str, telefono: str | None, pregunta: str) -> None:
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        marca = "" if (fuente or "etiguel") == "etiguel" else f"[{fuente}] "
+        title = f"❓ {marca}Camila no sabe qué contestar"
+        resumen = (pregunta or "").strip().replace("\n", " ")
+        quien = (telefono or "").strip()
+        body = ((f"{quien}: " if quien else "") + resumen)[:140] or "Nueva consulta"
+        # Respeta el toggle de evento "consulta_camila" (#38).
+        tokens = _tokens_para_evento(db, "consulta_camila")
+        aviso_id = _log_aviso(db, "consulta_camila", title, body) if tokens else None
+        # deep-link: tocar la push abre DIRECTO la ventana de contestar.
+        _enviar(tokens, title, body, {"tipo": "consulta", "consulta_id": consulta_id,
+                                      "aviso_id": aviso_id, "nav": "preguntas"})
+    except Exception as e:
+        print(f"[PUSH] error armando consulta: {type(e).__name__}: {e}")
+    finally:
+        db.close()
+
+
+def notificar_consulta_async(consulta_id: int, fuente: str, telefono: str | None, pregunta: str) -> None:
+    """Push de una consulta nueva de Camila (no sabe qué responder). Lleva
+    `nav:preguntas` + `consulta_id` para que el tap abra directo la ventana de
+    contestar. Background (no bloquea el ingest)."""
+    threading.Thread(target=_notificar_consulta, args=(consulta_id, fuente, telefono, pregunta), daemon=True).start()
 
 
 def _notificar_aviso(title: str, body: str, data: dict) -> None:

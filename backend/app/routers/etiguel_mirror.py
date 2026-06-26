@@ -12,8 +12,9 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.database import get_db
 from app.models.agent_error import AgentError
+from app.models.consulta import Consulta
 from app.models.etiguel_mirror import EtiguelMirror, EtiguelMirrorMensaje
-from app.schemas.admin import AgentErrorIn, AvisoIn, EtiguelMirrorIn
+from app.schemas.admin import AgentErrorIn, AvisoIn, ConsultaIn, EtiguelMirrorIn
 from app.services import push
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
@@ -223,3 +224,31 @@ def delete_agent_error(
     db.delete(err)
     db.commit()
     return {"ok": True, "borrado": error_id}
+
+
+@router.post("/consulta")
+def ingest_consulta(
+    body: ConsultaIn,
+    x_mirror_token: str | None = Header(None),
+    db: Session = Depends(get_db),
+):
+    """El plugin camila-consulta-push reporta acá una pregunta que Camila no supo
+    responder (señal CAMILA_CONSULTA|num|pregunta), para que Sebi la conteste desde
+    la app/web y la respuesta vuelva al cliente. Dispara push con deep-link a la
+    ventana de contestar. Devuelve el `id` = el #número de la consulta."""
+    _check_token(x_mirror_token)
+    c = Consulta(
+        pregunta=(body.pregunta or "")[:5000],
+        telefono=body.telefono,
+        fuente=body.fuente or "etiguel",
+        agente=body.agente,
+        tenant_id=body.tenant_id,
+    )
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+    try:
+        push.notificar_consulta_async(c.id, c.fuente, c.telefono, c.pregunta)
+    except Exception:
+        pass
+    return {"ok": True, "id": c.id}

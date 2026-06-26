@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, BarChart2, ChevronDown, ChevronLeft, ChevronRight, Coins, Eye, ListTodo, LogOut, Menu, Search, Server, Settings, ShieldCheck, Users, X } from 'lucide-react'
+import { Activity, AlertTriangle, BarChart2, ChevronDown, ChevronLeft, ChevronRight, Coins, Eye, ListTodo, LogOut, Menu, MessageCircleQuestion, Search, Server, Settings, ShieldCheck, Users, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
@@ -199,6 +199,16 @@ export default function Layout() {
             )}
             {nivel === 1 && (
               <Link
+                to="/preguntas"
+                onClick={() => setMobileOpen(false)}
+                className={navClass(location.pathname.startsWith('/preguntas'))}
+              >
+                <MessageCircleQuestion size={16} />
+                Preguntas
+              </Link>
+            )}
+            {nivel === 1 && (
+              <Link
                 to="/admin-clientes"
                 onClick={() => setMobileOpen(false)}
                 className={navClass(location.pathname.startsWith('/admin-clientes'))}
@@ -283,6 +293,16 @@ export default function Layout() {
           >
             <AlertTriangle size={16} />
             {!collapsed && 'Errores'}
+          </Link>
+        )}
+        {nivel === 1 && (
+          <Link
+            to="/preguntas"
+            title={collapsed ? 'Preguntas' : undefined}
+            className={navClass(location.pathname.startsWith('/preguntas'), collapsed)}
+          >
+            <MessageCircleQuestion size={16} />
+            {!collapsed && 'Preguntas'}
           </Link>
         )}
         {nivel === 1 && (
