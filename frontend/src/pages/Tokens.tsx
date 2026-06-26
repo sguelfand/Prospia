@@ -9,12 +9,14 @@ type Totales = {
 }
 type ConvModelo = { llamadas: number; costo_usd: number }
 type Conv = {
-  telefono: string; tokens: number; costo_usd: number; llamadas: number
+  telefono: string; nombre?: string | null; mirror_id?: number
+  tokens: number; costo_usd: number; llamadas: number
   input?: number; output?: number; cacheRead?: number; cacheWrite?: number
   timeouts: number; errores: number; compactaciones?: number
   por_modelo?: Record<string, ConvModelo>; primer_ts?: string | null; ultimo_ts?: string | null
   ejemplo: string | null; es_sistema: boolean
 }
+type MirrorMensaje = { id: number; direccion: string; texto: string; fecha: string }
 type DiaDetalle = { fecha: string; totales: Totales; por_modelo: Record<string, { tokens: number; costo_usd: number; llamadas: number }>; conversaciones?: Conv[]; top_conversaciones?: Conv[]; n_conversaciones: number }
 type Ultimo = DiaDetalle
 type DiaTrend = { fecha: string; costo_usd: number; costo_mensajes: number; costo_errores: number }
@@ -51,6 +53,21 @@ export default function Tokens() {
   const [diaData, setDiaData] = useState<DiaDetalle | null>(null)
   const [diaLoading, setDiaLoading] = useState(false)
   const [convAbierta, setConvAbierta] = useState<string | null>(null)
+  const [convMsgs, setConvMsgs] = useState<Record<string, MirrorMensaje[]>>({})
+  const [convMsgsLoading, setConvMsgsLoading] = useState<string | null>(null)
+
+  const abrirConv = useCallback(async (c: Conv) => {
+    if (convAbierta === c.telefono) { setConvAbierta(null); return }
+    setConvAbierta(c.telefono)
+    if (c.mirror_id && !convMsgs[c.telefono]) {
+      setConvMsgsLoading(c.telefono)
+      try {
+        const m = await api.get<MirrorMensaje[]>(`/admin/etiguel/mirror/${c.mirror_id}/mensajes`)
+        setConvMsgs((prev) => ({ ...prev, [c.telefono]: m }))
+      } catch { /* sin mensajes */ }
+      finally { setConvMsgsLoading(null) }
+    }
+  }, [convAbierta, convMsgs])
 
   useEffect(() => { api.get<Source[]>('/admin/tokens/sources').then(setSources).catch(() => {}) }, [])
   const cargar = useCallback(async () => {
@@ -190,12 +207,13 @@ export default function Tokens() {
                     const abierta = convAbierta === c.telefono
                     return (
                       <div key={c.telefono} className="border border-line rounded-xl overflow-hidden">
-                        <button onClick={() => setConvAbierta(abierta ? null : c.telefono)}
+                        <button onClick={() => abrirConv(c)}
                           className="w-full text-left p-3 hover:bg-app/50 transition-colors">
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-sm font-medium text-ink flex items-center gap-1.5"><Phone size={13} className="text-muted" />{c.telefono}</span>
-                            <span className="text-sm font-semibold text-ink">{usd3(c.costo_usd)}</span>
+                            <span className="text-sm font-bold text-ink flex items-center gap-1.5"><Phone size={13} className="text-muted" />{c.telefono}</span>
+                            <span className="text-sm font-semibold text-amber-400">{usd3(c.costo_usd)}</span>
                           </div>
+                          {c.nombre && <p className="text-xs text-ink-soft mt-0.5 truncate">{c.nombre}</p>}
                           <div className="text-xs text-muted mt-0.5">
                             {c.llamadas} llamadas · {fmt(c.tokens)} tok
                             {Object.keys(c.por_modelo ?? {}).length > 0 && <span> · {Object.keys(c.por_modelo!).map((m) => m.replace('claude-', '')).join(', ')}</span>}
@@ -205,7 +223,20 @@ export default function Tokens() {
                           {!abierta && c.ejemplo && <p className="text-xs text-muted mt-1 truncate">“{c.ejemplo}”</p>}
                         </button>
                         {abierta && (
-                          <div className="px-3 pb-3 pt-1 border-t border-line/60 bg-app/30 space-y-2">
+                          <div className="px-3 pb-3 pt-2 border-t border-line/60 bg-app/30 space-y-2">
+                            {/* la conversación entera */}
+                            {convMsgsLoading === c.telefono ? <p className="text-xs text-muted">Cargando conversación…</p> :
+                              convMsgs[c.telefono]?.length ? (
+                                <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                                  {convMsgs[c.telefono].map((m) => (
+                                    <div key={m.id} className={`flex ${m.direccion === 'out' ? 'justify-end' : 'justify-start'}`}>
+                                      <div className={`max-w-[85%] rounded-lg px-2.5 py-1.5 text-xs whitespace-pre-wrap ${m.direccion === 'out' ? 'bg-amber-500/15 border border-amber-500/30 text-ink' : 'bg-card text-ink-soft border border-line'}`}>{m.texto}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : c.mirror_id ? <p className="text-xs text-muted">Sin mensajes espejados.</p> : <p className="text-xs text-muted">Conversación no encontrada en el espejo.</p>}
+                            {/* detalle de costo */}
+                            <div className="border-t border-line/40 pt-2 space-y-1">
                             {/* split por modelo */}
                             <div className="space-y-1">
                               {Object.entries(c.por_modelo ?? {}).sort((a, b) => b[1].costo_usd - a[1].costo_usd).map(([m, v]) => (
@@ -225,6 +256,7 @@ export default function Tokens() {
                               {c.primer_ts && <span>Horario: <span className="text-ink-soft">{hhmm(c.primer_ts)}–{hhmm(c.ultimo_ts)}</span></span>}
                             </div>
                             {c.ejemplo && <p className="text-xs text-muted italic">“{c.ejemplo}”</p>}
+                            </div>
                           </div>
                         )}
                       </div>
