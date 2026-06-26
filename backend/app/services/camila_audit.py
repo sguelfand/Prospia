@@ -541,6 +541,21 @@ def get_dia(source: str, fecha: str) -> dict | None:
         db.close()
 
 
+def get_conversacion_costo(source: str, telefono: str) -> dict:
+    """Costo EN VIVO de una conversación: proxy al `/costos/conversacion` del webhook
+    del cliente (lee la sesión per-chat al momento → fresco para la pantalla de chat)."""
+    if source not in SOURCES:
+        raise ValueError(f"source desconocido: {source}")
+    cfg = SOURCES[source]
+    base, token = cfg["base"], cfg["token_fn"]()
+    if not token:
+        raise RuntimeError("token del source no configurado")
+    r = requests.get(f"{base}/costos/conversacion", params={"telefono": telefono},
+                     headers={"User-Agent": _UA, "X-Deploy-Token": token}, timeout=20)
+    r.raise_for_status()
+    return r.json()
+
+
 def get_clientes_resumen() -> list[dict]:
     """Por cada cliente/source: gasto del mes actual + serie mensual (para las
     cards 'gasto del mes' y el gráfico mensual por cliente del dashboard superadmin).

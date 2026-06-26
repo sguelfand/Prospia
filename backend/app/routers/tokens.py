@@ -40,6 +40,18 @@ def dia(source: str = Query("etiguel"), fecha: str = Query(...)):
     return d
 
 
+@router.get("/conversacion")
+def conversacion(source: str = Query("etiguel"), telefono: str = Query(...)):
+    """Costo en vivo de una conversación (por teléfono) — para la pantalla de chat
+    de la app. Proxy al webhook del cliente."""
+    if source not in camila_audit.SOURCES:
+        raise HTTPException(status_code=404, detail="source desconocido")
+    try:
+        return camila_audit.get_conversacion_costo(source, telefono)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"{type(e).__name__}: {e}")
+
+
 @router.get("/clientes")
 def clientes():
     """Gasto del mes actual + serie mensual por cliente (cards + gráfico del
