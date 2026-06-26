@@ -378,6 +378,9 @@ function ProspectCard({ prospect, onPress }: { prospect: ProspectRow; onPress: (
             <View style={[styles.estadoDot, { backgroundColor: color }]} />
             <Text style={styles.metaText}>{estadoLabel[prospect.estado] ?? prospect.estado}</Text>
           </View>
+          {prospect.envio_no_confirmado ? (
+            <Text style={styles.envioChip}>⚠️ Envío sin confirmar</Text>
+          ) : null}
           {prospect.cant_contactos > 0 ? (
             <IconText name="message" text={`${prospect.cant_contactos} ${prospect.cant_contactos === 1 ? "contacto" : "contactos"}`} />
           ) : null}
@@ -608,6 +611,7 @@ const styles = StyleSheet.create({
   cardTitle: { color: colors.text, fontSize: 15, fontWeight: "700", flex: 1, marginRight: 8 },
   cardUrl: { color: colors.blue, fontSize: 12, marginTop: 2 },
   clasifChip: { color: colors.textDim, fontSize: 11, fontWeight: "700", borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, overflow: "hidden", textTransform: "capitalize" },
+  envioChip: { color: "#b45309", backgroundColor: "#fef3c7", borderColor: "#fcd34d", borderWidth: 1, fontSize: 10, fontWeight: "700", borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, overflow: "hidden" },
   cardMeta: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 12, marginTop: 8 },
   metaItem: { flexDirection: "row", alignItems: "center" },
   estadoDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
