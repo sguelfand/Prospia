@@ -49,6 +49,10 @@ class Prospect(Base):
     # en web/app). Se limpia al confirmar un envío real posterior.
     envio_pendiente_desde: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     envio_no_confirmado: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Reintentos automáticos del envío sin confirmar (Parte B): el barrido re-inyecta
+    # el mensaje hasta WA_CONFIRM_MAX_REINTENTOS veces antes de avisar. Se resetea a 0
+    # al confirmar un 'out' real o al iniciar un contacto nuevo.
+    envio_reintentos: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

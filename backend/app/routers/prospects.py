@@ -383,6 +383,7 @@ def chat_log(
     if body.direccion == "out" and (prospect.envio_pendiente_desde is not None or prospect.envio_no_confirmado):
         prospect.envio_pendiente_desde = None
         prospect.envio_no_confirmado = False
+        prospect.envio_reintentos = 0
     db.commit()
     db.refresh(msg)
     # Push por cada mensaje entrante (#44), respeta el toggle global + por cliente.

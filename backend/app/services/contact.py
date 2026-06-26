@@ -11,6 +11,34 @@ import requests
 WA_SEND_MAX_INTENTOS  = int(os.environ.get("WA_SEND_MAX_INTENTOS", "3"))
 WA_SEND_RETRY_DELAY_S = float(os.environ.get("WA_SEND_RETRY_DELAY_S", "5"))
 
+# Anti-ráfaga (Parte A, paridad Etiguel): la cola ya espacia los envíos masivos,
+# pero el botón "Contactar" inmediato podría disparar varios a la vez. Serializamos
+# los envíos al gateway con un gap mínimo reservando "slots" → la sesión del agente
+# no se satura. import threading local para no tocar imports de arriba.
+import threading
+WA_SEND_GAP_S = float(os.environ.get("WA_SEND_GAP_S", "8"))
+_wa_send_gate_lock = threading.Lock()
+_wa_send_next_ts = 0.0
+
+# Reintentos automáticos cuando un envío no se confirma (Parte B): tras la ventana
+# sin 'out', re-inyecta el mensaje hasta N veces antes de avisar. 1 = un reintento.
+WA_CONFIRM_MAX_REINTENTOS = int(os.environ.get("WA_CONFIRM_MAX_REINTENTOS", "1"))
+
+
+def _wa_send_throttle():
+    """Reserva atómicamente el próximo slot (WA_SEND_GAP_S después del anterior) y
+    duerme hasta ahí FUERA del lock. Convierte una ráfaga en una fila espaciada."""
+    global _wa_send_next_ts
+    if WA_SEND_GAP_S <= 0:
+        return
+    with _wa_send_gate_lock:
+        ahora = time.time()
+        slot = max(ahora, _wa_send_next_ts)
+        _wa_send_next_ts = slot + WA_SEND_GAP_S
+    espera = slot - time.time()
+    if espera > 0:
+        time.sleep(espera)
+
 # Templates de prospección genéricos (5 variantes, rotación anti-ban)
 WA_TEMPLATES = [
     "Hola buen día! Mi nombre es {agente}, te contacto de parte de {empresa}. "
@@ -50,6 +78,9 @@ def _get_template(
 def _send_whatsapp(numero: str, mensaje: str, gateway_url: str, gateway_token: str, session_key: str) -> tuple[bool, str]:
     target = numero.lstrip('+').replace(' ', '').replace('-', '')
     payload_message = f"ENVIAR_PROSPECCION|{target}|{mensaje}"
+
+    # Anti-ráfaga: espaciar envíos para no saturar la sesión del agente del tenant.
+    _wa_send_throttle()
 
     try:
         resp = requests.post(
@@ -189,6 +220,7 @@ def contactar_prospect(prospect_id: int):
                 # si no llega en la ventana, el barrido avisa. Reset del flag previo.
                 prospect.envio_pendiente_desde = ahora
                 prospect.envio_no_confirmado = False
+                prospect.envio_reintentos = 0
             if email_enviado:
                 _registrar_historial(db, prospect.id, prospect.tenant_id, "contactado_email",
                                      f"Email a {email} (contacto #{contacto_n}, envío real pendiente)")
@@ -225,18 +257,34 @@ def contactar_prospect(prospect_id: int):
 WA_CONFIRM_WINDOW_S = int(os.environ.get("WA_CONFIRM_WINDOW_S", "300"))
 
 
+def _reintentar_envio_async(wa, mensaje, gateway_url, gateway_token, session_key, etiqueta):
+    """Re-inyecta un envío en un thread daemon (no bloquea el loop de monitoreo).
+    Pasa por el mismo throttle anti-ráfaga. Si falla, el próximo barrido lo agarra
+    (ya con los reintentos agotados → avisa)."""
+    def _run():
+        try:
+            ok, info = _send_whatsapp_con_retry(wa, mensaje, gateway_url, gateway_token, session_key)
+            print(f"[CONTACT SWEEP] reintento {etiqueta} → ok={ok} {info}")
+        except Exception as e:
+            print(f"[CONTACT SWEEP] reintento {etiqueta} ERROR: {e}")
+    threading.Thread(target=_run, daemon=True).start()
+
+
 def barrer_envios_sin_confirmar():
-    """Barrido periódico (lo llama el loop de monitoreo). Prospects con un envío
-    de WA pendiente de confirmación que pasó la ventana sin 'out' real → avisar a
-    Sebi (push global) + marcar envio_no_confirmado=True (chip web/app) + historial.
-    Limpia envio_pendiente_desde para no re-avisar."""
+    """Barrido periódico (lo llama el loop de monitoreo). Prospects con un envío de
+    WA que pasó la ventana sin 'out' real:
+      - Parte B: si quedan reintentos, re-inyecta el mensaje y reinicia el reloj
+        (NO avisa todavía).
+      - Si ya se agotaron: marca envio_no_confirmado=True (chip web/app), historial
+        y avisa a Sebi (push global). El 'out' real corta todo en cualquier momento."""
     from app.database import SessionLocal
     from app.models.prospect import Prospect
-    from app.models.tenant import Tenant
+    from app.models.tenant import Tenant, TenantConfig
     from app.services import push
 
     corte = datetime.now(timezone.utc) - timedelta(seconds=WA_CONFIRM_WINDOW_S)
     avisos = []
+    reintentos = []
     db = SessionLocal()
     try:
         vencidos = (
@@ -245,37 +293,68 @@ def barrer_envios_sin_confirmar():
             .filter(Prospect.envio_pendiente_desde < corte)
             .all()
         )
+        ahora = datetime.now(timezone.utc)
         for p in vencidos:
-            p.envio_no_confirmado = True
-            p.envio_pendiente_desde = None
-            _registrar_historial(
-                db, p.id, p.tenant_id, "envio_no_confirmado",
-                f"El WhatsApp a {p.whatsapp or p.telefono or '?'} no se registró como "
-                f"enviado en {WA_CONFIRM_WINDOW_S // 60} min. Pudo no haber salido.",
-            )
-            tenant = db.get(Tenant, p.tenant_id)
-            avisos.append({
-                "prospect_id": p.id,
-                "nombre": p.nombre,
-                "telefono": p.whatsapp or p.telefono or "?",
-                "tenant": (tenant.nombre if tenant else str(p.tenant_id)),
-            })
+            config = db.query(TenantConfig).filter(TenantConfig.tenant_id == p.tenant_id).first()
+            wa = (p.whatsapp or "").strip()
+            gateway_url = config.openclaw_gateway_url if config else ""
+            session_key = config.openclaw_session_id if config else ""
+            gateway_token = (config.openclaw_gateway_token if config else None) \
+                or os.environ.get("OPENCLAW_GATEWAY_TOKEN", "")
+            puede_reintentar = bool(wa and gateway_url and gateway_token and session_key)
+
+            if (p.envio_reintentos or 0) < WA_CONFIRM_MAX_REINTENTOS and puede_reintentar:
+                # Parte B: re-inyectar. Regenera un template (prospección genérica).
+                agente = (config.agente_nombre if config else None) or "Camila"
+                empresa = (config.empresa_nombre_msg if config else None) or "nuestra empresa"
+                templates = (config.wa_templates if config else None) or None
+                mensaje = _get_template(agente=agente, empresa=empresa, templates=templates)
+                n = (p.envio_reintentos or 0) + 1
+                p.envio_reintentos = n
+                p.envio_pendiente_desde = ahora   # reinicia el reloj para este reintento
+                _registrar_historial(
+                    db, p.id, p.tenant_id, "reintento_envio",
+                    f"Envío sin confirmar en {WA_CONFIRM_WINDOW_S // 60} min → reintento "
+                    f"{n}/{WA_CONFIRM_MAX_REINTENTOS}, re-inyectando a {wa}.",
+                )
+                reintentos.append((wa, mensaje, gateway_url, gateway_token, session_key,
+                                   f"prospect {p.id} ({n}/{WA_CONFIRM_MAX_REINTENTOS})"))
+            else:
+                # Agotó reintentos (o no se puede reintentar) → aviso final.
+                p.envio_no_confirmado = True
+                p.envio_pendiente_desde = None
+                _registrar_historial(
+                    db, p.id, p.tenant_id, "envio_no_confirmado",
+                    f"El WhatsApp a {wa or p.telefono or '?'} no se registró como enviado "
+                    f"ni con reintento. Pudo no haber salido.",
+                )
+                tenant = db.get(Tenant, p.tenant_id)
+                avisos.append({
+                    "prospect_id": p.id,
+                    "nombre": p.nombre,
+                    "telefono": wa or p.telefono or "?",
+                    "tenant": (tenant.nombre if tenant else str(p.tenant_id)),
+                })
         if vencidos:
             db.commit()
     except Exception as e:
         print(f"[CONTACT SWEEP ERROR] {e}")
-        avisos = []
+        avisos, reintentos = [], []
     finally:
         db.close()
 
-    # Push fuera de la transacción (best-effort). Solo a Sebi (superadmin/global).
+    # Reintentos (network) en threads daemon, fuera de la transacción.
+    for r in reintentos:
+        _reintentar_envio_async(*r)
+
+    # Avisos finales (best-effort). Solo a Sebi (superadmin/global).
     for a in avisos:
         try:
             push.notificar_global_async(
                 "envio_no_confirmado",
                 "⚠️ WhatsApp no confirmado",
-                f"[{a['tenant']}] Se contactó a {a['nombre']} ({a['telefono']}) pero "
-                f"el envío no se registró en {WA_CONFIRM_WINDOW_S // 60} min. Pudo no haber salido.",
+                f"[{a['tenant']}] Se contactó a {a['nombre']} ({a['telefono']}) y, ni con "
+                f"reintento, se registró el envío. Pudo no haber salido.",
                 {"nav": "prospect_detalle", "prospect_id": a["prospect_id"]},
             )
         except Exception as e:

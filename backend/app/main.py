@@ -133,6 +133,9 @@ def run_migrations():
         conn.execute(text(
             "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS envio_no_confirmado BOOLEAN NOT NULL DEFAULT false"
         ))
+        conn.execute(text(
+            "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS envio_reintentos INTEGER NOT NULL DEFAULT 0"
+        ))
         # backfill: los ya resueltos pasan a 'fixed' (idempotente)
         conn.execute(text(
             "UPDATE agent_errors SET estado = 'fixed' WHERE resuelto = true AND estado = 'nuevo'"
