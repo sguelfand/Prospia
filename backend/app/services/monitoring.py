@@ -225,22 +225,61 @@ def _fetch_camila_health() -> tuple[dict | None, str | None]:
     return data, err
 
 
+# Confirmación por tiempo sostenido para camila_responde. La señal de liveness es
+# instantánea: un turno pesado puntual genera un stall >15s que la marca mala, pero
+# se limpia solo dentro de la ventana de 10 min del gateway → falsa alarma + push
+# transitorio. Por eso solo declaramos "down" si la señal mala PERSISTE de forma
+# continua >= _RESPONDE_CONFIRM_S; cualquier lectura buena (o no verificable)
+# resetea el reloj. Mientras se confirma devolvemos "warn": visible en la UI como
+# "verificando" pero SIN push (camila_responde no tiene alerta_warn → warn no alarma).
+_RESPONDE_CONFIRM_S = 12 * 60  # 12 min sostenidos antes de declarar caída (≈3 lecturas)
+_responde_bad = {"since": None}  # time.monotonic() de la primera lectura mala consecutiva
+
+
 def _check_camila_responde():
-    """liveness.ok==True → up; ==False (stuck/overflow/stall) → down; null/no
-    verificable → unknown. Lee señales del gateway, no gasta tokens."""
+    """liveness.ok==True → up; ==False sostenido >=12min → down (con confirmación,
+    para no flapear por un stall puntual); False reciente → warn 'verificando';
+    null/no verificable → unknown. Lee señales del gateway, no gasta tokens."""
     data, err = _fetch_camila_health()
+    now = time.monotonic()
     if data is None:
+        _responde_bad["since"] = None  # no verificable → no podemos confirmar caída
         return "unknown", None, err
     lv = data.get("liveness") or {}
     ok = lv.get("ok")
     detalle = f"stall {round((lv.get('stall_max_ms') or 0) / 1000)}s / stuck {lv.get('stuck', 0)}"
     if lv.get("overflow"):
         detalle += f" / overflow {lv.get('overflow')}"
+    if ok is False:
+        if _responde_bad["since"] is None:
+            _responde_bad["since"] = now
+        elapsed = now - _responde_bad["since"]
+        mins = round(elapsed / 60)
+        if elapsed >= _RESPONDE_CONFIRM_S:
+            return "down", None, f"{detalle} (caída sostenida {mins}min)"
+        return "warn", None, f"{detalle} (verificando {mins}min, confirma a los 12)"
+    # ok True, o unknown/sin datos → resetear el reloj de confirmación
+    _responde_bad["since"] = None
     if ok is True:
         return "up", None, None
-    if ok is False:
-        return "down", None, detalle
     return "unknown", None, "liveness sin datos"
+
+
+def _check_camila_gateway_outbound():
+    """¿El webhook PUEDE mandar vía el gateway? (OPENCLAW_GATEWAY_TOKEN presente +
+    aceptado). Cubre el hueco silencioso del 25/6: el webhook quedó sin token y
+    todo el outbound de Camila quedó mudo sin alerta (el check camila_gateway mira
+    el proceso del gateway, no la capacidad de enviar del webhook). Token-free."""
+    data, err = _fetch_camila_health()
+    if data is None:
+        return "unknown", None, err
+    g = data.get("gateway_outbound") or {}
+    ok = g.get("ok")
+    if ok is True:
+        return "up", None, g.get("detalle")
+    if ok is False:
+        return "down", None, g.get("detalle") or "el webhook no puede enviar"
+    return "unknown", None, "gateway_outbound sin datos (¿webhook viejo?)"
 
 
 def _check_camila_memoria():
@@ -294,7 +333,8 @@ def _check_camila_modelo():
 CHECKS: list[dict] = [
     {"slug": "etiguel_webhook", "nombre": "Cloudflare", "descripcion": "Webhook Etiguel", "tooltip": "Túnel Cloudflare + webhook de Etiguel. Es la puerta por la que pasan los contactos de Camila; si se cae, Camila queda incomunicada.", "grupo": "Etiguel (MyClaw)", "critico": True, "fn": _check_etiguel_webhook},
     {"slug": "camila_gateway", "nombre": "OpenClaw", "descripcion": "Gateway de Camila", "tooltip": "Gateway de OpenClaw que corre el agente Camila. Si está caído, Camila no atiende WhatsApp.", "grupo": "Etiguel (MyClaw)", "critico": True, "fn": _check_camila_gateway},
-    {"slug": "camila_responde", "nombre": "Camila responde", "descripcion": "Liveness", "tooltip": "Verifica que Camila no esté trabada/en loop (lee señales del gateway, sin gastar tokens).", "grupo": "Etiguel (MyClaw)", "critico": True, "fn": _check_camila_responde},
+    {"slug": "camila_responde", "nombre": "Camila responde", "descripcion": "Liveness", "tooltip": "Verifica que Camila no esté trabada/en loop (lee señales del gateway, sin gastar tokens). Solo marca caído si el problema persiste ~12 min seguidos, para no alarmar por un pico puntual.", "grupo": "Etiguel (MyClaw)", "critico": True, "fn": _check_camila_responde},
+    {"slug": "camila_outbound", "nombre": "Camila envía", "descripcion": "Outbound", "tooltip": "Verifica que el webhook pueda MANDAR vía el gateway (token presente y aceptado). Si falla, Camila puede recibir pero no contesta ni inicia contactos — pasó el 25/6 y no avisaba nada.", "grupo": "Etiguel (MyClaw)", "critico": True, "fn": _check_camila_gateway_outbound},
     {"slug": "camila_memoria", "nombre": "Memoria del servidor de Camila", "descripcion": "RAM", "tooltip": "Si se llena, se caen los servicios de Camila (lo que pasó el 25/6: se quedó sin memoria y tiró el túnel y el webhook). Avisa antes.", "grupo": "Etiguel (MyClaw)", "critico": True, "alerta_warn": True, "fn": _check_camila_memoria},
     {"slug": "camila_contexto", "nombre": "Contexto de Camila", "descripcion": "Conversación", "tooltip": "Cuánto contexto acumuló la conversación de Camila. Si se llena, deja de responder. Avisa antes de que reviente.", "grupo": "Etiguel (MyClaw)", "critico": True, "alerta_warn": True, "fn": _check_camila_contexto},
     {"slug": "camila_modelo", "nombre": "Modelo de Camila", "descripcion": "Modelo IA", "tooltip": "Verifica que Camila siga en su modelo correcto (sonnet-4.6 + fallbacks). Si algo lo cambia, se avisa.", "grupo": "Etiguel (MyClaw)", "critico": True, "fn": _check_camila_modelo},
