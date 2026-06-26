@@ -155,6 +155,26 @@ def ingest_aviso(
     return {"ok": True}
 
 
+@router.post("/claude-termino")
+def ingest_claude_termino(
+    body: AvisoIn,
+    x_mirror_token: str | None = Header(None),
+):
+    """Lo dispara el hook Stop de Claude Code (workspace de Prospia) cada vez que
+    Claude termina un turno. Push del evento opt-in `claude_termino` (default OFF):
+    solo llega a los devices que lo prendieron. Best-effort, no bloquea el turno."""
+    _check_token(x_mirror_token)
+    try:
+        push.notificar_global_async(
+            "claude_termino",
+            body.title[:120] or "Claude terminó una tarea",
+            body.body[:300] or "",
+        )
+    except Exception:
+        pass
+    return {"ok": True}
+
+
 @router.post("/agent-error")
 def ingest_agent_error(
     body: AgentErrorIn,
