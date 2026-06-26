@@ -4,8 +4,10 @@ import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text,
 import {
   HistorialRow,
   MensajeRow,
+  TokenConvCosto,
   bloquearProspectCliente,
   desbloquearProspectCliente,
+  getConversacionCosto,
   getHistorialProspect,
   getMensajesProspect,
 } from "../api";
@@ -26,6 +28,8 @@ export default function ProspectDetailScreen({ route, navigation }: ProspectDeta
   const [refreshing, setRefreshing] = useState(false);
   const [bloqueado, setBloqueado] = useState(!!prospect.bloqueado);
   const [bloqueando, setBloqueando] = useState(false);
+  const [costo, setCosto] = useState<TokenConvCosto | null>(null);
+  const tel = prospect.whatsapp ?? prospect.telefono;
 
   useEffect(() => {
     navigation.setOptions({ title: prospect.nombre });
@@ -90,7 +94,11 @@ export default function ProspectDetailScreen({ route, navigation }: ProspectDeta
       setLoading(false);
       setRefreshing(false);
     }
-  }, [token, tenantId, prospect.id]);
+    // Costo de la conversación (en vivo, best-effort — no bloquea el chat).
+    if (tel) {
+      try { setCosto(await getConversacionCosto(token, tel)); } catch { /* sin costo */ }
+    }
+  }, [token, tenantId, prospect.id, tel]);
 
   useEffect(() => {
     load();
@@ -156,6 +164,25 @@ export default function ProspectDetailScreen({ route, navigation }: ProspectDeta
         <Dato label="Próximo contacto" value={fmt(prospect.prox_contacto)} />
         <Dato label="Creado" value={fmt(prospect.created_at)} />
       </View>
+
+      {/* ── Costo de la conversación (en vivo) ───────────────────── */}
+      {costo?.ok && costo.resumen ? (() => {
+        const r = costo.resumen!;
+        const tok = r.input + r.output + r.cacheRead + r.cacheWrite;
+        const mods = Object.keys(r.modelos).map((m) => m.replace("claude-", "")).join(", ");
+        return (
+          <View style={styles.costoCard}>
+            <View style={styles.costoTop}>
+              <Text style={styles.costoLabel}>Costo de esta conversación</Text>
+              <Text style={styles.costoVal}>${r.costo.toFixed(3)}</Text>
+            </View>
+            <Text style={styles.costoMeta}>
+              {r.turnos} respuestas · {tok.toLocaleString("es-AR")} tokens{mods ? ` · ${mods}` : ""}
+            </Text>
+            <Text style={styles.costoLive}>en vivo · deslizá hacia abajo para actualizar</Text>
+          </View>
+        );
+      })() : null}
 
       {/* ── Conversación con Camila ──────────────────────────────── */}
       <CollapsibleSection title="Conversación con Camila" count={mensajes.length}>
@@ -240,6 +267,12 @@ const styles = StyleSheet.create({
   datoRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 5 },
   datoLabel: { color: colors.textDim, fontSize: 13, marginRight: 12 },
   datoValue: { color: colors.text, fontSize: 13, fontWeight: "600", flex: 1, textAlign: "right" },
+  costoCard: { backgroundColor: colors.card, borderRadius: 14, padding: 14, marginTop: 14, borderWidth: 1, borderColor: colors.primary + "44" },
+  costoTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  costoLabel: { color: colors.textDim, fontSize: 12, fontWeight: "700", textTransform: "uppercase", flex: 1 },
+  costoVal: { color: colors.primary, fontSize: 22, fontWeight: "800" },
+  costoMeta: { color: colors.textDim, fontSize: 12, marginTop: 4 },
+  costoLive: { color: colors.textDim, fontSize: 10, marginTop: 4, fontStyle: "italic" },
   empty: { color: colors.textDim },
 
   burbujaRow: { flexDirection: "row", marginBottom: 8 },

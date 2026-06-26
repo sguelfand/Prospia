@@ -414,9 +414,14 @@ export interface TokenTotales {
   llamadas: number; costo_usd: number; costo_mensajes: number; costo_errores: number;
   errores: number; timeouts: number; compactaciones: number;
 }
+export interface TokenConvModelo { llamadas: number; costo_usd: number }
 export interface TokenConv {
   telefono: string; tokens: number; costo_usd: number; llamadas: number;
-  timeouts: number; errores: number; ejemplo: string | null; es_sistema: boolean;
+  input?: number; output?: number; cacheRead?: number; cacheWrite?: number;
+  timeouts: number; errores: number; compactaciones?: number;
+  por_modelo?: Record<string, TokenConvModelo>;
+  primer_ts?: string | null; ultimo_ts?: string | null;
+  ejemplo: string | null; es_sistema: boolean;
 }
 export interface TokenOportunidad {
   id: number; tipo: string; clave: string; severidad: "alta" | "media" | "baja";
@@ -425,7 +430,7 @@ export interface TokenOportunidad {
 export interface TokenAgg { tokens: number; costo_usd: number; llamadas: number }
 export interface TokenUltimo {
   fecha: string; totales: TokenTotales; por_modelo: Record<string, TokenAgg>;
-  top_conversaciones: TokenConv[]; n_conversaciones: number;
+  top_conversaciones: TokenConv[]; conversaciones?: TokenConv[]; n_conversaciones: number;
 }
 export interface TokenDiaTrend { fecha: string; costo_usd: number; costo_mensajes: number; costo_errores: number }
 export interface TokenMesTrend { mes: string; costo_usd: number; conversaciones: number; llamadas: number; costo_por_conversacion: number }
@@ -443,6 +448,34 @@ export const getTokenAudit = (token: string, source: string, days = 14) =>
 
 export const recomputeTokens = (token: string, source: string) =>
   request<TokenUltimo>(`/admin/tokens/recompute?source=${encodeURIComponent(source)}`, { method: "POST" }, token);
+
+// Drill-down: detalle completo de un día (conversaciones con todo el detalle).
+export interface TokenDia {
+  source: string; fecha: string; vacio?: boolean;
+  totales?: TokenTotales; por_modelo?: Record<string, TokenAgg>;
+  conversaciones?: TokenConv[]; n_conversaciones?: number;
+}
+export const getTokenDia = (token: string, source: string, fecha: string) =>
+  request<TokenDia>(`/admin/tokens/dia?source=${encodeURIComponent(source)}&fecha=${encodeURIComponent(fecha)}`, {}, token);
+
+// Gasto por cliente (mes actual + serie mensual) para el dashboard.
+export interface TokenClienteSerie { mes: string; costo_usd: number; conversaciones: number; llamadas: number; costo_por_conversacion: number }
+export interface TokenClienteCosto {
+  id: string; nombre: string; mes_actual: string;
+  gasto_mes_actual: number; llamadas_mes: number; serie_mensual: TokenClienteSerie[];
+}
+export const getTokenClientes = (token: string) =>
+  request<TokenClienteCosto[]>("/admin/tokens/clientes", {}, token);
+
+// Costo EN VIVO de una conversación (por teléfono) — pantalla de chat.
+export interface TokenConvTurno { ts: string; model: string; input: number; output: number; cacheRead: number; cacheWrite: number; costo: number }
+export interface TokenConvCosto {
+  ok: boolean; telefono: string | null;
+  resumen: { turnos: number; input: number; output: number; cacheRead: number; cacheWrite: number; costo: number; modelos: Record<string, number>; primer_ts: string | null; ultimo_ts: string | null } | null;
+  turnos: TokenConvTurno[];
+}
+export const getConversacionCosto = (token: string, telefono: string, source = "etiguel") =>
+  request<TokenConvCosto>(`/admin/tokens/conversacion?source=${encodeURIComponent(source)}&telefono=${encodeURIComponent(telefono)}`, {}, token);
 
 export const getEtiguelLeads = (token: string) =>
   request<EtiguelLead[]>("/admin/etiguel/leads", {}, token);
