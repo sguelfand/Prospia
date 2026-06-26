@@ -43,6 +43,12 @@ class Prospect(Base):
     clasificacion: Mapped[str | None] = mapped_column(String(10), nullable=True)   # ALTO | MEDIO | BAJO
     clasificacion_detalle: Mapped[str | None] = mapped_column(Text, nullable=True)
     clasificacion_verificada: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Verificación de envío real ("¿salió el WhatsApp?"). Al contactar por WA se
+    # setea envio_pendiente_desde; el chat-log de un 'out' real lo limpia. Si pasa
+    # la ventana sin 'out', el barrido avisa y marca envio_no_confirmado=True (chip
+    # en web/app). Se limpia al confirmar un envío real posterior.
+    envio_pendiente_desde: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    envio_no_confirmado: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

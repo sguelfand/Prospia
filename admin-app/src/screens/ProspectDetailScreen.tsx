@@ -60,9 +60,14 @@ export default function ProspectDetailScreen({ route, navigation }: ProspectDeta
       {/* ── Datos del prospect ───────────────────────────────────── */}
       <View style={styles.headerCard}>
         <Text style={styles.nombre}>{prospect.nombre}</Text>
-        <Text style={[styles.estadoBadge, { color, borderColor: color }]}>
-          {estadoLabel[prospect.estado] ?? prospect.estado}
-        </Text>
+        <View style={styles.badgeRow}>
+          <Text style={[styles.estadoBadge, { color, borderColor: color }]}>
+            {estadoLabel[prospect.estado] ?? prospect.estado}
+          </Text>
+          {prospect.envio_no_confirmado && (
+            <Text style={styles.envioBadge}>⚠️ Envío sin confirmar</Text>
+          )}
+        </View>
       </View>
 
       <View style={styles.datos}>
@@ -148,6 +153,8 @@ const styles = StyleSheet.create({
   headerCard: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   nombre: { color: colors.text, fontSize: 20, fontWeight: "800", flex: 1, marginRight: 8 },
   estadoBadge: { fontSize: 11, fontWeight: "700", borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, overflow: "hidden" },
+  badgeRow: { alignItems: "flex-end", gap: 4 },
+  envioBadge: { fontSize: 10, fontWeight: "700", color: "#b45309", backgroundColor: "#fef3c7", borderColor: "#fcd34d", borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, overflow: "hidden" },
   datos: { backgroundColor: colors.card, borderRadius: 12, padding: 14, marginTop: 14 },
   datoRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 5 },
   datoLabel: { color: colors.textDim, fontSize: 13, marginRight: 12 },
