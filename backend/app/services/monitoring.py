@@ -225,25 +225,49 @@ def _fetch_camila_health() -> tuple[dict | None, str | None]:
     return data, err
 
 
-# Confirmación por tiempo sostenido para camila_responde. La señal de liveness es
-# instantánea: un turno pesado puntual genera un stall >15s que la marca mala, pero
-# se limpia solo dentro de la ventana de 10 min del gateway → falsa alarma + push
-# transitorio. Por eso solo declaramos "down" si la señal mala PERSISTE de forma
-# continua >= _RESPONDE_CONFIRM_S; cualquier lectura buena (o no verificable)
-# resetea el reloj. Mientras se confirma devolvemos "warn": visible en la UI como
-# "verificando" pero SIN push (camila_responde no tiene alerta_warn → warn no alarma).
-_RESPONDE_CONFIRM_S = 12 * 60  # 12 min sostenidos antes de declarar caída (≈3 lecturas)
-_responde_bad = {"since": None}  # time.monotonic() de la primera lectura mala consecutiva
+# ── confirmación de caída sostenida (genérica, anti-flapping) ────────────────
+#
+# Una caída (`down`) recién detectada NO alarma de entrada: se muestra como `warn`
+# ("verificando") y solo se declara `down` real —que dispara push— si la caída
+# PERSISTE de forma continua >= _CAIDA_CONFIRM_S. Cualquier lectura no-`down`
+# (up/warn/unknown) resetea el reloj. Esto mata el flapping de un blip puntual:
+# cuando desarrollamos, deployar el webhook (os.execv lo reinicia unos segundos),
+# pushear a main (Coolify redeploya prospia.app/varen) o reiniciar el gateway de
+# OpenClaw tira un `down` transitorio que se recupera en el próximo loop → dos push
+# (caído + recuperado) por nada. Como el loop corre cada 5 min y un redeploy dura
+# segundos/1-2 min, exigir continuidad >= 12 min ignora todos esos blips de un solo
+# loop, sin perder la alerta de una caída real (que sí persiste).
+# Aplica solo a checks binarios up/down (marcados `sostener: True` en CHECKS). Los
+# checks alerta_warn (memoria/contexto) NO lo usan: su `warn` es un aviso gradual
+# y preventivo, no un flap.
+_CAIDA_CONFIRM_S = 12 * 60  # 12 min sostenidos antes de declarar caída (≈3 lecturas)
+_caida_since: dict[str, float] = {}  # slug → time.monotonic() de la 1ª lectura `down` consecutiva
+
+
+def _sostener_caida(slug, estado, ms, detalle):
+    """Convierte un `down` fresco en `warn` ('verificando') hasta que la caída se
+    sostenga _CAIDA_CONFIRM_S. Devuelve (estado, ms, detalle) ya ajustados."""
+    if estado != "down":
+        _caida_since.pop(slug, None)
+        return estado, ms, detalle
+    now = time.monotonic()
+    since = _caida_since.get(slug)
+    if since is None:
+        since = _caida_since[slug] = now
+    elapsed = now - since
+    mins = round(elapsed / 60)
+    if elapsed >= _CAIDA_CONFIRM_S:
+        return "down", ms, detalle
+    base = detalle or "sin respuesta"
+    return "warn", ms, f"{base} (verificando {mins}min, confirma a los {_CAIDA_CONFIRM_S // 60})"
 
 
 def _check_camila_responde():
-    """liveness.ok==True → up; ==False sostenido >=12min → down (con confirmación,
-    para no flapear por un stall puntual); False reciente → warn 'verificando';
-    null/no verificable → unknown. Lee señales del gateway, no gasta tokens."""
+    """liveness.ok==True → up; ==False → down (la confirmación sostenida la aplica
+    _sostener_caida, para no flapear por un stall puntual); null/no verificable →
+    unknown. Lee señales del gateway, no gasta tokens."""
     data, err = _fetch_camila_health()
-    now = time.monotonic()
     if data is None:
-        _responde_bad["since"] = None  # no verificable → no podemos confirmar caída
         return "unknown", None, err
     lv = data.get("liveness") or {}
     ok = lv.get("ok")
@@ -251,15 +275,7 @@ def _check_camila_responde():
     if lv.get("overflow"):
         detalle += f" / overflow {lv.get('overflow')}"
     if ok is False:
-        if _responde_bad["since"] is None:
-            _responde_bad["since"] = now
-        elapsed = now - _responde_bad["since"]
-        mins = round(elapsed / 60)
-        if elapsed >= _RESPONDE_CONFIRM_S:
-            return "down", None, f"{detalle} (caída sostenida {mins}min)"
-        return "warn", None, f"{detalle} (verificando {mins}min, confirma a los 12)"
-    # ok True, o unknown/sin datos → resetear el reloj de confirmación
-    _responde_bad["since"] = None
+        return "down", None, detalle
     if ok is True:
         return "up", None, None
     return "unknown", None, "liveness sin datos"
@@ -331,17 +347,17 @@ def _check_camila_modelo():
 # slug, nombre (= proveedor, para identificar rápido), descripcion (etiqueta corta
 # al lado del nombre), tooltip (explicación al pasar el mouse), grupo, critico, fn
 CHECKS: list[dict] = [
-    {"slug": "etiguel_webhook", "nombre": "Cloudflare", "descripcion": "Webhook Etiguel", "tooltip": "Túnel Cloudflare + webhook de Etiguel. Es la puerta por la que pasan los contactos de Camila; si se cae, Camila queda incomunicada.", "grupo": "Etiguel (MyClaw)", "critico": True, "fn": _check_etiguel_webhook},
-    {"slug": "camila_gateway", "nombre": "OpenClaw", "descripcion": "Gateway de Camila", "tooltip": "Gateway de OpenClaw que corre el agente Camila. Si está caído, Camila no atiende WhatsApp.", "grupo": "Etiguel (MyClaw)", "critico": True, "fn": _check_camila_gateway},
-    {"slug": "camila_responde", "nombre": "Camila responde", "descripcion": "Liveness", "tooltip": "Verifica que Camila no esté trabada/en loop (lee señales del gateway, sin gastar tokens). Solo marca caído si el problema persiste ~12 min seguidos, para no alarmar por un pico puntual.", "grupo": "Etiguel (MyClaw)", "critico": True, "fn": _check_camila_responde},
-    {"slug": "camila_outbound", "nombre": "Camila envía", "descripcion": "Outbound", "tooltip": "Verifica que el webhook pueda MANDAR vía el gateway (token presente y aceptado). Si falla, Camila puede recibir pero no contesta ni inicia contactos — pasó el 25/6 y no avisaba nada.", "grupo": "Etiguel (MyClaw)", "critico": True, "fn": _check_camila_gateway_outbound},
+    {"slug": "etiguel_webhook", "nombre": "Cloudflare", "descripcion": "Webhook Etiguel", "tooltip": "Túnel Cloudflare + webhook de Etiguel. Es la puerta por la que pasan los contactos de Camila; si se cae, Camila queda incomunicada. Solo avisa si la caída persiste ~12 min, para no alarmar por un blip al deployar.", "grupo": "Etiguel (MyClaw)", "critico": True, "sostener": True, "fn": _check_etiguel_webhook},
+    {"slug": "camila_gateway", "nombre": "OpenClaw", "descripcion": "Gateway de Camila", "tooltip": "Gateway de OpenClaw que corre el agente Camila. Si está caído, Camila no atiende WhatsApp. Solo avisa si la caída persiste ~12 min, para no alarmar por un reinicio puntual.", "grupo": "Etiguel (MyClaw)", "critico": True, "sostener": True, "fn": _check_camila_gateway},
+    {"slug": "camila_responde", "nombre": "Camila responde", "descripcion": "Liveness", "tooltip": "Verifica que Camila no esté trabada/en loop (lee señales del gateway, sin gastar tokens). Solo marca caído si el problema persiste ~12 min seguidos, para no alarmar por un pico puntual.", "grupo": "Etiguel (MyClaw)", "critico": True, "sostener": True, "fn": _check_camila_responde},
+    {"slug": "camila_outbound", "nombre": "Camila envía", "descripcion": "Outbound", "tooltip": "Verifica que el webhook pueda MANDAR vía el gateway (token presente y aceptado). Si falla, Camila puede recibir pero no contesta ni inicia contactos — pasó el 25/6 y no avisaba nada. Solo avisa si la caída persiste ~12 min, para no alarmar por un blip al desarrollar.", "grupo": "Etiguel (MyClaw)", "critico": True, "sostener": True, "fn": _check_camila_gateway_outbound},
     {"slug": "camila_memoria", "nombre": "Memoria del servidor de Camila", "descripcion": "RAM", "tooltip": "Si se llena, se caen los servicios de Camila (lo que pasó el 25/6: se quedó sin memoria y tiró el túnel y el webhook). Avisa antes.", "grupo": "Etiguel (MyClaw)", "critico": True, "alerta_warn": True, "fn": _check_camila_memoria},
     {"slug": "camila_contexto", "nombre": "Contexto de Camila", "descripcion": "Conversación", "tooltip": "Cuánto contexto acumuló la conversación de Camila. Si se llena, deja de responder. Avisa antes de que reviente.", "grupo": "Etiguel (MyClaw)", "critico": True, "alerta_warn": True, "fn": _check_camila_contexto},
-    {"slug": "camila_modelo", "nombre": "Modelo de Camila", "descripcion": "Modelo IA", "tooltip": "Verifica que Camila siga en su modelo correcto (sonnet-4.6 + fallbacks). Si algo lo cambia, se avisa.", "grupo": "Etiguel (MyClaw)", "critico": True, "fn": _check_camila_modelo},
-    {"slug": "prospia_web", "nombre": "Coolify", "descripcion": "prospia.app (web)", "tooltip": "La web de Prospia (prospia.app) que ves en el navegador. Servida por Coolify en el server de Hetzner.", "grupo": "Prospia (Hetzner)", "critico": True, "fn": _check_prospia_web},
-    {"slug": "prospia_api", "nombre": "Coolify", "descripcion": "API Prospia", "tooltip": "La API del backend de Prospia. Si se cae, la web y la app móvil dejan de funcionar.", "grupo": "Prospia (Hetzner)", "critico": True, "fn": _check_prospia_api},
-    {"slug": "varen_app", "nombre": "Coolify", "descripcion": "varen.prospia.app", "tooltip": "La app interna de Varen Home (varen.prospia.app), corre en el mismo server de Prospia.", "grupo": "Prospia (Hetzner)", "critico": True, "fn": _check_varen_app},
-    {"slug": "database", "nombre": "PostgreSQL", "descripcion": "Base de datos", "tooltip": "La base de datos PostgreSQL de Prospia: guarda prospects, contactos, pendientes y todo el estado. Si se cae, no anda nada.", "grupo": "Prospia (Hetzner)", "critico": True, "fn": _check_database},
+    {"slug": "camila_modelo", "nombre": "Modelo de Camila", "descripcion": "Modelo IA", "tooltip": "Verifica que Camila siga en su modelo correcto (sonnet-4.6 + fallbacks). Si algo lo cambia, se avisa. Solo avisa si persiste ~12 min, para no alarmar por una lectura puntual al reiniciar el gateway.", "grupo": "Etiguel (MyClaw)", "critico": True, "sostener": True, "fn": _check_camila_modelo},
+    {"slug": "prospia_web", "nombre": "Coolify", "descripcion": "prospia.app (web)", "tooltip": "La web de Prospia (prospia.app) que ves en el navegador. Servida por Coolify en el server de Hetzner. Solo avisa si la caída persiste ~12 min, para no alarmar por un redeploy.", "grupo": "Prospia (Hetzner)", "critico": True, "sostener": True, "fn": _check_prospia_web},
+    {"slug": "prospia_api", "nombre": "Coolify", "descripcion": "API Prospia", "tooltip": "La API del backend de Prospia. Si se cae, la web y la app móvil dejan de funcionar. Solo avisa si la caída persiste ~12 min, para no alarmar por un redeploy.", "grupo": "Prospia (Hetzner)", "critico": True, "sostener": True, "fn": _check_prospia_api},
+    {"slug": "varen_app", "nombre": "Coolify", "descripcion": "varen.prospia.app", "tooltip": "La app interna de Varen Home (varen.prospia.app), corre en el mismo server de Prospia. Solo avisa si la caída persiste ~12 min, para no alarmar por un redeploy.", "grupo": "Prospia (Hetzner)", "critico": True, "sostener": True, "fn": _check_varen_app},
+    {"slug": "database", "nombre": "PostgreSQL", "descripcion": "Base de datos", "tooltip": "La base de datos PostgreSQL de Prospia: guarda prospects, contactos, pendientes y todo el estado. Si se cae, no anda nada. Solo avisa si la caída persiste ~12 min, para no alarmar por un redeploy.", "grupo": "Prospia (Hetzner)", "critico": True, "sostener": True, "fn": _check_database},
     {"slug": "monday", "nombre": "Monday", "descripcion": "API de leads", "tooltip": "API de Monday.com, donde Etiguel lleva los leads y prospects. Si no responde, no se cargan ni actualizan leads.", "grupo": "Externos", "critico": False, "fn": _check_monday},
     {"slug": "anthropic", "nombre": "Anthropic", "descripcion": "Modelo de Camila", "tooltip": "API de Anthropic (Claude), el cerebro de Camila. Si está caída, Camila no puede pensar las respuestas.", "grupo": "Externos", "critico": False, "fn": _check_anthropic},
     {"slug": "apify", "nombre": "Apify", "descripcion": "Scraping", "tooltip": "API de Apify, que usa el scraper para juntar prospects. Si se cae, no se consiguen contactos nuevos.", "grupo": "Externos", "critico": False, "fn": _check_apify},
@@ -443,6 +459,8 @@ def run_all() -> dict:
             estado, ms, detalle = entry["fn"]()
         except Exception as e:
             estado, ms, detalle = "down", None, f"{type(e).__name__}: {e}"
+        if entry.get("sostener"):
+            estado, ms, detalle = _sostener_caida(entry["slug"], estado, ms, detalle)
         return (entry, estado, ms, detalle)
 
     with ThreadPoolExecutor(max_workers=min(8, len(CHECKS))) as ex:
@@ -460,6 +478,8 @@ def run_one(slug: str) -> dict | None:
         estado, ms, detalle = entry["fn"]()
     except Exception as e:
         estado, ms, detalle = "down", None, f"{type(e).__name__}: {e}"
+    if entry.get("sostener"):
+        estado, ms, detalle = _sostener_caida(entry["slug"], estado, ms, detalle)
     _persist_and_alert([(entry, estado, ms, detalle)])
     return get_service(slug)
 
