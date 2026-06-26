@@ -162,27 +162,16 @@ export default function ProspectDetailScreen({ route, navigation }: ProspectDeta
         <Dato label="Contactos" value={String(prospect.cant_contactos)} />
         <Dato label="Último contacto" value={fmt(prospect.ult_contacto)} />
         <Dato label="Próximo contacto" value={fmt(prospect.prox_contacto)} />
+        {/* Costo de esta conversación (en vivo, hasta el momento) */}
+        <View style={styles.datoRow}>
+          <Text style={styles.datoLabel}>Costo conversación</Text>
+          <Text style={[styles.datoValue, { color: colors.primary }]}>
+            {costo?.resumen ? `$${costo.resumen.costo.toFixed(3)}` : "—"}
+            {costo?.resumen ? <Text style={styles.costoSubInline}>{`  · ${costo.resumen.turnos} resp`}</Text> : null}
+          </Text>
+        </View>
         <Dato label="Creado" value={fmt(prospect.created_at)} />
       </View>
-
-      {/* ── Costo de la conversación (en vivo) ───────────────────── */}
-      {costo?.ok && costo.resumen ? (() => {
-        const r = costo.resumen!;
-        const tok = r.input + r.output + r.cacheRead + r.cacheWrite;
-        const mods = Object.keys(r.modelos).map((m) => m.replace("claude-", "")).join(", ");
-        return (
-          <View style={styles.costoCard}>
-            <View style={styles.costoTop}>
-              <Text style={styles.costoLabel}>Costo de esta conversación</Text>
-              <Text style={styles.costoVal}>${r.costo.toFixed(3)}</Text>
-            </View>
-            <Text style={styles.costoMeta}>
-              {r.turnos} respuestas · {tok.toLocaleString("es-AR")} tokens{mods ? ` · ${mods}` : ""}
-            </Text>
-            <Text style={styles.costoLive}>en vivo · deslizá hacia abajo para actualizar</Text>
-          </View>
-        );
-      })() : null}
 
       {/* ── Conversación con Camila ──────────────────────────────── */}
       <CollapsibleSection title="Conversación con Camila" count={mensajes.length}>
@@ -273,6 +262,7 @@ const styles = StyleSheet.create({
   costoVal: { color: colors.primary, fontSize: 22, fontWeight: "800" },
   costoMeta: { color: colors.textDim, fontSize: 12, marginTop: 4 },
   costoLive: { color: colors.textDim, fontSize: 10, marginTop: 4, fontStyle: "italic" },
+  costoSubInline: { color: colors.textDim, fontSize: 11, fontWeight: "400" },
   empty: { color: colors.textDim },
 
   burbujaRow: { flexDirection: "row", marginBottom: 8 },

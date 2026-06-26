@@ -240,7 +240,8 @@ export default function TokensScreen() {
               const modelos = Object.entries(c.por_modelo ?? {}).sort((a, b) => b[1].costo_usd - a[1].costo_usd);
               const msgs = convMsgs[c.telefono];
               return (
-                <TouchableOpacity key={c.telefono} activeOpacity={0.7} style={[styles.conv, i > 0 && styles.border]}
+                <TouchableOpacity key={c.telefono} activeOpacity={0.8}
+                  style={[styles.convBox, { backgroundColor: i % 2 === 0 ? "#101D38" : "#1B2A47" }, abierta && styles.convBoxOpen]}
                   onPress={() => abrirConv(c)}>
                   <View style={styles.convTop}>
                     <Text style={styles.convTel}>{c.telefono}</Text>
@@ -263,18 +264,17 @@ export default function TokensScreen() {
                           </View>
                         ) : c.mirror_id ? <Text style={styles.empty}>Sin mensajes espejados.</Text> :
                           <Text style={styles.empty}>Conversación no encontrada en el espejo.</Text>}
-                      {/* Detalle de costo (compacto) */}
+                      {/* Detalle de costo (compacto): split por modelo + horario */}
                       <View style={styles.costoSep}>
                         {modelos.map(([m, v]) => (
                           <View key={m} style={styles.kv}><Text style={styles.detK}>{m}</Text><Text style={styles.detV}>{usd3(v.costo_usd)} · {v.llamadas} ll</Text></View>
                         ))}
-                        <View style={styles.detGrid}>
-                          <Text style={styles.detItem}>Input: <Text style={styles.detVal}>{fmt(c.input ?? 0)}</Text></Text>
-                          <Text style={styles.detItem}>Output: <Text style={styles.detVal}>{fmt(c.output ?? 0)}</Text></Text>
-                          <Text style={styles.detItem}>Cache R: <Text style={styles.detVal}>{fmt(c.cacheRead ?? 0)}</Text></Text>
-                          <Text style={styles.detItem}>Cache W: <Text style={styles.detVal}>{fmt(c.cacheWrite ?? 0)}</Text></Text>
-                          {c.primer_ts ? <Text style={styles.detItem}>Horario: <Text style={styles.detVal}>{hhmm(c.primer_ts)}–{hhmm(c.ultimo_ts)}</Text></Text> : null}
-                        </View>
+                        {(c.primer_ts || (c.compactaciones ?? 0) > 0) ? (
+                          <View style={styles.detGrid}>
+                            {c.primer_ts ? <Text style={styles.detItem}>Horario: <Text style={styles.detVal}>{hhmm(c.primer_ts)}–{hhmm(c.ultimo_ts)}</Text></Text> : null}
+                            {(c.compactaciones ?? 0) > 0 ? <Text style={styles.detItem}>Compact.: <Text style={[styles.detVal, { color: colors.amber }]}>{c.compactaciones}</Text></Text> : null}
+                          </View>
+                        ) : null}
                       </View>
                     </View>
                   ) : null}
@@ -356,6 +356,8 @@ const styles = StyleSheet.create({
   mesBoxKv: { color: colors.textDim, fontSize: 13, marginTop: 2 },
   mesBoxV: { color: colors.text, fontWeight: "700" },
   conv: { paddingVertical: 9 },
+  convBox: { borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, marginTop: 8 },
+  convBoxOpen: { borderWidth: 1, borderColor: colors.primary + "55" },
   convTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   convTel: { color: colors.text, fontSize: 15, fontWeight: "700" },
   convNombre: { color: colors.text, fontSize: 13, fontWeight: "500", marginTop: 1 },
@@ -365,7 +367,7 @@ const styles = StyleSheet.create({
   bubRow: { flexDirection: "row" },
   bub: { maxWidth: "85%", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
   bubOut: { backgroundColor: colors.primary + "22", borderColor: colors.primary + "44", borderWidth: 1 },
-  bubIn: { backgroundColor: colors.cardAlt },
+  bubIn: { backgroundColor: "#0C1730" },
   bubText: { color: colors.text, fontSize: 13 },
   costoSep: { marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border, gap: 3 },
   convEj: { color: colors.textDim, fontSize: 12, marginTop: 3, fontStyle: "italic" },
