@@ -81,17 +81,40 @@ SOURCES: dict[str, dict] = {
 }
 
 _PHONE_RE = re.compile(r'"(?:chat_id|sender_id)"\s*:\s*"([^"]+)"')
+# Outbound de primer contacto: el número va en ENVIAR_LEAD|num|... / ENVIAR_PROSPECCION|num|...
+# (en un lead recién contactado todavía no hay mensaje entrante con chat_id).
+_ENVIAR_RE = re.compile(r'ENVIAR_(?:LEAD|PROSPECCION)\|(\+?\d{8,15})\|')
+
+
+def _norm_phone(p: str | None) -> str | None:
+    """Normaliza a '+<dígitos>' para unificar chat_id (+549...) con el num de
+    ENVIAR_LEAD (549...) → la misma conversación no se parte en dos."""
+    if not p:
+        return None
+    digits = re.sub(r"\D", "", p)
+    return ("+" + digits) if digits else None
 
 
 def _extract_phone(mc: dict) -> str | None:
-    for m in mc.get("data", {}).get("messagesSnapshot", []):
+    snaps = mc.get("data", {}).get("messagesSnapshot", [])
+    # 1) chat_id / sender_id (mensajes entrantes)
+    for m in snaps:
         if not isinstance(m, dict):
             continue
         c = m.get("content")
         txt = c if isinstance(c, str) else json.dumps(c, ensure_ascii=False)
         hit = _PHONE_RE.search(txt)
         if hit:
-            return hit.group(1)
+            return _norm_phone(hit.group(1))
+    # 2) outbound de primer contacto (ENVIAR_LEAD|num| / ENVIAR_PROSPECCION|num|)
+    for m in snaps:
+        if not isinstance(m, dict):
+            continue
+        c = m.get("content")
+        txt = c if isinstance(c, str) else json.dumps(c, ensure_ascii=False)
+        hit = _ENVIAR_RE.search(txt)
+        if hit:
+            return _norm_phone(hit.group(1))
     return None
 
 
@@ -495,6 +518,8 @@ def get_audit(source: str, days: int = 14) -> dict:
                               "costo_mensajes": round(t.get("costo_mensajes", 0.0), 4),
                               "costo_errores": round(t.get("costo_errores", 0.0), 4)})
         ultimo = json.loads(rows[0].data) if rows else None
+        if ultimo:
+            _enriquecer_nombres(source, [ultimo.get("conversaciones"), ultimo.get("top_conversaciones")], db)
 
         mensual = (db.query(CamilaAuditMensual).filter(CamilaAuditMensual.source == source)
                    .order_by(CamilaAuditMensual.mes.asc()).all())
@@ -521,6 +546,29 @@ def get_audit(source: str, days: int = 14) -> dict:
         db.close()
 
 
+def _enriquecer_nombres(source: str, listas: list, db) -> None:
+    """Para cada conversación (por teléfono) agrega `nombre` y `mirror_id` (Etiguel)
+    matcheando por últimos 10 dígitos contra el espejo. Permite mostrar el nombre y
+    abrir la conversación entera desde la vista de costos."""
+    if source != "etiguel":
+        return
+    try:
+        from app.models.etiguel_mirror import EtiguelMirror
+        by_digits = {}
+        for r in db.query(EtiguelMirror.id, EtiguelMirror.nombre, EtiguelMirror.telefono).all():
+            d = re.sub(r"\D", "", r.telefono or "")[-10:]
+            if d and d not in by_digits:
+                by_digits[d] = (r.nombre, r.id)
+        for convs in listas:
+            for c in (convs or []):
+                d = re.sub(r"\D", "", (c.get("telefono") or ""))[-10:]
+                ref = by_digits.get(d)
+                if ref:
+                    c["nombre"], c["mirror_id"] = ref[0], ref[1]
+    except Exception:
+        pass
+
+
 def get_dia(source: str, fecha: str) -> dict | None:
     """Detalle COMPLETO de un día (para el drill-down): totales + por_modelo +
     lista completa de conversaciones (cada una con tokens, costo, split por modelo,
@@ -534,9 +582,11 @@ def get_dia(source: str, fecha: str) -> dict | None:
         if not row:
             return None
         try:
-            return json.loads(row.data)
+            data = json.loads(row.data)
         except Exception:
             return {"source": source, "fecha": fecha, "totales": {}, "conversaciones": []}
+        _enriquecer_nombres(source, [data.get("conversaciones"), data.get("top_conversaciones")], db)
+        return data
     finally:
         db.close()
 
