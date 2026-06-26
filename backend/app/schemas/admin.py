@@ -176,6 +176,17 @@ class EtiguelMirrorItem(BaseModel):
     prox_contacto: str | None = None
     ultima_actividad: datetime
     cant_mensajes: int
+    bloqueado: bool = False
+
+
+class BloquearOut(BaseModel):
+    """Resultado de bloquear/desbloquear un número en la lista negra de Camila."""
+    telefono: str
+    digits: str
+    bloqueado: bool
+    webhook_ok: bool
+    blacklist_total: int | None = None
+    webhook_error: str | None = None
 
 
 class AgentErrorIn(BaseModel):

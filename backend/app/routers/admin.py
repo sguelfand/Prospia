@@ -48,6 +48,7 @@ from app.schemas.admin import (
     EtiguelLead,
     AvisoOut,
     AvisosEliminar,
+    BloquearOut,
     EtiguelMirrorItem,
     EtiguelMirrorMensajeOut,
     EventoOut,
@@ -544,6 +545,7 @@ def etiguel_mirror(tipo: str | None = Query(None), db: Session = Depends(get_db)
             prox_contacto=m.prox_contacto,
             ultima_actividad=m.ultima_actividad,
             cant_mensajes=len(m.mensajes),
+            bloqueado=bool(m.bloqueado),
         )
         for m in items
     ]
@@ -641,6 +643,85 @@ def reset_numero_prueba(body: ResetNumeroPruebaIn, db: Session = Depends(get_db)
         webhook_respuesta=webhook_respuesta,
         webhook_error=webhook_error,
     )
+
+
+def _etiguel_bloquear(mirror_id: int, bloquear: bool, db: Session) -> BloquearOut:
+    """Bloquea/desbloquea el número de un item espejado de Etiguel. Le pega al
+    webhook de Camila (POST /bloquear|/desbloquear, X-Deploy-Token) que escribe la
+    lista negra (blacklist.json/.md) que leen los plugins, y refleja el estado en
+    la DB de Prospia. Si el webhook falla, NO marca el espejo como bloqueado (el
+    bloqueo real vive en Camila): así el botón no miente."""
+    from app.services import monitoring
+
+    mirror = db.get(EtiguelMirror, mirror_id)
+    if not mirror:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No encontrado")
+    if not mirror.telefono:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="El item no tiene teléfono para bloquear.")
+    digits = "".join(c for c in mirror.telefono if c.isdigit())
+
+    token = monitoring._etiguel_token()
+    if not token:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail="Token de Etiguel no configurado.")
+
+    endpoint = "bloquear" if bloquear else "desbloquear"
+    webhook_ok = False
+    webhook_error: str | None = None
+    blacklist_total: int | None = None
+    try:
+        r = requests.post(
+            f"https://webhook.etiguel.net/{endpoint}",
+            headers={
+                "X-Deploy-Token": token,
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+                "Content-Type": "application/json",
+            },
+            json={"telefono": mirror.telefono},
+            timeout=15,
+        )
+        if r.status_code == 200:
+            data = r.json()
+            webhook_ok = bool(data.get("ok", True))
+            bl = data.get("blacklist")
+            blacklist_total = len(bl) if isinstance(bl, list) else None
+        else:
+            webhook_error = f"HTTP {r.status_code}: {r.text[:300]}"
+    except Exception as e:
+        webhook_error = f"{type(e).__name__}: {e}"
+
+    if webhook_ok:
+        mirror.bloqueado = bloquear
+        mirror.bloqueado_en = datetime.now(timezone.utc) if bloquear else None
+        db.commit()
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"No se pudo {'bloquear' if bloquear else 'desbloquear'} en Camila: {webhook_error}",
+        )
+
+    return BloquearOut(
+        telefono=mirror.telefono,
+        digits=digits,
+        bloqueado=bloquear,
+        webhook_ok=webhook_ok,
+        blacklist_total=blacklist_total,
+        webhook_error=webhook_error,
+    )
+
+
+@router.post("/etiguel/mirror/{mirror_id}/bloquear", response_model=BloquearOut)
+def etiguel_mirror_bloquear(mirror_id: int, db: Session = Depends(get_db)):
+    """Manda el número de este lead/prospect a la lista negra: Camila deja de
+    escucharlo y de responderle, y no se lo vuelve a contactar."""
+    return _etiguel_bloquear(mirror_id, True, db)
+
+
+@router.post("/etiguel/mirror/{mirror_id}/desbloquear", response_model=BloquearOut)
+def etiguel_mirror_desbloquear(mirror_id: int, db: Session = Depends(get_db)):
+    """Saca el número de la lista negra: Camila vuelve a atenderlo normalmente."""
+    return _etiguel_bloquear(mirror_id, False, db)
 
 
 @router.post("/clientes/{tenant_id}/reset-numero-prueba", response_model=ResetNumeroPruebaTenantOut)
