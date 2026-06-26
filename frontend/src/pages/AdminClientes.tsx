@@ -1,8 +1,8 @@
 import { Eye, EyeOff, KeyRound, Plus, Trash2 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import InfoNegocio from '../components/InfoNegocio'
-import { useSaveStatus } from '../context/SaveStatus'
+import { useAutoSave } from '../hooks/useAutoSave'
 
 type ClienteResumen = { tenant_id: number; nombre: string; fuente: string }
 
@@ -69,10 +69,13 @@ export default function AdminClientes() {
   const [resetMsg, setResetMsg] = useState<string | null>(null)
   const [newPwd, setNewPwd] = useState('')
   const [showPwd, setShowPwd] = useState(false)
-  const { beginSave, endSave } = useSaveStatus()
-  // Snapshot serializado de lo último guardado, para no re-guardar sin cambios
-  // (ni disparar un PUT apenas se carga el cliente).
-  const lastSavedRef = useRef('')
+
+  // Auto-guardado de la config (todo menos credenciales), con flush al salir.
+  const flush = useAutoSave({
+    ready: !!cfg,
+    payload: cfg ? autoPayload(cfg) : null,
+    path: cfg ? `/admin/clientes/${cfg.tenant_id}/config` : '',
+  })
 
   useEffect(() => {
     api
@@ -82,6 +85,7 @@ export default function AdminClientes() {
   }, [])
 
   async function selectCliente(id: number | '') {
+    flush() // guarda lo pendiente del cliente actual antes de cambiar
     setSelectedId(id)
     setCfg(null)
     setMsg(null)
@@ -91,9 +95,7 @@ export default function AdminClientes() {
     if (id === '') return
     setLoading(true)
     try {
-      const data = await api.get<ClienteConfig>(`/admin/clientes/${id}/config`)
-      lastSavedRef.current = JSON.stringify(autoPayload(data))
-      setCfg(data)
+      setCfg(await api.get<ClienteConfig>(`/admin/clientes/${id}/config`))
     } catch (err: unknown) {
       setMsg({ ok: false, text: err instanceof Error ? err.message : 'Error al cargar' })
     } finally {
@@ -119,26 +121,15 @@ export default function AdminClientes() {
     if (cfg) field('cadencia_dias', { ...cfg.cadencia_dias, [k]: v })
   }
 
-  // Auto-guardado con debounce: cada cambio en los campos no-credenciales se
-  // persiste ~1s después de la última edición. El estado (Guardando / Todo
-  // guardado) lo muestra el indicador del header.
+  // Mantiene el nombre del cliente en el desplegable en sync con lo que se edita.
   useEffect(() => {
     if (!cfg) return
-    const cur = JSON.stringify(autoPayload(cfg))
-    if (cur === lastSavedRef.current) return
-    const t = setTimeout(async () => {
-      beginSave()
-      try {
-        await api.put<ClienteConfig>(`/admin/clientes/${cfg.tenant_id}/config`, autoPayload(cfg))
-        lastSavedRef.current = cur
-        setClientes((cs) => cs.map((c) => (c.tenant_id === cfg.tenant_id ? { ...c, nombre: cfg.nombre } : c)))
-        endSave(true)
-      } catch (err: unknown) {
-        endSave(false, err instanceof Error ? err.message : 'Error al guardar')
-      }
-    }, 1000)
-    return () => clearTimeout(t)
-  }, [cfg, beginSave, endSave])
+    setClientes((cs) => {
+      const found = cs.find((c) => c.tenant_id === cfg.tenant_id)
+      if (!found || found.nombre === cfg.nombre) return cs
+      return cs.map((c) => (c.tenant_id === cfg.tenant_id ? { ...c, nombre: cfg.nombre } : c))
+    })
+  }, [cfg])
 
   // Credenciales (usuario + contraseña): guardado manual, no se auto-guarda.
   async function guardarAcceso() {
@@ -151,7 +142,6 @@ export default function AdminClientes() {
         usuario: cfg.usuario,
         password: newPwd.trim() || null,
       })
-      lastSavedRef.current = JSON.stringify(autoPayload(updated))
       setCfg(updated)
       const cambioPass = newPwd.trim().length > 0
       setNewPwd('')
@@ -424,7 +414,7 @@ export default function AdminClientes() {
 
       {/* ── Información del negocio del cliente (relevamiento) — misma fuente que
            edita el cliente en su Configuración; se actualizan mutuamente ── */}
-      {cfg && <InfoNegocio basePath={`/admin/clientes/${cfg.tenant_id}`} />}
+      {cfg && <InfoNegocio key={cfg.tenant_id} basePath={`/admin/clientes/${cfg.tenant_id}`} />}
     </div>
   )
 }

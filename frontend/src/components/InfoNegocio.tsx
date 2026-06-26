@@ -1,7 +1,7 @@
 import { ChevronDown, Download, Plus, Sparkles, Trash2, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '../api/client'
-import { useSaveStatus } from '../context/SaveStatus'
+import { useAutoSave } from '../hooks/useAutoSave'
 
 // ── Información del negocio (relevamiento) ────────────────────────────────────
 // Renderiza el esquema del formulario de intake, ya cargado y editable. Lo usan:
@@ -62,8 +62,13 @@ export default function InfoNegocio({ basePath = '/me', defaultOpen = false }: {
   const [values, setValues] = useState<Record<string, unknown>>({})
   const [extra, setExtra] = useState<{ label: string; valor: string }[]>([])
   const [open, setOpen] = useState(defaultOpen) // arranca cerrada; se expande al tocar el título
-  const { beginSave, endSave } = useSaveStatus()
-  const lastSavedRef = useRef('')
+
+  // Auto-guardado (debounce + flush al salir). El estado lo muestra el header.
+  useAutoSave({
+    ready: !!data,
+    payload: { values, extra: extra.filter((e) => e.label.trim() || e.valor.trim()) },
+    path: `${basePath}/info-negocio`,
+  })
 
   // ── "Agregar información": modal con IA que reparte texto libre en campos ──
   const [asistirOpen, setAsistirOpen] = useState(false)
@@ -80,10 +85,6 @@ export default function InfoNegocio({ basePath = '/me', defaultOpen = false }: {
         setData(d)
         setValues(d.values || {})
         setExtra(d.extra || [])
-        lastSavedRef.current = JSON.stringify({
-          values: d.values || {},
-          extra: (d.extra || []).filter((e) => e.label.trim() || e.valor.trim()),
-        })
       })
       .catch(() => setData(null))
   }, [basePath])
@@ -91,25 +92,6 @@ export default function InfoNegocio({ basePath = '/me', defaultOpen = false }: {
   function setVal(id: string, v: unknown) {
     setValues((prev) => ({ ...prev, [id]: v }))
   }
-
-  // Auto-guardado con debounce ~1s. El estado lo muestra el indicador del header.
-  useEffect(() => {
-    if (!data) return
-    const payload = { values, extra: extra.filter((e) => e.label.trim() || e.valor.trim()) }
-    const cur = JSON.stringify(payload)
-    if (cur === lastSavedRef.current) return
-    const t = setTimeout(async () => {
-      beginSave()
-      try {
-        await api.put(`${basePath}/info-negocio`, payload)
-        lastSavedRef.current = cur
-        endSave(true)
-      } catch (err: unknown) {
-        endSave(false, err instanceof Error ? err.message : 'Error al guardar')
-      }
-    }, 1000)
-    return () => clearTimeout(t)
-  }, [values, extra, data, basePath, beginSave, endSave])
 
   function abrirAsistir() {
     setAsistirTexto('')
