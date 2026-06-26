@@ -28,6 +28,25 @@ def audit(source: str = Query("etiguel"), days: int = Query(14, ge=1, le=90)):
     return camila_audit.get_audit(source, days)
 
 
+@router.get("/dia")
+def dia(source: str = Query("etiguel"), fecha: str = Query(...)):
+    """Drill-down de un día: lista COMPLETA de conversaciones con todo el detalle
+    (tokens, costo, split por modelo/cache, timeouts/errores, ejemplo, horario)."""
+    if source not in camila_audit.SOURCES:
+        raise HTTPException(status_code=404, detail="source desconocido")
+    d = camila_audit.get_dia(source, fecha)
+    if d is None:
+        return {"source": source, "fecha": fecha, "vacio": True, "conversaciones": []}
+    return d
+
+
+@router.get("/clientes")
+def clientes():
+    """Gasto del mes actual + serie mensual por cliente (cards + gráfico del
+    dashboard superadmin)."""
+    return camila_audit.get_clientes_resumen()
+
+
 @router.post("/recompute")
 def recompute(source: str = Query("etiguel"), fecha: str | None = Query(None)):
     """Recalcula la auditoría de un día (default: hoy). Sin push."""

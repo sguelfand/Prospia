@@ -206,10 +206,22 @@ def _fold(acc: dict, ev: dict):
     m["tokens"] += u.get("total", 0); m["costo_usd"] += costo; m["llamadas"] += 1
 
     cv = acc["por_conversacion"].setdefault(tel, {
-        "telefono": tel, "tokens": 0, "costo_usd": 0.0, "llamadas": 0,
-        "timeouts": 0, "errores": 0, "ejemplo": None, "es_sistema": es_sistema})
+        "telefono": tel, "tokens": 0, "input": 0, "output": 0,
+        "cacheRead": 0, "cacheWrite": 0, "costo_usd": 0.0, "llamadas": 0,
+        "timeouts": 0, "errores": 0, "compactaciones": 0, "por_modelo": {},
+        "primer_ts": None, "ultimo_ts": None, "ejemplo": None, "es_sistema": es_sistema})
+    for k in ("input", "output", "cacheRead", "cacheWrite"):
+        cv[k] += u.get(k, 0)
     cv["tokens"] += u.get("total", 0); cv["costo_usd"] += costo; cv["llamadas"] += 1
     cv["timeouts"] += 1 if timed_out else 0; cv["errores"] += 1 if error else 0
+    cv["compactaciones"] += comp
+    cm = cv["por_modelo"].setdefault(model, {"llamadas": 0, "costo_usd": 0.0})
+    cm["llamadas"] += 1; cm["costo_usd"] += costo
+    tsiso = ev["ts"].isoformat()
+    if cv["primer_ts"] is None or tsiso < cv["primer_ts"]:
+        cv["primer_ts"] = tsiso
+    if cv["ultimo_ts"] is None or tsiso > cv["ultimo_ts"]:
+        cv["ultimo_ts"] = tsiso
     if not cv["ejemplo"]:
         txt = (d.get("finalPromptText") or "").strip().replace("\n", " ")
         if txt:
@@ -221,11 +233,16 @@ def _aggregate_day(source: str, fecha: str, eventos: list) -> dict:
     for ev in eventos:
         _fold(acc, ev)
     convs = sorted(acc["por_conversacion"].values(), key=lambda x: x["costo_usd"], reverse=True)
+    for c in convs:
+        c["costo_usd"] = round(c["costo_usd"], 4)
+        for mv in c.get("por_modelo", {}).values():
+            mv["costo_usd"] = round(mv["costo_usd"], 4)
     return {
         "source": source, "fecha": fecha,
         "totales": acc["totales"],
         "por_modelo": acc["por_modelo"],
         "top_conversaciones": convs[:15],
+        "conversaciones": convs,  # lista COMPLETA (para el drill-down per-día)
         "n_conversaciones": sum(1 for c in convs if not c["es_sistema"]),
     }
 
@@ -502,6 +519,64 @@ def get_audit(source: str, days: int = 14) -> dict:
         }
     finally:
         db.close()
+
+
+def get_dia(source: str, fecha: str) -> dict | None:
+    """Detalle COMPLETO de un día (para el drill-down): totales + por_modelo +
+    lista completa de conversaciones (cada una con tokens, costo, split por modelo,
+    cache, timeouts/errores, ejemplo y primer/último ts). None si no hay fila."""
+    from app.models.camila_audit import CamilaAudit
+    from app.database import SessionLocal
+    db = SessionLocal()
+    try:
+        row = (db.query(CamilaAudit)
+               .filter(CamilaAudit.source == source, CamilaAudit.fecha == fecha).first())
+        if not row:
+            return None
+        try:
+            return json.loads(row.data)
+        except Exception:
+            return {"source": source, "fecha": fecha, "totales": {}, "conversaciones": []}
+    finally:
+        db.close()
+
+
+def get_clientes_resumen() -> list[dict]:
+    """Por cada cliente/source: gasto del mes actual + serie mensual (para las
+    cards 'gasto del mes' y el gráfico mensual por cliente del dashboard superadmin).
+    El gasto del mes corriente se suma de las filas diarias (más fresco que el rollup)."""
+    from app.models.camila_audit import CamilaAudit, CamilaAuditMensual
+    from app.database import SessionLocal
+    mes_actual = _mes_actual()
+    out = []
+    db = SessionLocal()
+    try:
+        for sid, cfg in SOURCES.items():
+            mensual = (db.query(CamilaAuditMensual)
+                       .filter(CamilaAuditMensual.source == sid)
+                       .order_by(CamilaAuditMensual.mes.asc()).all())
+            serie = [{"mes": r.mes, "costo_usd": round(r.costo_usd, 4),
+                      "conversaciones": r.conversaciones, "llamadas": r.llamadas,
+                      "costo_por_conversacion": round(r.costo_usd / r.conversaciones, 4)
+                      if r.conversaciones else 0.0}
+                     for r in mensual]
+            dailies = (db.query(CamilaAudit)
+                       .filter(CamilaAudit.source == sid,
+                               CamilaAudit.fecha.like(mes_actual + "%")).all())
+            gasto_mes = round(sum(d.costo_usd for d in dailies), 4)
+            llamadas_mes = sum(d.llamadas for d in dailies)
+            if not dailies:  # fallback al rollup si no hay diarias del mes
+                r = next((x for x in mensual if x.mes == mes_actual), None)
+                gasto_mes = round(r.costo_usd, 4) if r else 0.0
+                llamadas_mes = r.llamadas if r else 0
+            out.append({
+                "id": sid, "nombre": cfg["nombre"], "mes_actual": mes_actual,
+                "gasto_mes_actual": gasto_mes, "llamadas_mes": llamadas_mes,
+                "serie_mensual": serie,
+            })
+    finally:
+        db.close()
+    return out
 
 
 # ── loops ─────────────────────────────────────────────────────────────────────
