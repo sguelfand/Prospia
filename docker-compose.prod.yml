@@ -26,6 +26,9 @@ services:
       # Token del webhook de Etiguel — lo usa el relay de respuesta de consultas
       # (POST /responder-consulta) y el monitoreo de Camila (/camila-config/diag).
       ETIGUEL_DEPLOY_TOKEN: ${ETIGUEL_DEPLOY_TOKEN:-}
+      # Resend (mails de aviso de consultas a clientes). Sender por defecto
+      # notificaciones@prospia.app (RESEND_FROM tiene default en config.py).
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
       UPLOADS_DIR: /app/uploads
     depends_on:
       db:
