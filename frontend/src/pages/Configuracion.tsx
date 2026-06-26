@@ -29,16 +29,16 @@ function CollapsibleSection({
 }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="space-y-4">
+    <div className="bg-card border border-line rounded-2xl">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 w-full text-left"
+        className="w-full flex items-center justify-between gap-2 px-6 py-4 text-left"
       >
-        <ChevronDown size={14} className={`text-muted transition-transform ${open ? '' : '-rotate-90'}`} />
-        <h2 className="text-xs font-semibold text-muted uppercase tracking-wide">{title}</h2>
+        <h2 className="text-base font-semibold text-ink">{title}</h2>
+        <ChevronDown size={18} className={`text-muted transition-transform ${open ? '' : '-rotate-90'}`} />
       </button>
-      {open && children}
+      {open && <div className="px-6 pb-6">{children}</div>}
     </div>
   )
 }
@@ -122,7 +122,7 @@ export default function Configuracion() {
       <CollapsibleSection title="Perfil">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
       {/* ── Perfil / usuario ── */}
-      <form onSubmit={saveProfile} className="bg-card border border-line rounded-2xl p-6 space-y-4">
+      <form onSubmit={saveProfile} className="space-y-4">
         <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Usuario</h2>
         <div>
           <label className={labelCls}>Nombre</label>
@@ -151,7 +151,7 @@ export default function Configuracion() {
       </form>
 
       {/* ── Cambiar contraseña ── */}
-      <form onSubmit={savePassword} className="bg-card border border-line rounded-2xl p-6 space-y-4">
+      <form onSubmit={savePassword} className="space-y-4">
         <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Cambiar contraseña</h2>
         <div>
           <label className={labelCls}>Contraseña actual</label>
@@ -625,17 +625,17 @@ function InfoNegocio() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="bg-card border border-line rounded-2xl">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 w-full text-left"
+        className="w-full flex items-center justify-between gap-2 px-6 py-4 text-left"
       >
-        <ChevronDown size={14} className={`text-muted transition-transform ${open ? '' : '-rotate-90'}`} />
-        <h2 className="text-xs font-semibold text-muted uppercase tracking-wide">Información del negocio</h2>
+        <h2 className="text-base font-semibold text-ink">Información del negocio</h2>
+        <ChevronDown size={18} className={`text-muted transition-transform ${open ? '' : '-rotate-90'}`} />
       </button>
       {open && (
-      <>
+      <div className="px-6 pb-6 space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <p className="text-xs text-muted">
           {sinCargar
@@ -657,7 +657,7 @@ function InfoNegocio() {
       </div>
 
       {data.secciones.map((s) => (
-        <div key={s.id} className="bg-card border border-line rounded-2xl p-6 space-y-4">
+        <div key={s.id} className="border border-line rounded-xl p-4 space-y-4">
           <div>
             <h3 className="text-sm font-semibold text-ink">{s.titulo}</h3>
             {s.descripcion && <p className="text-xs text-muted mt-1">{s.descripcion}</p>}
@@ -669,7 +669,7 @@ function InfoNegocio() {
       ))}
 
       {/* ── Campos libres que agrega el cliente ── */}
-      <div className="bg-card border border-line rounded-2xl p-6 space-y-4">
+      <div className="border border-line rounded-xl p-4 space-y-4">
         <div>
           <h3 className="text-sm font-semibold text-ink">Más información</h3>
           <p className="text-xs text-muted mt-1">Agregá cualquier dato extra que nos sirva.</p>
@@ -794,7 +794,7 @@ function InfoNegocio() {
           </div>
         </div>
       )}
-      </>
+      </div>
       )}
     </div>
   )
