@@ -428,10 +428,14 @@ function ProspectCard({ prospect, onPress }: { prospect: ProspectRow; onPress: (
           ) : null}
         </View>
         <View style={styles.cardMeta}>
-          <View style={styles.metaItem}>
-            <View style={[styles.estadoDot, { backgroundColor: color }]} />
-            <Text style={styles.metaText}>{estadoLabel[prospect.estado] ?? prospect.estado}</Text>
-          </View>
+          {prospect.bloqueado ? (
+            <Text style={styles.leadBloqueado}>Bloqueado</Text>
+          ) : (
+            <View style={styles.metaItem}>
+              <View style={[styles.estadoDot, { backgroundColor: color }]} />
+              <Text style={styles.metaText}>{estadoLabel[prospect.estado] ?? prospect.estado}</Text>
+            </View>
+          )}
           {prospect.envio_no_confirmado ? (
             <Text style={styles.envioChip}>⚠️ Envío sin confirmar</Text>
           ) : null}

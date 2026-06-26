@@ -1,14 +1,17 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import {
   HistorialRow,
   MensajeRow,
+  bloquearProspectCliente,
+  desbloquearProspectCliente,
   getHistorialProspect,
   getMensajesProspect,
 } from "../api";
 import { useAuth } from "../auth";
 import { CollapsibleSection, Loader } from "../components/ui";
+import { Icon } from "../components/Icon";
 import { ProspectDetailProps } from "../navigation";
 import { colors, estadoColor, estadoLabel } from "../theme";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -21,10 +24,56 @@ export default function ProspectDetailScreen({ route, navigation }: ProspectDeta
   const [historial, setHistorial] = useState<HistorialRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [bloqueado, setBloqueado] = useState(!!prospect.bloqueado);
+  const [bloqueando, setBloqueando] = useState(false);
 
   useEffect(() => {
     navigation.setOptions({ title: prospect.nombre });
   }, [navigation, prospect.nombre]);
+
+  // El detalle vive en un Drawer navigator → reusa UNA instancia del screen (al
+  // abrir otro prospect cambian los params, no se remonta). Sin esto, el estado
+  // bloqueado quedaba pegado del prospect anterior. Re-sincronizamos por prospect.
+  useEffect(() => {
+    setBloqueado(!!prospect.bloqueado);
+    setBloqueando(false);
+  }, [prospect.id, prospect.bloqueado]);
+
+  const toggleBloqueo = useCallback(() => {
+    if (!token || bloqueando) return;
+    const accion = bloqueado ? "Desbloquear" : "Bloquear";
+    const mensaje = bloqueado
+      ? `${prospect.nombre} vuelve a la cadencia normal.`
+      : `No se va a contactar más a ${prospect.nombre} y el bot deja de escucharlo/responderle.`;
+    Alert.alert(`${accion} prospect`, mensaje, [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: accion,
+        style: bloqueado ? "default" : "destructive",
+        onPress: async () => {
+          setBloqueando(true);
+          try {
+            const res = bloqueado
+              ? await desbloquearProspectCliente(token, tenantId, prospect.id)
+              : await bloquearProspectCliente(token, tenantId, prospect.id);
+            setBloqueado(res.bloqueado);
+            const botInfo =
+              res.webhook_estado === "ok" ? "El bot dejó de atenderlo."
+              : res.webhook_estado === "no_conectado" ? "El bot todavía no está conectado (cuando lo esté, deja de atenderlo)."
+              : "Aviso al bot falló, pero quedó bloqueado en la plataforma.";
+            Alert.alert(
+              res.bloqueado ? "Bloqueado ✓" : "Desbloqueado ✓",
+              res.bloqueado ? botInfo : "Vuelve a la cadencia normal."
+            );
+          } catch (e: any) {
+            Alert.alert("No se pudo", String(e?.message ?? e));
+          } finally {
+            setBloqueando(false);
+          }
+        },
+      },
+    ]);
+  }, [token, bloqueando, bloqueado, tenantId, prospect.id, prospect.nombre]);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -57,13 +106,36 @@ export default function ProspectDetailScreen({ route, navigation }: ProspectDeta
         <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />
       }
     >
+      {/* ── Acción: Bloquear/Desbloquear (solo admin) ────────────── */}
+      <TouchableOpacity
+        style={[styles.blockBtn, bloqueado ? styles.blockBtnOn : styles.blockBtnOff]}
+        onPress={toggleBloqueo}
+        disabled={bloqueando}
+        activeOpacity={0.8}
+      >
+        {bloqueando ? (
+          <ActivityIndicator size="small" color={bloqueado ? colors.primary : colors.red} />
+        ) : (
+          <>
+            <Icon name="lock" size={15} color={bloqueado ? colors.primary : colors.red} />
+            <Text style={[styles.blockBtnText, { color: bloqueado ? colors.primary : colors.red }]}>
+              {bloqueado ? "Desbloquear" : "Bloquear"}
+            </Text>
+          </>
+        )}
+      </TouchableOpacity>
+
       {/* ── Datos del prospect ───────────────────────────────────── */}
       <View style={styles.headerCard}>
         <Text style={styles.nombre}>{prospect.nombre}</Text>
         <View style={styles.badgeRow}>
-          <Text style={[styles.estadoBadge, { color, borderColor: color }]}>
-            {estadoLabel[prospect.estado] ?? prospect.estado}
-          </Text>
+          {bloqueado ? (
+            <Text style={styles.bloqueadoBadge}>Bloqueado</Text>
+          ) : (
+            <Text style={[styles.estadoBadge, { color, borderColor: color }]}>
+              {estadoLabel[prospect.estado] ?? prospect.estado}
+            </Text>
+          )}
           {prospect.envio_no_confirmado && (
             <Text style={styles.envioBadge}>⚠️ Envío sin confirmar</Text>
           )}
@@ -153,6 +225,15 @@ const styles = StyleSheet.create({
   headerCard: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   nombre: { color: colors.text, fontSize: 20, fontWeight: "800", flex: 1, marginRight: 8 },
   estadoBadge: { fontSize: 11, fontWeight: "700", borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, overflow: "hidden" },
+  blockBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    alignSelf: "flex-end", borderRadius: 8, borderWidth: 1,
+    paddingHorizontal: 12, paddingVertical: 7, minWidth: 130, minHeight: 34, marginBottom: 12,
+  },
+  blockBtnOff: { borderColor: colors.red },
+  blockBtnOn: { borderColor: colors.primary, backgroundColor: colors.primary + "1A" },
+  blockBtnText: { fontSize: 13, fontWeight: "700" },
+  bloqueadoBadge: { fontSize: 11, fontWeight: "800", color: colors.red, borderColor: colors.red, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, overflow: "hidden", backgroundColor: colors.red + "1A" },
   badgeRow: { alignItems: "flex-end", gap: 4 },
   envioBadge: { fontSize: 10, fontWeight: "700", color: "#b45309", backgroundColor: "#fef3c7", borderColor: "#fcd34d", borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, overflow: "hidden" },
   datos: { backgroundColor: colors.card, borderRadius: 12, padding: 14, marginTop: 14 },

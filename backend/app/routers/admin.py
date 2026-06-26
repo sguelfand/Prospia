@@ -49,6 +49,7 @@ from app.schemas.admin import (
     AvisoOut,
     AvisosEliminar,
     BloquearOut,
+    BloquearProspectOut,
     EtiguelMirrorItem,
     EtiguelMirrorMensajeOut,
     EventoOut,
@@ -813,6 +814,85 @@ def reset_numero_prueba_cliente(tenant_id: int, body: ResetNumeroPruebaIn, db: S
         webhook_respuesta=webhook_respuesta,
         webhook_error=webhook_error,
     )
+
+
+def _bloquear_prospect_cliente(tenant_id: int, prospect_id: int, bloquear: bool, db: Session) -> BloquearProspectOut:
+    """Bloquea/desbloquea un prospect de un CLIENTE. SOLO superadmin (todo el router
+    /admin lo está) → solo Sebi lo hace desde la app; la web del cliente (que usa
+    /prospects con token de tenant) no tiene esta acción. Tenant-aware:
+      - Marca prospect.bloqueado en la DB (corta cadencia + contacto; lo hace Prospia).
+      - Si el tenant tiene su webhook de bot conectado (webhook_url + deploy_token),
+        le pega POST {webhook_url}/bloquear|/desbloquear para que el bot deje de
+        escuchar/responder. Si no está conectado → solo DB, estado 'no_conectado'."""
+    prospect = db.get(Prospect, prospect_id)
+    if not prospect or prospect.tenant_id != tenant_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect no encontrado")
+    tenant = db.get(Tenant, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No existe ese cliente.")
+
+    numero = prospect.whatsapp or prospect.telefono
+
+    # (a) DB primero: el bloqueo de cadencia/contacto lo controla Prospia y vale
+    #     aunque el bot no esté conectado.
+    prospect.bloqueado = bloquear
+    prospect.bloqueado_en = datetime.now(timezone.utc) if bloquear else None
+    db.add(ProspectHistorial(
+        prospect_id=prospect.id, tenant_id=tenant_id,
+        tipo="bloqueado" if bloquear else "desbloqueado",
+        detalle="Bloqueado por el admin (lista negra)" if bloquear else "Desbloqueado por el admin",
+    ))
+    db.commit()
+
+    # (b) Avisar al bot del tenant vía su webhook (best-effort, igual que el reset).
+    cfg = tenant.config
+    url = (cfg.webhook_url or "").strip() if cfg else ""
+    token = (cfg.webhook_deploy_token or "").strip() if cfg else ""
+    webhook_estado = "no_conectado"
+    webhook_error: str | None = None
+    if url and token and numero:
+        endpoint = "bloquear" if bloquear else "desbloquear"
+        try:
+            r = requests.post(
+                url.rstrip("/") + "/" + endpoint,
+                headers={
+                    "X-Deploy-Token": token,
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+                    "Content-Type": "application/json",
+                },
+                json={"telefono": numero},
+                timeout=15,
+            )
+            if r.status_code == 200:
+                webhook_estado = "ok"
+            else:
+                webhook_estado = "error"
+                webhook_error = f"HTTP {r.status_code}: {r.text[:300]}"
+        except Exception as e:
+            webhook_estado = "error"
+            webhook_error = f"{type(e).__name__}: {e}"
+
+    return BloquearProspectOut(
+        prospect_id=prospect.id,
+        tenant_id=tenant_id,
+        telefono=numero,
+        bloqueado=bloquear,
+        webhook_estado=webhook_estado,
+        webhook_error=webhook_error,
+    )
+
+
+@router.post("/clientes/{tenant_id}/prospects/{prospect_id}/bloquear", response_model=BloquearProspectOut)
+def bloquear_prospect_cliente(tenant_id: int, prospect_id: int, db: Session = Depends(get_db)):
+    """Manda el prospect a la lista negra: no se lo re-contacta y el bot del cliente
+    deja de escucharlo/responderle (si su webhook está conectado). Solo superadmin."""
+    return _bloquear_prospect_cliente(tenant_id, prospect_id, True, db)
+
+
+@router.post("/clientes/{tenant_id}/prospects/{prospect_id}/desbloquear", response_model=BloquearProspectOut)
+def desbloquear_prospect_cliente(tenant_id: int, prospect_id: int, db: Session = Depends(get_db)):
+    """Saca el prospect de la lista negra: vuelve a la cadencia normal. Solo superadmin."""
+    return _bloquear_prospect_cliente(tenant_id, prospect_id, False, db)
 
 
 ESTADOS_ERROR = ("nuevo", "reportado", "fixed")

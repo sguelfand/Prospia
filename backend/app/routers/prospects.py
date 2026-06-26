@@ -179,6 +179,8 @@ def contactar(
     prospect = db.get(Prospect, prospect_id)
     if not prospect or prospect.tenant_id != current_user.tenant_id:
         raise HTTPException(status_code=404, detail="Prospect no encontrado")
+    if prospect.bloqueado:
+        raise HTTPException(status_code=400, detail="El prospect está bloqueado (lista negra).")
     if not prospect.whatsapp and not prospect.email:
         raise HTTPException(status_code=400, detail="El prospect no tiene WhatsApp ni email")
 

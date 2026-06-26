@@ -189,6 +189,18 @@ class BloquearOut(BaseModel):
     webhook_error: str | None = None
 
 
+class BloquearProspectOut(BaseModel):
+    """Resultado de bloquear/desbloquear un prospect de un cliente (tenant).
+    El bloqueo en la DB de Prospia (corte de cadencia/contacto) siempre se aplica;
+    que el bot del tenant deje de escucharlo es best-effort vía su webhook."""
+    prospect_id: int
+    tenant_id: int
+    telefono: str | None
+    bloqueado: bool
+    webhook_estado: str                 # "ok" | "no_conectado" | "error"
+    webhook_error: str | None = None
+
+
 class AgentErrorIn(BaseModel):
     """Payload del plugin outbound-guard cuando bloquea un error de Camila."""
     contenido: str

@@ -53,6 +53,11 @@ class Prospect(Base):
     # el mensaje hasta WA_CONFIRM_MAX_REINTENTOS veces antes de avisar. Se resetea a 0
     # al confirmar un 'out' real o al iniciar un contacto nuevo.
     envio_reintentos: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Lista negra (solo la setea Sebi/superadmin desde la app). Si está bloqueado:
+    # la cadencia no lo re-contacta, no se lo puede contactar, y el bloqueo viaja
+    # al bot del tenant (deja de escucharlo/responderle) si su webhook está conectado.
+    bloqueado: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    bloqueado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

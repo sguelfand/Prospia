@@ -100,6 +100,7 @@ export interface ProspectRow {
   clasificacion_detalle: string | null;
   clasificacion_verificada: boolean;
   envio_no_confirmado: boolean;   // chip "envío sin confirmar" (verificación WA)
+  bloqueado: boolean;             // lista negra (solo superadmin lo setea desde la app)
   created_at: string;
 }
 
@@ -481,6 +482,23 @@ export function getProspectsCliente(
 
 export const getFiltrosCliente = (token: string, tenantId: number) =>
   request<FiltrosCliente>(`/admin/clientes/${tenantId}/filtros`, {}, token);
+
+// Lista negra de un prospect de cliente (solo superadmin / app). Bloquea/desbloquea:
+// corta cadencia+contacto en Prospia y avisa al bot del tenant si está conectado.
+export interface BloquearProspectResult {
+  prospect_id: number;
+  tenant_id: number;
+  telefono: string | null;
+  bloqueado: boolean;
+  webhook_estado: string; // "ok" | "no_conectado" | "error"
+  webhook_error: string | null;
+}
+
+export const bloquearProspectCliente = (token: string, tenantId: number, prospectId: number) =>
+  request<BloquearProspectResult>(`/admin/clientes/${tenantId}/prospects/${prospectId}/bloquear`, { method: "POST" }, token);
+
+export const desbloquearProspectCliente = (token: string, tenantId: number, prospectId: number) =>
+  request<BloquearProspectResult>(`/admin/clientes/${tenantId}/prospects/${prospectId}/desbloquear`, { method: "POST" }, token);
 
 export const getProspect = (token: string, tenantId: number, prospectId: number) =>
   request<ProspectRow>(`/admin/clientes/${tenantId}/prospects/${prospectId}`, {}, token);

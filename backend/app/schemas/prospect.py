@@ -24,6 +24,7 @@ class ProspectOut(BaseModel):
     clasificacion_detalle: str | None
     clasificacion_verificada: bool
     envio_no_confirmado: bool = False   # chip "envío sin confirmar" (verificación WA)
+    bloqueado: bool = False             # lista negra (solo superadmin lo setea desde la app)
     created_at: datetime
 
     model_config = {"from_attributes": True}

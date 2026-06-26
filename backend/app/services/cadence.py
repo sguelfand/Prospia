@@ -48,6 +48,7 @@ def _check_once():
                 Prospect.prox_contacto.isnot(None),
                 Prospect.prox_contacto <= ahora,
                 Prospect.estado.notin_(["interesado", "no_le_interesa", "cancelado"]),
+                Prospect.bloqueado.is_(False),  # bloqueado → no se re-contacta
             )
             .all()
         )
@@ -68,6 +69,7 @@ def _check_once():
                 Prospect.ult_contacto.isnot(None),
                 Prospect.cant_contactos >= 1,
                 Prospect.prox_contacto.is_(None),  # con callback pendiente → cadencia en pausa
+                Prospect.bloqueado.is_(False),  # bloqueado → no se re-contacta
             )
             .all()
         )
