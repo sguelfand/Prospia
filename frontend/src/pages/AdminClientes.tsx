@@ -1,7 +1,8 @@
 import { Eye, EyeOff, KeyRound, Plus, Trash2 } from 'lucide-react'
-import { FormEvent, useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 import InfoNegocio from '../components/InfoNegocio'
+import { useSaveStatus } from '../context/SaveStatus'
 
 type ClienteResumen = { tenant_id: number; nombre: string; fuente: string }
 
@@ -40,16 +41,38 @@ const labelCls = 'block text-sm font-medium text-ink-soft mb-1'
 const btnCls =
   'bg-primary text-on-primary rounded-lg px-4 py-2 text-sm font-medium hover:bg-primary-dark disabled:opacity-50'
 
+// Campos que se auto-guardan (todo menos credenciales: usuario y contraseña
+// tienen su propio botón, por el chequeo de unicidad y la seguridad).
+function autoPayload(c: ClienteConfig) {
+  return {
+    nombre: c.nombre,
+    user_nombre: c.user_nombre,
+    envio_auto_habilitado: c.envio_auto_habilitado,
+    envio_tope_diario: c.envio_tope_diario,
+    envio_delay_seg: c.envio_delay_seg,
+    envio_hora_inicio: c.envio_hora_inicio,
+    envio_hora_fin: c.envio_hora_fin,
+    wa_templates: c.wa_templates.map((t) => t.trim()).filter(Boolean),
+    cadencia_dias: c.cadencia_dias,
+    cadencia_max_contactos: c.cadencia_max_contactos,
+    cadencia_dias_cancelar: c.cadencia_dias_cancelar,
+  }
+}
+
 export default function AdminClientes() {
   const [clientes, setClientes] = useState<ClienteResumen[]>([])
   const [selectedId, setSelectedId] = useState<number | ''>('')
   const [cfg, setCfg] = useState<ClienteConfig | null>(null)
   const [loading, setLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
+  const [savingAcceso, setSavingAcceso] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [resetMsg, setResetMsg] = useState<string | null>(null)
   const [newPwd, setNewPwd] = useState('')
   const [showPwd, setShowPwd] = useState(false)
+  const { beginSave, endSave } = useSaveStatus()
+  // Snapshot serializado de lo último guardado, para no re-guardar sin cambios
+  // (ni disparar un PUT apenas se carga el cliente).
+  const lastSavedRef = useRef('')
 
   useEffect(() => {
     api
@@ -68,7 +91,9 @@ export default function AdminClientes() {
     if (id === '') return
     setLoading(true)
     try {
-      setCfg(await api.get<ClienteConfig>(`/admin/clientes/${id}/config`))
+      const data = await api.get<ClienteConfig>(`/admin/clientes/${id}/config`)
+      lastSavedRef.current = JSON.stringify(autoPayload(data))
+      setCfg(data)
     } catch (err: unknown) {
       setMsg({ ok: false, text: err instanceof Error ? err.message : 'Error al cargar' })
     } finally {
@@ -94,38 +119,48 @@ export default function AdminClientes() {
     if (cfg) field('cadencia_dias', { ...cfg.cadencia_dias, [k]: v })
   }
 
-  async function save(e: FormEvent) {
-    e.preventDefault()
+  // Auto-guardado con debounce: cada cambio en los campos no-credenciales se
+  // persiste ~1s después de la última edición. El estado (Guardando / Todo
+  // guardado) lo muestra el indicador del header.
+  useEffect(() => {
+    if (!cfg) return
+    const cur = JSON.stringify(autoPayload(cfg))
+    if (cur === lastSavedRef.current) return
+    const t = setTimeout(async () => {
+      beginSave()
+      try {
+        await api.put<ClienteConfig>(`/admin/clientes/${cfg.tenant_id}/config`, autoPayload(cfg))
+        lastSavedRef.current = cur
+        setClientes((cs) => cs.map((c) => (c.tenant_id === cfg.tenant_id ? { ...c, nombre: cfg.nombre } : c)))
+        endSave(true)
+      } catch (err: unknown) {
+        endSave(false, err instanceof Error ? err.message : 'Error al guardar')
+      }
+    }, 1000)
+    return () => clearTimeout(t)
+  }, [cfg, beginSave, endSave])
+
+  // Credenciales (usuario + contraseña): guardado manual, no se auto-guarda.
+  async function guardarAcceso() {
     if (!cfg) return
     setMsg(null)
     setResetMsg(null)
-    setSaving(true)
+    setSavingAcceso(true)
     try {
       const updated = await api.put<ClienteConfig>(`/admin/clientes/${cfg.tenant_id}/config`, {
-        nombre: cfg.nombre,
         usuario: cfg.usuario,
-        user_nombre: cfg.user_nombre,
         password: newPwd.trim() || null,
-        envio_auto_habilitado: cfg.envio_auto_habilitado,
-        envio_tope_diario: cfg.envio_tope_diario,
-        envio_delay_seg: cfg.envio_delay_seg,
-        envio_hora_inicio: cfg.envio_hora_inicio,
-        envio_hora_fin: cfg.envio_hora_fin,
-        wa_templates: cfg.wa_templates.map((t) => t.trim()).filter(Boolean),
-        cadencia_dias: cfg.cadencia_dias,
-        cadencia_max_contactos: cfg.cadencia_max_contactos,
-        cadencia_dias_cancelar: cfg.cadencia_dias_cancelar,
       })
+      lastSavedRef.current = JSON.stringify(autoPayload(updated))
       setCfg(updated)
-      setClientes((cs) => cs.map((c) => (c.tenant_id === updated.tenant_id ? { ...c, nombre: updated.nombre } : c)))
       const cambioPass = newPwd.trim().length > 0
       setNewPwd('')
       setShowPwd(false)
-      setMsg({ ok: true, text: cambioPass ? 'Datos y contraseña guardados' : 'Datos guardados' })
+      setMsg({ ok: true, text: cambioPass ? 'Usuario y contraseña guardados' : 'Usuario guardado' })
     } catch (err: unknown) {
       setMsg({ ok: false, text: err instanceof Error ? err.message : 'Error al guardar' })
     } finally {
-      setSaving(false)
+      setSavingAcceso(false)
     }
   }
 
@@ -165,7 +200,7 @@ export default function AdminClientes() {
       {loading && <p className="text-sm text-muted text-center">Cargando…</p>}
 
       {cfg && (
-        <form onSubmit={save} className="space-y-6">
+        <div className="space-y-6">
           <div className="grid lg:grid-cols-2 gap-6 items-start">
           {/* Identidad / acceso */}
           <div className="bg-card border border-line rounded-2xl p-6 space-y-4">
@@ -221,6 +256,17 @@ export default function AdminClientes() {
               <p className="text-xs text-muted mt-1">
                 Escribí una nueva para cambiarla. Vacío = no se modifica. (No se puede ver la actual: está encriptada.)
               </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={guardarAcceso}
+                disabled={savingAcceso || cfg.user_id === null}
+                className={btnCls}
+              >
+                {savingAcceso ? 'Guardando…' : 'Guardar usuario y contraseña'}
+              </button>
+              {msg && <span className={`text-sm ${msg.ok ? 'text-emerald-500' : 'text-red-500'}`}>{msg.text}</span>}
             </div>
             <div>
               <button
@@ -373,13 +419,7 @@ export default function AdminClientes() {
           </div>
           </div>
 
-          {msg && <p className={`text-sm ${msg.ok ? 'text-emerald-500' : 'text-red-500'}`}>{msg.text}</p>}
-          <div>
-            <button type="submit" disabled={saving} className={btnCls}>
-              {saving ? 'Guardando...' : 'Guardar'}
-            </button>
-          </div>
-        </form>
+        </div>
       )}
 
       {/* ── Información del negocio del cliente (relevamiento) — misma fuente que

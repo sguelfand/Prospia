@@ -1,6 +1,7 @@
 import { ChevronDown, Download, Plus, Sparkles, Trash2, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
+import { useSaveStatus } from '../context/SaveStatus'
 
 // ── Información del negocio (relevamiento) ────────────────────────────────────
 // Renderiza el esquema del formulario de intake, ya cargado y editable. Lo usan:
@@ -60,9 +61,9 @@ export default function InfoNegocio({ basePath = '/me', defaultOpen = false }: {
   const [data, setData] = useState<InfoNegocioResp | null>(null)
   const [values, setValues] = useState<Record<string, unknown>>({})
   const [extra, setExtra] = useState<{ label: string; valor: string }[]>([])
-  const [saving, setSaving] = useState(false)
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [open, setOpen] = useState(defaultOpen) // arranca cerrada; se expande al tocar el título
+  const { beginSave, endSave } = useSaveStatus()
+  const lastSavedRef = useRef('')
 
   // ── "Agregar información": modal con IA que reparte texto libre en campos ──
   const [asistirOpen, setAsistirOpen] = useState(false)
@@ -79,6 +80,10 @@ export default function InfoNegocio({ basePath = '/me', defaultOpen = false }: {
         setData(d)
         setValues(d.values || {})
         setExtra(d.extra || [])
+        lastSavedRef.current = JSON.stringify({
+          values: d.values || {},
+          extra: (d.extra || []).filter((e) => e.label.trim() || e.valor.trim()),
+        })
       })
       .catch(() => setData(null))
   }, [basePath])
@@ -87,18 +92,24 @@ export default function InfoNegocio({ basePath = '/me', defaultOpen = false }: {
     setValues((prev) => ({ ...prev, [id]: v }))
   }
 
-  async function guardar() {
-    setSaving(true)
-    setMsg(null)
-    try {
-      await api.put(`${basePath}/info-negocio`, { values, extra: extra.filter((e) => e.label.trim() || e.valor.trim()) })
-      setMsg({ ok: true, text: 'Información guardada' })
-    } catch (err: unknown) {
-      setMsg({ ok: false, text: err instanceof Error ? err.message : 'Error al guardar' })
-    } finally {
-      setSaving(false)
-    }
-  }
+  // Auto-guardado con debounce ~1s. El estado lo muestra el indicador del header.
+  useEffect(() => {
+    if (!data) return
+    const payload = { values, extra: extra.filter((e) => e.label.trim() || e.valor.trim()) }
+    const cur = JSON.stringify(payload)
+    if (cur === lastSavedRef.current) return
+    const t = setTimeout(async () => {
+      beginSave()
+      try {
+        await api.put(`${basePath}/info-negocio`, payload)
+        lastSavedRef.current = cur
+        endSave(true)
+      } catch (err: unknown) {
+        endSave(false, err instanceof Error ? err.message : 'Error al guardar')
+      }
+    }, 1000)
+    return () => clearTimeout(t)
+  }, [values, extra, data, basePath, beginSave, endSave])
 
   function abrirAsistir() {
     setAsistirTexto('')
@@ -147,7 +158,7 @@ export default function InfoNegocio({ basePath = '/me', defaultOpen = false }: {
       setExtra((prev) => [...prev, { label: 'Información adicional', valor: propuesta.nota_libre }])
     }
     setAsistirOpen(false)
-    setMsg({ ok: true, text: 'Información agregada. Revisá y tocá "Guardar información".' })
+    // Los cambios se guardan solos (auto-save).
   }
 
   if (!data) return null
@@ -310,13 +321,6 @@ export default function InfoNegocio({ basePath = '/me', defaultOpen = false }: {
         >
           <Plus size={16} /> Agregar campo
         </button>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <button type="button" onClick={guardar} disabled={saving} className={btnCls}>
-          {saving ? 'Guardando...' : 'Guardar información'}
-        </button>
-        {msg && <span className={`text-sm ${msg.ok ? 'text-emerald-500' : 'text-red-500'}`}>{msg.text}</span>}
       </div>
 
       {/* ── Modal "Agregar información" (IA reparte el texto en los campos) ── */}
