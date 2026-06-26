@@ -3,8 +3,8 @@
 Corre en el backend de Prospia. Lee las trajectories de OpenClaw vía /fs, parsea
 los `model.completed` (traen `usage` con tokens reales + el teléfono de la charla
 en el runtime-context) y agrega el consumo **por número de teléfono** (conversación),
-por modelo y por día/mes. El costo es ESTIMADO (tokens reales × precios de
-referencia de Anthropic; myclaw no expone su precio → reporta 0).
+por modelo y por día/mes. El costo es el REAL que paga Sebi = tokens × rate-card
+MyClaw (10% off oficial; el jsonl reporta cost 0 porque el provider myclaw está en 0).
 
 - Oportunidades de mejora: FIJAS (tabla camila_oportunidad). Se acumulan y quedan
   abiertas hasta que se marcan resueltas; NO cambian en cada recálculo.
@@ -24,22 +24,27 @@ import requests
 _UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
 _BA = timezone(timedelta(hours=-3))
 
-# Precios estimados USD/token [input, output, cacheRead, cacheWrite]. myclaw
-# reporta costo 0, así que estimamos con precios de referencia de Anthropic.
+# Precio REAL USD/token [input, output, cacheRead, cacheWrite] = rate-card MyClaw
+# (10% off el oficial; lo que Sebi efectivamente paga). El jsonl reporta cost 0
+# porque el provider myclaw está configurado en 0. Tabla en memoria
+# reference_myclaw_pricing. ($/M) / 1e6:
 _PRICES = {
-    "claude-sonnet-4.6": (3e-6, 15e-6, 0.3e-6, 3.75e-6),
-    "claude-opus-4.6":   (15e-6, 75e-6, 1.5e-6, 18.75e-6),
-    "claude-haiku":      (0.8e-6, 4e-6, 0.08e-6, 1e-6),
+    "sonnet": (2.70e-6, 13.50e-6, 0.27e-6, 3.38e-6),   # sonnet 4.6 / 4.5
+    "opus":   (4.50e-6, 22.50e-6, 0.45e-6, 5.63e-6),   # opus 4.5 / 4.6 / 4.7 / 4.8
+    "gpt":    (2.25e-6, 13.50e-6, 0.23e-6, 0.0),        # gpt-5.4 (sin cache write)
+    "haiku":  (0.90e-6,  4.50e-6, 0.90e-6, 1.13e-6),   # ⚠️ cacheRead haiku NO descontado
 }
-_PRICE_DEFAULT = _PRICES["claude-sonnet-4.6"]
+_PRICE_DEFAULT = _PRICES["sonnet"]
 
 
 def _price_for(model_id: str):
     m = (model_id or "").lower()
     if "opus" in m:
-        return _PRICES["claude-opus-4.6"]
+        return _PRICES["opus"]
     if "haiku" in m:
-        return _PRICES["claude-haiku"]
+        return _PRICES["haiku"]
+    if "gpt" in m:
+        return _PRICES["gpt"]
     return _PRICE_DEFAULT
 
 
