@@ -106,6 +106,13 @@ export default function ClienteViewScreen({ route, navigation }: ClienteViewProp
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
+  // Recargar al volver del detalle (ej. tras Bloquear/Desbloquear un lead) para
+  // que el badge "Bloqueado" del listado quede al día sin pull-to-refresh.
+  useEffect(() => {
+    const unsub = navigation.addListener("focus", () => { load(); });
+    return unsub;
+  }, [navigation, load]);
+
   const aplicarFiltro = async (f: ProspectsFiltro) => {
     setFiltro(f);
     setFiltroVisible(false);
@@ -488,7 +495,11 @@ function MirrorCard({ item, onPress }: { item: EtiguelMirrorItem; onPress: () =>
     <TouchableOpacity style={styles.card} onPress={onPress}>
       <View style={styles.cardRow}>
         <Text style={styles.cardTitle} numberOfLines={1}>{item.nombre ?? "(sin nombre)"}</Text>
-        {item.estado ? <Text style={styles.leadEstado} numberOfLines={2}>{item.estado}</Text> : null}
+        {item.bloqueado ? (
+          <Text style={styles.leadBloqueado} numberOfLines={1}>Bloqueado</Text>
+        ) : item.estado ? (
+          <Text style={styles.leadEstado} numberOfLines={2}>{item.estado}</Text>
+        ) : null}
       </View>
       <View style={styles.cardMeta}>
         {item.telefono ? <IconText name="phone" text={item.telefono} /> : null}
@@ -671,6 +682,7 @@ const styles = StyleSheet.create({
   verMasText: { color: colors.textDim, fontSize: 12, fontWeight: "600" },
 
   leadEstado: { color: colors.primary, fontSize: 11, fontWeight: "700", borderColor: colors.primary, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, flexShrink: 0, maxWidth: "52%", textAlign: "right" },
+  leadBloqueado: { color: colors.red, fontSize: 11, fontWeight: "800", borderColor: colors.red, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, flexShrink: 0, textAlign: "right", backgroundColor: colors.red + "1A" },
 
   collapsible: { marginBottom: 14 },
   collapsibleHeader: { flexDirection: "row", alignItems: "center", paddingVertical: 10, borderBottomColor: colors.border, borderBottomWidth: 1, marginBottom: 10 },
