@@ -23,6 +23,15 @@ export default function EtiguelMirrorDetailScreen({ route, navigation }: Etiguel
     navigation.setOptions({ title: item.nombre ?? "Conversación" });
   }, [navigation, item.nombre]);
 
+  // El detalle vive en un Drawer navigator → reusa UNA sola instancia del screen
+  // (al navegar a otro lead solo cambian los params, no se remonta). Sin esto, el
+  // estado `bloqueado` se quedaba con el valor del lead anterior y mostraba
+  // "Desbloquear" en contactos que no estaban bloqueados. Re-sincronizamos por item.
+  useEffect(() => {
+    setBloqueado(!!item.bloqueado);
+    setBloqueando(false);
+  }, [item.id, item.bloqueado]);
+
   const toggleBloqueo = useCallback(() => {
     if (!token || bloqueando) return;
     const nombre = item.nombre ?? item.telefono ?? "este contacto";
