@@ -408,11 +408,21 @@ def _persist_and_alert(results: list[tuple]):
                 ahora_malo = estado in malo
                 antes_malo = prev in malo
                 if ahora_malo and not antes_malo and prev != "unknown":
-                    alertas.append(("servicio_caido",
-                                    f"🔴 {entry['nombre']} caído"))
+                    # Un warn en checks alerta_warn (memoria/contexto) NO es una
+                    # caída: es un aviso preventivo ("pesado", "se está llenando").
+                    # Sólo un down real es "caído" — no confundir a Sebi.
+                    if estado == "warn":
+                        msg = f"🟡 {entry['nombre']}: atención"
+                        if detalle:
+                            msg += f" ({detalle})"
+                    else:
+                        msg = f"🔴 {entry['nombre']} caído"
+                    alertas.append(("servicio_caido", msg))
                 elif estado == "up" and antes_malo:
+                    # Si venía de warn (alerta_warn) "normalizó"; de down real "se recuperó".
+                    verbo = "normalizó" if prev == "warn" else "se recuperó"
                     alertas.append(("servicio_recuperado",
-                                    f"🟢 {entry['nombre']} se recuperó"))
+                                    f"🟢 {entry['nombre']} {verbo}"))
         db.commit()
     finally:
         if db:
