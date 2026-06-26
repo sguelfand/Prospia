@@ -44,6 +44,18 @@
   .progress-fill { height:100%; width:0%; background:var(--amber); border-radius:999px; transition:width .25s ease; }
   .progress-label { font-family:var(--font-mono); font-size:12px; color:var(--fog-muted); white-space:nowrap; }
 
+  /* ── Indicador de autoguardado (arriba a la derecha, junto al %) ── */
+  .save-status {
+    display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
+    font-size:12px; color:var(--fog-muted); min-width:96px;
+    border-left:1px solid rgba(255,255,255,.10); padding-left:14px;
+  }
+  .save-status.ok { color:var(--success); }
+  .save-status.err { color:var(--danger); cursor:pointer; }
+  .save-status svg { width:13px; height:13px; flex:none; }
+  .save-status.saving svg { animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
   main { max-width:780px; margin:0 auto; padding:28px 24px 80px; }
 
   .intro { font-size:15px; color:var(--ink-soft); line-height:1.6; margin:0 0 24px; }
@@ -182,6 +194,7 @@
     <div class="progress-inner">
       <div class="progress-bar"><div class="progress-fill" id="progFill"></div></div>
       <div class="progress-label" id="progLabel">0%</div>
+      <div class="save-status" id="saveStatus"></div>
     </div>
   </div>
 
@@ -211,9 +224,57 @@
     if (saved && saved.values) state.values = saved.values;
   } catch (e) {}
 
+  // Copia local instantánea (respaldo offline). La fuente real vive en el server.
   function persist() {
     try { localStorage.setItem(LS_KEY, JSON.stringify({ values: state.values })); } catch (e) {}
   }
+
+  // ── Indicador de autoguardado (mismo patrón que "Información del negocio") ──
+  const ICON_SPIN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.2-8.5"/></svg>';
+  const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+  const ICON_ALERT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+  function setSaveStatus(estado, when) {
+    const box = document.getElementById('saveStatus');
+    if (!box) return;
+    box.className = 'save-status ' + (estado === 'saved' ? 'ok' : estado === 'error' ? 'err' : 'saving');
+    box.onclick = null;
+    if (estado === 'saving') { box.innerHTML = ICON_SPIN + 'Guardando…'; }
+    else if (estado === 'saved') {
+      const hora = new Date(when || Date.now()).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+      box.innerHTML = ICON_CHECK + 'Guardado · ' + hora;
+    } else if (estado === 'error') {
+      box.innerHTML = ICON_ALERT + 'Error — reintentar';
+      box.onclick = () => flushSave(false);
+    } else { box.innerHTML = ''; }
+  }
+
+  // ── Autoguardado: debounce + flush al salir (desmontaje/recarga) ──
+  let lastSavedSerialized = null;
+  let saveTimer = null;
+  function serializeDraft() { return JSON.stringify({ values: state.values, extra: [] }); }
+  function scheduleSave() {
+    persist();
+    const s = serializeDraft();
+    if (s === lastSavedSerialized) return;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => flushSave(false), 1000);
+  }
+  function flushSave(keepalive) {
+    const s = serializeDraft();
+    if (s === lastSavedSerialized) return;
+    lastSavedSerialized = s; // optimista: evita reguardar lo mismo
+    setSaveStatus('saving');
+    fetch(API + '/public/intake/' + encodeURIComponent(SLUG) + '/draft', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: s,
+      keepalive: !!keepalive,
+    })
+      .then(r => { if (!r.ok) throw new Error('Error ' + r.status); return r.json(); })
+      .then(() => setSaveStatus('saved', Date.now()))
+      .catch(() => { lastSavedSerialized = null; setSaveStatus('error'); }); // permitir reintento
+  }
+  window.addEventListener('beforeunload', () => flushSave(true));
 
   const el = (tag, attrs, html) => {
     const n = document.createElement(tag);
@@ -240,7 +301,7 @@
     document.getElementById('progLabel').textContent = pct + '%';
   }
 
-  function setVal(id, v) { state.values[id] = v; persist(); updateProgress(); }
+  function setVal(id, v) { state.values[id] = v; updateProgress(); scheduleSave(); }
 
   function renderField(c) {
     const wrap = el('div', { class: 'field' });
@@ -290,23 +351,50 @@
       const list = el('ul', { class: 'file-list' });
       const refresh = () => {
         list.innerHTML = '';
-        (state.files[c.id] || []).forEach((f, idx) => {
+        (state.files[c.id] || []).forEach((f) => {
           const li = el('li');
-          li.appendChild(document.createTextNode('📎 ' + f.name + ' (' + Math.round(f.size / 1024) + ' KB)'));
-          const rm = el('span', { class: 'rm' }, '✕');
-          rm.addEventListener('click', () => { state.files[c.id].splice(idx, 1); refresh(); });
-          li.appendChild(rm);
+          const sz = f.size ? ' (' + Math.round(f.size / 1024) + ' KB)' : '';
+          const est = f.uploading ? ' · subiendo…' : (f.error ? ' · error, reintentá' : '');
+          li.appendChild(document.createTextNode('📎 ' + f.name + sz + est));
+          if (!f.uploading) {
+            const rm = el('span', { class: 'rm' }, '✕');
+            rm.addEventListener('click', () => removeFile(c.id, f));
+            li.appendChild(rm);
+          }
           list.appendChild(li);
         });
       };
-      inp.addEventListener('change', () => {
-        state.files[c.id] = (state.files[c.id] || []).concat(Array.from(inp.files));
-        inp.value = '';
+      // Borrar: si nunca llegó al server, solo lo saco de la lista; si tiene id, lo borro en el server.
+      const removeFile = (campo, f) => {
+        const arr = state.files[campo] || [];
+        const i = arr.indexOf(f);
+        if (i >= 0) arr.splice(i, 1);
         refresh();
+        if (f.id) {
+          fetch(API + '/public/intake/' + encodeURIComponent(SLUG) + '/archivo/' + encodeURIComponent(f.id), { method: 'DELETE' }).catch(() => {});
+        }
+      };
+      // Subir al instante apenas se adjunta (no hay botón de envío).
+      const uploadFile = (campo, file) => {
+        const entry = { name: file.name, size: file.size, uploading: true };
+        state.files[campo] = (state.files[campo] || []).concat([entry]);
+        refresh();
+        const fd = new FormData();
+        fd.append('campo', campo);
+        fd.append('archivo', file);
+        fetch(API + '/public/intake/' + encodeURIComponent(SLUG) + '/archivo', { method: 'POST', body: fd })
+          .then(r => { if (!r.ok) throw new Error('Error ' + r.status); return r.json(); })
+          .then(d => { entry.id = d.id; entry.uploading = false; entry.error = false; refresh(); })
+          .catch(() => { entry.uploading = false; entry.error = true; refresh(); });
+      };
+      inp.addEventListener('change', () => {
+        Array.from(inp.files).forEach(f => uploadFile(c.id, f));
+        inp.value = '';
       });
       row.appendChild(btn);
       wrap.appendChild(row);
       wrap.appendChild(list);
+      refresh(); // muestra los archivos ya subidos (restaurados del server)
     } else {
       const type = ({ email:'email', tel:'tel', url:'url', number:'number' })[c.tipo] || 'text';
       const inp = el('input', { type, id: 'f_' + c.id });
@@ -338,79 +426,11 @@
       main.appendChild(sec);
     });
 
-    const row = el('div', { class: 'submit-row' });
-    const btn = el('button', { class: 'cta', id: 'submitBtn' }, 'Enviar relevamiento');
-    btn.addEventListener('click', submit);
-    row.appendChild(btn);
-    row.appendChild(el('span', { class: 'save-note' }, '✓ Guardado automático en este dispositivo'));
-    main.appendChild(row);
-    main.appendChild(el('div', { class: 'err', id: 'errBox', style: 'display:none' }));
+    main.appendChild(el('p', { class: 'save-note', style: 'margin-top:10px' },
+      'No hay botón para enviar: todo se guarda solo a medida que completás. Podés cerrar y volver cuando quieras — incluso desde otro dispositivo.'));
     updateProgress();
-  }
-
-  function missingRequired() {
-    const miss = [];
-    SECCIONES.forEach(s => s.campos.forEach(c => {
-      if (!c.oblig || c.tipo === 'archivo') return;
-      const v = state.values[c.id];
-      const empty = Array.isArray(v) ? v.length === 0 : (v == null || String(v).trim() === '');
-      if (empty) miss.push(c.label);
-    }));
-    return miss;
-  }
-
-  async function submit() {
-    const errBox = document.getElementById('errBox');
-    errBox.style.display = 'none';
-    const miss = missingRequired();
-    if (miss.length) {
-      errBox.style.display = 'block';
-      errBox.textContent = 'Faltan campos obligatorios: ' + miss.slice(0, 6).join(', ') + (miss.length > 6 ? '…' : '');
-      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-      return;
-    }
-    const btn = document.getElementById('submitBtn');
-    btn.disabled = true; btn.textContent = 'Enviando…';
-
-    const fd = new FormData();
-    fd.append('payload', JSON.stringify({ values: state.values, extra: [], meta: { slug: SLUG } }));
-    // Cada archivo viaja con su campo en el nombre: "<campo>::<nombre real>".
-    Object.keys(state.files).forEach(campo => {
-      (state.files[campo] || []).forEach(f => {
-        fd.append('archivos', new File([f], campo + '::' + f.name, { type: f.type }));
-      });
-    });
-
-    try {
-      const res = await fetch(API + '/public/intake/' + encodeURIComponent(SLUG), { method: 'POST', body: fd });
-      if (!res.ok) {
-        const e = await res.json().catch(() => ({}));
-        throw new Error(e.detail || ('Error ' + res.status));
-      }
-      localStorage.removeItem(LS_KEY);
-      showDone();
-    } catch (e) {
-      btn.disabled = false; btn.textContent = 'Enviar relevamiento';
-      errBox.style.display = 'block';
-      errBox.textContent = 'No se pudo enviar: ' + e.message + '. Probá de nuevo en un momento.';
-    }
-  }
-
-  function showDone() {
-    document.querySelector('.progress-wrap').style.display = 'none';
-    const main = document.getElementById('main');
-    main.innerHTML =
-      '<div class="done">' +
-      '<svg class="iso" viewBox="0 0 100 100"><g stroke="#43577B" fill="#43577B">' +
-      '<line x1="50" y1="52" x2="22" y2="24" stroke-width="2.5"/><line x1="50" y1="52" x2="82" y2="22" stroke-width="2.5"/>' +
-      '<line x1="50" y1="52" x2="76" y2="78" stroke-width="2.5"/><circle cx="22" cy="24" r="5.5" stroke="none"/>' +
-      '<circle cx="82" cy="22" r="5.5" stroke="none"/><circle cx="76" cy="78" r="5.5" stroke="none"/>' +
-      '<circle cx="24" cy="74" r="5.5" stroke="none"/><circle cx="50" cy="52" r="13" stroke="none" fill="#F5B23D"/></g></svg>' +
-      '<h2>¡Listo, recibimos todo! 🎉</h2>' +
-      '<p>Gracias por completar el relevamiento. Lo vamos a analizar y nos ponemos en contacto para los próximos pasos. ' +
-      'Si querés sumar algo más, escribinos cuando quieras.</p>' +
-      '</div>';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Baseline: lo recién cargado ya está "guardado" (no dispara un PUT al abrir).
+    lastSavedSerialized = serializeDraft();
   }
 
   async function boot() {
@@ -436,6 +456,12 @@
       if (metaRes.ok) {
         const meta = await metaRes.json();
         document.getElementById('brandSub').textContent = 'Relevamiento · ' + (meta.nombre || SLUG);
+        // El server es la fuente de verdad: si ya hay borrador, lo usamos (permite
+        // retomar desde otro dispositivo). Si no, queda lo de localStorage.
+        if (meta.values && Object.keys(meta.values).length) state.values = meta.values;
+        (meta.archivos || []).forEach(a => {
+          (state.files[a.campo] = state.files[a.campo] || []).push({ id: a.id, name: a.nombre_original, size: a.size });
+        });
       }
       render();
     } catch (e) {
