@@ -177,6 +177,16 @@ export interface EtiguelMirrorItem {
   prox_contacto: string | null; // 'YYYY-MM-DD' próximo contacto (cadencia/callback)
   ultima_actividad: string;
   cant_mensajes: number;
+  bloqueado: boolean; // en lista negra: Camila no lo escucha ni le responde
+}
+
+export interface BloquearResult {
+  telefono: string;
+  digits: string;
+  bloqueado: boolean;
+  webhook_ok: boolean;
+  blacklist_total: number | null;
+  webhook_error: string | null;
 }
 
 export type EstadoError = "nuevo" | "reportado" | "fixed";
@@ -329,6 +339,25 @@ export const responderConsulta = (token: string, id: number, respuesta: string) 
 export const eliminarConsultas = (token: string, ids: number[]) =>
   request<void>("/admin/consultas/eliminar", { method: "POST", body: JSON.stringify({ ids }) }, token);
 
+// ── Inicializar prueba: borra todo rastro de un número de prueba del cliente ───
+// Etiguel y los tenants usan endpoints distintos; el campo del webhook también
+// difiere (webhook_ok vs webhook_estado) → la screen normaliza al leer.
+export interface ResetNumeroPruebaResult {
+  db_borrado: { prospects?: number; mensajes?: number; mirrors?: number };
+  webhook_ok?: boolean;            // Etiguel
+  webhook_estado?: string;         // tenants: ok | error | no_conectado
+  webhook_error?: string | null;
+}
+
+export const resetNumeroPrueba = (token: string, tenantId: number, telefono: string) =>
+  request<ResetNumeroPruebaResult>(
+    tenantId === ETIGUEL_TENANT_ID
+      ? "/admin/etiguel/reset-numero-prueba"
+      : `/admin/clientes/${tenantId}/reset-numero-prueba`,
+    { method: "POST", body: JSON.stringify({ telefono }) },
+    token,
+  );
+
 // ── Monitoreo de servicios ───────────────────────────────────────────────────
 export type EstadoServicio = "up" | "down" | "warn" | "unknown";
 
@@ -423,6 +452,14 @@ export const getEtiguelMirror = (token: string) =>
 
 export const getEtiguelMirrorMensajes = (token: string, mirrorId: number) =>
   request<MensajeRow[]>(`/admin/etiguel/mirror/${mirrorId}/mensajes`, {}, token);
+
+// Lista negra: bloquear/desbloquear un lead/prospect de Etiguel. Camila deja de
+// escucharlo y responderle, y no se lo vuelve a contactar.
+export const bloquearEtiguelMirror = (token: string, mirrorId: number) =>
+  request<BloquearResult>(`/admin/etiguel/mirror/${mirrorId}/bloquear`, { method: "POST" }, token);
+
+export const desbloquearEtiguelMirror = (token: string, mirrorId: number) =>
+  request<BloquearResult>(`/admin/etiguel/mirror/${mirrorId}/desbloquear`, { method: "POST" }, token);
 
 export function getProspectsCliente(
   token: string,

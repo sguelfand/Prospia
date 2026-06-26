@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
+  Alert,
   FlatList,
   Modal,
   RefreshControl,
@@ -22,6 +23,7 @@ import {
   getFiltrosCliente,
   getProspectsCliente,
   getPushPref,
+  resetNumeroPrueba,
   setPushPref,
 } from "../api";
 import { useAuth } from "../auth";
@@ -140,6 +142,42 @@ export default function ClienteViewScreen({ route, navigation }: ClienteViewProp
   const mirrorLeads = mirror.filter((m) => m.tipo === "lead");
   const mirrorProspects = mirror.filter((m) => m.tipo === "prospect");
 
+  // Inicializar prueba: borra todo rastro de un número de prueba para este cliente
+  // (app + memoria del bot si está conectado). Usa el número de prueba estándar;
+  // para otro número, está el campo editable en la web (AdminClientes).
+  const TELEFONO_PRUEBA = "+5491123146373";
+  async function inicializarPrueba() {
+    if (!token) return;
+    Alert.alert(
+      "Inicializar prueba",
+      `Borra todo rastro del número ${TELEFONO_PRUEBA} para ${nombre} (app + memoria del bot si está conectado).`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Borrar",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const r = await resetNumeroPrueba(token, tenantId, TELEFONO_PRUEBA);
+              const db = r.db_borrado || {};
+              const prospects = db.prospects ?? db.mirrors ?? 0;
+              const mensajes = db.mensajes ?? 0;
+              let bot: string;
+              if (r.webhook_estado === "no_conectado")
+                bot = "Bot no conectado: se limpió solo la app.";
+              else if (r.webhook_ok === false || r.webhook_estado === "error")
+                bot = `El bot NO limpió su memoria (${r.webhook_error ?? "error"}).`;
+              else bot = "Memoria del bot limpiada.";
+              Alert.alert("Listo", `App: ${prospects} prospects, ${mensajes} mensajes.\n${bot}`);
+            } catch (e) {
+              Alert.alert("Error", e instanceof Error ? e.message : "No se pudo inicializar la prueba.");
+            }
+          },
+        },
+      ],
+    );
+  }
+
   const header = (
     <View>
       {/* ── Notificaciones de este cliente (#44): botón → config detallada ── */}
@@ -151,6 +189,15 @@ export default function ClienteViewScreen({ route, navigation }: ClienteViewProp
         <View style={{ flexDirection: "row", alignItems: "center" }}>
           <Icon name="bell" size={16} color={colors.text} />
           <Text style={[styles.pushLabel, { marginLeft: 6 }]}>Notificaciones de este cliente</Text>
+        </View>
+        <Text style={styles.pushChevron}>›</Text>
+      </TouchableOpacity>
+
+      {/* ── Inicializar prueba (per-cliente): borra todo del número de prueba ── */}
+      <TouchableOpacity style={styles.pushRow} onPress={inicializarPrueba} activeOpacity={0.7}>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <Icon name="refresh" size={16} color={colors.text} />
+          <Text style={[styles.pushLabel, { marginLeft: 6 }]}>Inicializar prueba</Text>
         </View>
         <Text style={styles.pushChevron}>›</Text>
       </TouchableOpacity>
