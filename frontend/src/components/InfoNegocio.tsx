@@ -1,6 +1,7 @@
 import { ChevronDown, Download, Plus, Sparkles, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
+import { useAutoSave } from '../hooks/useAutoSave'
 
 // ── Información del negocio (relevamiento) ────────────────────────────────────
 // Renderiza el esquema del formulario de intake, ya cargado y editable. Lo usan:
@@ -60,9 +61,14 @@ export default function InfoNegocio({ basePath = '/me', defaultOpen = false }: {
   const [data, setData] = useState<InfoNegocioResp | null>(null)
   const [values, setValues] = useState<Record<string, unknown>>({})
   const [extra, setExtra] = useState<{ label: string; valor: string }[]>([])
-  const [saving, setSaving] = useState(false)
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [open, setOpen] = useState(defaultOpen) // arranca cerrada; se expande al tocar el título
+
+  // Auto-guardado (debounce + flush al salir). El estado lo muestra el header.
+  useAutoSave({
+    ready: !!data,
+    payload: { values, extra: extra.filter((e) => e.label.trim() || e.valor.trim()) },
+    path: `${basePath}/info-negocio`,
+  })
 
   // ── "Agregar información": modal con IA que reparte texto libre en campos ──
   const [asistirOpen, setAsistirOpen] = useState(false)
@@ -85,19 +91,6 @@ export default function InfoNegocio({ basePath = '/me', defaultOpen = false }: {
 
   function setVal(id: string, v: unknown) {
     setValues((prev) => ({ ...prev, [id]: v }))
-  }
-
-  async function guardar() {
-    setSaving(true)
-    setMsg(null)
-    try {
-      await api.put(`${basePath}/info-negocio`, { values, extra: extra.filter((e) => e.label.trim() || e.valor.trim()) })
-      setMsg({ ok: true, text: 'Información guardada' })
-    } catch (err: unknown) {
-      setMsg({ ok: false, text: err instanceof Error ? err.message : 'Error al guardar' })
-    } finally {
-      setSaving(false)
-    }
   }
 
   function abrirAsistir() {
@@ -147,7 +140,7 @@ export default function InfoNegocio({ basePath = '/me', defaultOpen = false }: {
       setExtra((prev) => [...prev, { label: 'Información adicional', valor: propuesta.nota_libre }])
     }
     setAsistirOpen(false)
-    setMsg({ ok: true, text: 'Información agregada. Revisá y tocá "Guardar información".' })
+    // Los cambios se guardan solos (auto-save).
   }
 
   if (!data) return null
@@ -310,13 +303,6 @@ export default function InfoNegocio({ basePath = '/me', defaultOpen = false }: {
         >
           <Plus size={16} /> Agregar campo
         </button>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <button type="button" onClick={guardar} disabled={saving} className={btnCls}>
-          {saving ? 'Guardando...' : 'Guardar información'}
-        </button>
-        {msg && <span className={`text-sm ${msg.ok ? 'text-emerald-500' : 'text-red-500'}`}>{msg.text}</span>}
       </div>
 
       {/* ── Modal "Agregar información" (IA reparte el texto en los campos) ── */}
