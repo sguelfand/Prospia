@@ -19,12 +19,21 @@ EVENTOS_PUSH: list[tuple[str, str]] = [
     ("consulta_camila", "Consulta de Camila (no sabe qué responder)"),
     ("standby", "Pendiente en espera (standby)"),
     ("cola_terminada", "Cola de pendientes terminada"),
+    ("claude_termino", "Claude terminó una tarea (Prospia)"),
     ("necesita_autorizacion", "Necesita tu autorización"),
     ("servicio_caido", "Servicio caído (monitoreo)"),
     ("servicio_recuperado", "Servicio recuperado (monitoreo)"),
     ("tokens_oportunidad", "Oportunidad de mejora de consumo (tokens)"),
 ]
 EVENTOS_PUSH_KEYS = [k for k, _ in EVENTOS_PUSH]
+
+# Eventos OPT-IN: arrancan APAGADOS y solo llegan a los devices que los prenden.
+# El resto de EVENTOS_PUSH es opt-out (sin fila en push_event_mutes = activado).
+# Para estos, la fila en push_event_mutes se reinterpreta al revés: PRESENCIA de
+# fila = ACTIVADO (suscripto). Sin fila = no recibe. (Ver _tokens_para_evento y
+# los endpoints /notif-prefs.) claude_termino avisa al terminar CUALQUIER tarea
+# de Prospia; default OFF para no inundar a quien no lo quiera.
+EVENTOS_PUSH_DEFAULT_OFF = {"claude_termino"}
 
 # Eventos configurables POR CLIENTE (#44) + su default cuando no hay fila.
 # mensaje_entrante arranca OFF para no inundar; el resto ON.
@@ -58,12 +67,16 @@ def _tokens_para_evento(db, evento: str) -> list[str]:
     from app.models.device import Device
     from app.models.push_event_mute import PushEventMute
 
-    muteados = {
+    con_fila = {
         t for (t,) in db.query(PushEventMute.expo_token)
         .filter(PushEventMute.evento == evento)
         .all()
     }
-    return [d.expo_token for d in db.query(Device).all() if d.expo_token not in muteados]
+    if evento in EVENTOS_PUSH_DEFAULT_OFF:
+        # opt-in: la fila marca "suscripto" → solo esos devices reciben.
+        return [d.expo_token for d in db.query(Device).all() if d.expo_token in con_fila]
+    # opt-out (default): la fila marca "silenciado".
+    return [d.expo_token for d in db.query(Device).all() if d.expo_token not in con_fila]
 
 
 def _enviar(tokens: list[str], title: str, body: str, data: dict) -> None:

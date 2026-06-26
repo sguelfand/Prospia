@@ -1411,15 +1411,21 @@ def listar_devices(db: Session = Depends(get_db)):
 
 @router.get("/notif-prefs", response_model=NotifPrefsOut)
 def get_notif_prefs(expo_token: str = Query(...), db: Session = Depends(get_db)):
-    """Estado de cada evento de push para un device. Sin fila de mute = activado."""
-    muteados = {
+    """Estado de cada evento de push para un device. Para los opt-out (la mayoría):
+    sin fila = activado. Para los opt-in (EVENTOS_PUSH_DEFAULT_OFF): con fila =
+    activado, sin fila = apagado."""
+    con_fila = {
         e for (e,) in db.query(PushEventMute.evento)
         .filter(PushEventMute.expo_token == expo_token)
         .all()
     }
     device = db.query(Device).filter(Device.expo_token == expo_token).first()
     eventos = [
-        NotifEvento(evento=k, label=label, enabled=k not in muteados)
+        NotifEvento(
+            evento=k,
+            label=label,
+            enabled=(k in con_fila) if k in push.EVENTOS_PUSH_DEFAULT_OFF else (k not in con_fila),
+        )
         for k, label in push.EVENTOS_PUSH
     ]
     return NotifPrefsOut(expo_token=expo_token, platform=device.platform if device else None, eventos=eventos)
@@ -1427,8 +1433,9 @@ def get_notif_prefs(expo_token: str = Query(...), db: Session = Depends(get_db))
 
 @router.put("/notif-prefs", response_model=NotifPrefsOut)
 def set_notif_pref(body: NotifPrefUpdate, db: Session = Depends(get_db)):
-    """Activa/desactiva un evento de push para un device. enabled=false crea el
-    mute; enabled=true lo borra. Idempotente."""
+    """Activa/desactiva un evento de push para un device. Idempotente. Para los
+    opt-out (mayoría): la fila es el mute (enabled=false la crea). Para los opt-in
+    (EVENTOS_PUSH_DEFAULT_OFF): la fila es la suscripción (enabled=true la crea)."""
     if body.evento not in push.EVENTOS_PUSH_KEYS:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Evento desconocido")
     existente = (
@@ -1436,13 +1443,16 @@ def set_notif_pref(body: NotifPrefUpdate, db: Session = Depends(get_db)):
         .filter(PushEventMute.expo_token == body.expo_token, PushEventMute.evento == body.evento)
         .first()
     )
-    if body.enabled:
-        if existente:
-            db.delete(existente)
-            db.commit()
-    else:
+    # opt-in → la fila significa "activado"; opt-out → significa "silenciado".
+    default_off = body.evento in push.EVENTOS_PUSH_DEFAULT_OFF
+    quiere_fila = body.enabled if default_off else (not body.enabled)
+    if quiere_fila:
         if not existente:
             db.add(PushEventMute(expo_token=body.expo_token, evento=body.evento))
+            db.commit()
+    else:
+        if existente:
+            db.delete(existente)
             db.commit()
     return get_notif_prefs(expo_token=body.expo_token, db=db)
 
