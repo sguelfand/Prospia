@@ -307,6 +307,7 @@ export interface Aviso {
   tipo: string;
   title: string;
   body: string;
+  detalle?: string | null; // conclusión completa (botón "Detalle")
   tenant_id: number | null;
   cliente: string | null;
   prospect_id: number | null;
