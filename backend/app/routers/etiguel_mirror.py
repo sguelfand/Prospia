@@ -169,6 +169,7 @@ def ingest_claude_termino(
             "claude_termino",
             body.title[:120] or "Claude terminó una tarea",
             body.body[:300] or "",
+            detalle=(body.detalle or None),
         )
     except Exception:
         pass

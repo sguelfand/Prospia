@@ -107,14 +107,16 @@ def _enviar(tokens: list[str], title: str, body: str, data: dict) -> None:
         print(f"[PUSH] error enviando: {type(e).__name__}: {e}")
 
 
-def _log_aviso(db, tipo: str, title: str, body: str, tenant_id=None, cliente=None, prospect_id=None) -> int | None:
+def _log_aviso(db, tipo: str, title: str, body: str, tenant_id=None, cliente=None, prospect_id=None, detalle=None) -> int | None:
     """Persiste el push como Aviso (#42) para que quede en el historial de la app.
     Devuelve el id del aviso creado (para deep-link desde la push) o None si falla.
+    `detalle` = conclusión completa (texto largo) que se ve al tocar "Detalle".
     Best-effort: si falla, no rompe el envío."""
     from app.models.aviso import Aviso
     try:
         av = Aviso(tipo=tipo, title=title[:160], body=(body or "")[:2000],
-                   tenant_id=tenant_id, cliente=cliente, prospect_id=prospect_id)
+                   tenant_id=tenant_id, cliente=cliente, prospect_id=prospect_id,
+                   detalle=(detalle or None) and detalle[:8000])
         db.add(av)
         db.commit()
         return av.id
@@ -295,13 +297,13 @@ def notificar_aviso_async(title: str, body: str, data: dict | None = None) -> No
     threading.Thread(target=_notificar_aviso, args=(title, body, data or {}), daemon=True).start()
 
 
-def _notificar_global(evento: str, title: str, body: str, data: dict) -> None:
+def _notificar_global(evento: str, title: str, body: str, data: dict, detalle=None) -> None:
     from app.database import SessionLocal
 
     db = SessionLocal()
     try:
         tokens = _tokens_para_evento(db, evento)
-        aviso_id = _log_aviso(db, evento, title, body) if tokens else None
+        aviso_id = _log_aviso(db, evento, title, body, detalle=detalle) if tokens else None
         _enviar(tokens, title, body, {**data, "evento": evento, "aviso_id": aviso_id})
     except Exception as e:
         print(f"[PUSH] error armando push global {evento}: {type(e).__name__}: {e}")
@@ -309,26 +311,27 @@ def _notificar_global(evento: str, title: str, body: str, data: dict) -> None:
         db.close()
 
 
-def notificar_global(evento: str, title: str, body: str, data: dict | None = None) -> int:
+def notificar_global(evento: str, title: str, body: str, data: dict | None = None, detalle=None) -> int:
     """Push de un evento global (#38): standby / cola_terminada /
-    necesita_autorizacion. Respeta el toggle por dispositivo. SINCRÓNICO (lo
-    llama Claude desde un script o el endpoint /admin/notify). Devuelve a cuántos
+    necesita_autorizacion / claude_termino. Respeta el toggle por dispositivo.
+    `detalle` = conclusión completa para la pantalla Avisos. SINCRÓNICO (lo llama
+    Claude desde un script o el endpoint /admin/notify). Devuelve a cuántos
     devices se mandó."""
     from app.database import SessionLocal
 
     db = SessionLocal()
     try:
         tokens = _tokens_para_evento(db, evento)
-        aviso_id = _log_aviso(db, evento, title, body) if tokens else None
+        aviso_id = _log_aviso(db, evento, title, body, detalle=detalle) if tokens else None
         _enviar(tokens, title, body, {**(data or {}), "evento": evento, "aviso_id": aviso_id})
         return len(tokens)
     finally:
         db.close()
 
 
-def notificar_global_async(evento: str, title: str, body: str, data: dict | None = None) -> None:
+def notificar_global_async(evento: str, title: str, body: str, data: dict | None = None, detalle=None) -> None:
     """Versión background de notificar_global (para disparar desde un request)."""
-    threading.Thread(target=_notificar_global, args=(evento, title, body, data or {}), daemon=True).start()
+    threading.Thread(target=_notificar_global, args=(evento, title, body, data or {}, detalle), daemon=True).start()
 
 
 def enviar_prueba() -> int:

@@ -217,6 +217,7 @@ class AvisoIn(BaseModel):
     title: str
     body: str
     categoria: str | None = None
+    detalle: str | None = None  # conclusión completa (texto largo), opcional
 
 
 class AgentErrorOut(BaseModel):
@@ -346,6 +347,7 @@ class AvisoOut(BaseModel):
     tipo: str
     title: str
     body: str
+    detalle: str | None = None  # conclusión completa (botón "Detalle" en la app)
     tenant_id: int | None = None
     cliente: str | None = None
     prospect_id: int | None = None

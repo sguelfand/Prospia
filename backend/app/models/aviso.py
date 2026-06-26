@@ -19,6 +19,9 @@ class Aviso(Base):
     tipo: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(160), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # Conclusión completa (texto largo) que se ve al tocar "Detalle" en la app.
+    # Solo la usan los avisos que la traen (p.ej. claude_termino); el resto la deja NULL.
+    detalle: Mapped[str | None] = mapped_column(Text, nullable=True)
     tenant_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # cliente, si aplica
     cliente: Mapped[str | None] = mapped_column(String(160), nullable=True)  # nombre del tenant
     prospect_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
