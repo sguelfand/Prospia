@@ -416,7 +416,8 @@ export interface TokenTotales {
 }
 export interface TokenConvModelo { llamadas: number; costo_usd: number }
 export interface TokenConv {
-  telefono: string; tokens: number; costo_usd: number; llamadas: number;
+  telefono: string; nombre?: string | null; mirror_id?: number;
+  tokens: number; costo_usd: number; llamadas: number;
   input?: number; output?: number; cacheRead?: number; cacheWrite?: number;
   timeouts: number; errores: number; compactaciones?: number;
   por_modelo?: Record<string, TokenConvModelo>;

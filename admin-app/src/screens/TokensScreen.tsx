@@ -11,11 +11,13 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
+  MensajeRow,
   TokenAudit,
   TokenConv,
   TokenDia,
   TokenMesTrend,
   TokenSource,
+  getEtiguelMirrorMensajes,
   getTokenAudit,
   getTokenDia,
   getTokenSources,
@@ -56,6 +58,21 @@ export default function TokensScreen() {
   const [diaData, setDiaData] = useState<TokenDia | null>(null);
   const [diaLoading, setDiaLoading] = useState(false);
   const [convAbierta, setConvAbierta] = useState<string | null>(null);
+  const [convMsgs, setConvMsgs] = useState<Record<string, MensajeRow[]>>({});
+  const [convMsgsLoading, setConvMsgsLoading] = useState<string | null>(null);
+
+  const abrirConv = useCallback(async (c: TokenConv) => {
+    if (convAbierta === c.telefono) { setConvAbierta(null); return; }
+    setConvAbierta(c.telefono);
+    if (token && c.mirror_id && !convMsgs[c.telefono]) {
+      setConvMsgsLoading(c.telefono);
+      try {
+        const m = await getEtiguelMirrorMensajes(token, c.mirror_id);
+        setConvMsgs((prev) => ({ ...prev, [c.telefono]: m }));
+      } catch { /* sin mensajes */ }
+      finally { setConvMsgsLoading(null); }
+    }
+  }, [convAbierta, token, convMsgs]);
 
   useEffect(() => { if (token) getTokenSources(token).then(setSources).catch(() => {}); }, [token]);
   useEffect(() => { setDiaSel(null); setDiaData(null); setConvAbierta(null); }, [source]);
@@ -160,6 +177,32 @@ export default function TokensScreen() {
             <Kpi label="Timeouts" value={fmt(t?.timeouts ?? 0)} alert={(t?.timeouts ?? 0) > 0} />
           </View>
 
+          {/* Histórico mensual: tap en un mes muestra detalle */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Histórico mensual</Text>
+            <Text style={styles.sub}>Tocá un mes para ver el detalle.</Text>
+            {meses.length === 0 ? <Text style={styles.empty}>Sin histórico.</Text> : (
+              <>
+                {mSel && (
+                  <View style={styles.mesBox}>
+                    <Text style={styles.mesBoxTitle}>{mSel.mes}</Text>
+                    <Text style={styles.mesBoxKv}>Total: <Text style={styles.mesBoxV}>{usd(mSel.costo_usd)}</Text></Text>
+                    <Text style={styles.mesBoxKv}>Conversaciones: <Text style={styles.mesBoxV}>{fmt(mSel.conversaciones)}</Text></Text>
+                    <Text style={styles.mesBoxKv}>Prom. $/conversación: <Text style={styles.mesBoxV}>{usd3(mSel.costo_por_conversacion)}</Text></Text>
+                  </View>
+                )}
+                <View style={[styles.bars, { marginTop: 10 }]}>
+                  {meses.map((m, i) => (
+                    <TouchableOpacity key={m.mes} style={styles.barCol} onPress={() => setMesSel(i === mesSel ? null : i)}>
+                      <View style={{ height: Math.max(2, (m.costo_usd / maxMes) * 90), width: "70%", backgroundColor: i === mesSel ? colors.primary : colors.cardAlt, borderTopLeftRadius: 3, borderTopRightRadius: 3 }} />
+                      <Text style={styles.barLabel}>{m.mes.slice(2)}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
+          </View>
+
           {/* Barras por día apiladas */}
           <View style={styles.card}>
             <View style={styles.legendRow}>
@@ -189,45 +232,21 @@ export default function TokensScreen() {
             </View>
           </View>
 
-          {/* Histórico mensual: tap en un mes muestra detalle */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Histórico mensual</Text>
-            <Text style={styles.sub}>Tocá un mes para ver el detalle.</Text>
-            {meses.length === 0 ? <Text style={styles.empty}>Sin histórico.</Text> : (
-              <>
-                {mSel && (
-                  <View style={styles.mesBox}>
-                    <Text style={styles.mesBoxTitle}>{mSel.mes}</Text>
-                    <Text style={styles.mesBoxKv}>Total: <Text style={styles.mesBoxV}>{usd(mSel.costo_usd)}</Text></Text>
-                    <Text style={styles.mesBoxKv}>Conversaciones: <Text style={styles.mesBoxV}>{fmt(mSel.conversaciones)}</Text></Text>
-                    <Text style={styles.mesBoxKv}>Prom. $/conversación: <Text style={styles.mesBoxV}>{usd3(mSel.costo_por_conversacion)}</Text></Text>
-                  </View>
-                )}
-                <View style={[styles.bars, { marginTop: 10 }]}>
-                  {meses.map((m, i) => (
-                    <TouchableOpacity key={m.mes} style={styles.barCol} onPress={() => setMesSel(i === mesSel ? null : i)}>
-                      <View style={{ height: Math.max(2, (m.costo_usd / maxMes) * 90), width: "70%", backgroundColor: i === mesSel ? colors.primary : colors.cardAlt, borderTopLeftRadius: 3, borderTopRightRadius: 3 }} />
-                      <Text style={styles.barLabel}>{m.mes.slice(2)}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </>
-            )}
-          </View>
-
-          {/* Conversaciones del día (tap = detalle) */}
+          {/* Conversaciones del día (tap = ver la conversación entera) */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Conversaciones del día <Text style={styles.sub}>· {convs.length} · tocá una</Text></Text>
             {convs.length === 0 ? <Text style={styles.empty}>{diaLoading ? "Cargando…" : "Sin conversaciones."}</Text> : convs.map((c, i) => {
               const abierta = convAbierta === c.telefono;
               const modelos = Object.entries(c.por_modelo ?? {}).sort((a, b) => b[1].costo_usd - a[1].costo_usd);
+              const msgs = convMsgs[c.telefono];
               return (
                 <TouchableOpacity key={c.telefono} activeOpacity={0.7} style={[styles.conv, i > 0 && styles.border]}
-                  onPress={() => setConvAbierta(abierta ? null : c.telefono)}>
+                  onPress={() => abrirConv(c)}>
                   <View style={styles.convTop}>
                     <Text style={styles.convTel}>{c.telefono}</Text>
                     <Text style={styles.convCost}>{usd3(c.costo_usd)}</Text>
                   </View>
+                  {c.nombre ? <Text style={styles.convNombre}>{c.nombre}</Text> : null}
                   <Text style={styles.convMeta}>
                     {c.llamadas} ll · {fmt(c.tokens)} tok
                     {modelos.length > 0 ? ` · ${modelos.map(([m]) => m.replace("claude-", "")).join(", ")}` : ""}
@@ -236,18 +255,27 @@ export default function TokensScreen() {
                   {!abierta && c.ejemplo ? <Text style={styles.convEj} numberOfLines={1}>“{c.ejemplo}”</Text> : null}
                   {abierta ? (
                     <View style={styles.convDet}>
-                      {modelos.map(([m, v]) => (
-                        <View key={m} style={styles.kv}><Text style={styles.detK}>{m}</Text><Text style={styles.detV}>{usd3(v.costo_usd)} · {v.llamadas} ll</Text></View>
-                      ))}
-                      <View style={styles.detGrid}>
-                        <Text style={styles.detItem}>Input: <Text style={styles.detVal}>{fmt(c.input ?? 0)}</Text></Text>
-                        <Text style={styles.detItem}>Output: <Text style={styles.detVal}>{fmt(c.output ?? 0)}</Text></Text>
-                        <Text style={styles.detItem}>Cache R: <Text style={styles.detVal}>{fmt(c.cacheRead ?? 0)}</Text></Text>
-                        <Text style={styles.detItem}>Cache W: <Text style={styles.detVal}>{fmt(c.cacheWrite ?? 0)}</Text></Text>
-                        {(c.compactaciones ?? 0) > 0 ? <Text style={styles.detItem}>Compact.: <Text style={[styles.detVal, { color: colors.amber }]}>{c.compactaciones}</Text></Text> : null}
-                        {c.primer_ts ? <Text style={styles.detItem}>Horario: <Text style={styles.detVal}>{hhmm(c.primer_ts)}–{hhmm(c.ultimo_ts)}</Text></Text> : null}
+                      {/* La conversación entera */}
+                      {convMsgsLoading === c.telefono ? <ActivityIndicator size="small" color={colors.textDim} /> :
+                        msgs && msgs.length > 0 ? (
+                          <View style={styles.chat}>
+                            {msgs.map((m) => <Burbuja key={m.id} m={m} />)}
+                          </View>
+                        ) : c.mirror_id ? <Text style={styles.empty}>Sin mensajes espejados.</Text> :
+                          <Text style={styles.empty}>Conversación no encontrada en el espejo.</Text>}
+                      {/* Detalle de costo (compacto) */}
+                      <View style={styles.costoSep}>
+                        {modelos.map(([m, v]) => (
+                          <View key={m} style={styles.kv}><Text style={styles.detK}>{m}</Text><Text style={styles.detV}>{usd3(v.costo_usd)} · {v.llamadas} ll</Text></View>
+                        ))}
+                        <View style={styles.detGrid}>
+                          <Text style={styles.detItem}>Input: <Text style={styles.detVal}>{fmt(c.input ?? 0)}</Text></Text>
+                          <Text style={styles.detItem}>Output: <Text style={styles.detVal}>{fmt(c.output ?? 0)}</Text></Text>
+                          <Text style={styles.detItem}>Cache R: <Text style={styles.detVal}>{fmt(c.cacheRead ?? 0)}</Text></Text>
+                          <Text style={styles.detItem}>Cache W: <Text style={styles.detVal}>{fmt(c.cacheWrite ?? 0)}</Text></Text>
+                          {c.primer_ts ? <Text style={styles.detItem}>Horario: <Text style={styles.detVal}>{hhmm(c.primer_ts)}–{hhmm(c.ultimo_ts)}</Text></Text> : null}
+                        </View>
                       </View>
-                      {c.ejemplo ? <Text style={styles.convEj}>“{c.ejemplo}”</Text> : null}
                     </View>
                   ) : null}
                 </TouchableOpacity>
@@ -272,6 +300,17 @@ export default function TokensScreen() {
 
 function Kpi({ label, value, alert }: { label: string; value: string; alert?: boolean }) {
   return <View style={styles.kpi}><Text style={[styles.kpiVal, alert && { color: colors.red }]}>{value}</Text><Text style={styles.kpiLabel}>{label}</Text></View>;
+}
+
+function Burbuja({ m }: { m: MensajeRow }) {
+  const out = m.direccion === "out";
+  return (
+    <View style={[styles.bubRow, { justifyContent: out ? "flex-end" : "flex-start" }]}>
+      <View style={[styles.bub, out ? styles.bubOut : styles.bubIn]}>
+        <Text style={styles.bubText}>{m.texto}</Text>
+      </View>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -318,9 +357,17 @@ const styles = StyleSheet.create({
   mesBoxV: { color: colors.text, fontWeight: "700" },
   conv: { paddingVertical: 9 },
   convTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  convTel: { color: colors.text, fontSize: 14, fontWeight: "600" },
-  convCost: { color: colors.text, fontSize: 14, fontWeight: "700" },
+  convTel: { color: colors.text, fontSize: 15, fontWeight: "700" },
+  convNombre: { color: colors.text, fontSize: 13, fontWeight: "500", marginTop: 1 },
+  convCost: { color: colors.primary, fontSize: 14, fontWeight: "700" },
   convMeta: { color: colors.textDim, fontSize: 11, marginTop: 3 },
+  chat: { gap: 4 },
+  bubRow: { flexDirection: "row" },
+  bub: { maxWidth: "85%", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
+  bubOut: { backgroundColor: colors.primary + "22", borderColor: colors.primary + "44", borderWidth: 1 },
+  bubIn: { backgroundColor: colors.cardAlt },
+  bubText: { color: colors.text, fontSize: 13 },
+  costoSep: { marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border, gap: 3 },
   convEj: { color: colors.textDim, fontSize: 12, marginTop: 3, fontStyle: "italic" },
   convDet: { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border, gap: 3 },
   detK: { color: colors.text, fontSize: 12 },
