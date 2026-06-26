@@ -1,5 +1,5 @@
-import { Download, Eye, EyeOff, Plus, Sparkles, Trash2, X } from 'lucide-react'
-import { FormEvent, useEffect, useState } from 'react'
+import { ChevronDown, Download, Eye, EyeOff, Plus, Sparkles, Trash2, X } from 'lucide-react'
+import { FormEvent, ReactNode, useEffect, useState } from 'react'
 import { api } from '../api/client'
 
 type Me = {
@@ -16,6 +16,32 @@ const inputCls =
 const labelCls = 'block text-sm font-medium text-ink-soft mb-1'
 const btnCls =
   'bg-primary text-on-primary rounded-lg px-4 py-2 text-sm font-medium hover:bg-primary-dark disabled:opacity-50'
+
+// ── Sección colapsable: el título es un botón con chevron; arranca cerrada ────
+function CollapsibleSection({
+  title,
+  children,
+  defaultOpen = false,
+}: {
+  title: string
+  children: ReactNode
+  defaultOpen?: boolean
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div className="space-y-4">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 w-full text-left"
+      >
+        <ChevronDown size={14} className={`text-muted transition-transform ${open ? '' : '-rotate-90'}`} />
+        <h2 className="text-xs font-semibold text-muted uppercase tracking-wide">{title}</h2>
+      </button>
+      {open && children}
+    </div>
+  )
+}
 
 export default function Configuracion() {
   // ── Perfil ──
@@ -93,7 +119,7 @@ export default function Configuracion() {
       <h1 className="text-xl font-semibold text-ink">Configuración</h1>
 
       {/* ── Perfil: usuario + contraseña (lo que ya estaba) ── */}
-      <h2 className="text-xs font-semibold text-muted uppercase tracking-wide">Perfil</h2>
+      <CollapsibleSection title="Perfil">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
       {/* ── Perfil / usuario ── */}
       <form onSubmit={saveProfile} className="bg-card border border-line rounded-2xl p-6 space-y-4">
@@ -176,6 +202,7 @@ export default function Configuracion() {
       </form>
 
       </div>
+      </CollapsibleSection>
 
       {/* ── Información del negocio (relevamiento) — cliente y superadmin ── */}
       <InfoNegocio />
@@ -426,6 +453,7 @@ function InfoNegocio() {
   const [extra, setExtra] = useState<{ label: string; valor: string }[]>([])
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [open, setOpen] = useState(false) // arranca cerrada; se expande al tocar el título
 
   // ── "Agregar información": modal con IA que reparte texto libre en campos ──
   const [asistirOpen, setAsistirOpen] = useState(false)
@@ -598,15 +626,22 @@ function InfoNegocio() {
 
   return (
     <div className="space-y-4">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 w-full text-left"
+      >
+        <ChevronDown size={14} className={`text-muted transition-transform ${open ? '' : '-rotate-90'}`} />
+        <h2 className="text-xs font-semibold text-muted uppercase tracking-wide">Información del negocio</h2>
+      </button>
+      {open && (
+      <>
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h2 className="text-xs font-semibold text-muted uppercase tracking-wide">Información del negocio</h2>
-          <p className="text-xs text-muted mt-1">
-            {sinCargar
-              ? 'Todavía no se completó el relevamiento. Podés cargarlo acá o desde el formulario que te compartimos.'
-              : 'Lo que sabemos de tu negocio. Editá, ampliá o agregá lo que quieras — lo usamos para encontrar mejores clientes.'}
-          </p>
-        </div>
+        <p className="text-xs text-muted">
+          {sinCargar
+            ? 'Todavía no se completó el relevamiento. Podés cargarlo acá o desde el formulario que te compartimos.'
+            : 'Lo que sabemos de tu negocio. Editá, ampliá o agregá lo que quieras — lo usamos para encontrar mejores clientes.'}
+        </p>
         <div className="flex items-center gap-3">
           {data.updated_at && (
             <span className="text-xs text-muted">Última edición: {new Date(data.updated_at).toLocaleDateString('es-AR')}</span>
@@ -758,6 +793,8 @@ function InfoNegocio() {
             </div>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   )
