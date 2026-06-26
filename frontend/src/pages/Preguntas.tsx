@@ -32,11 +32,14 @@ export default function Preguntas() {
   const [abierta, setAbierta] = useState<Consulta | null>(null)
   const [selMode, setSelMode] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
+  // El superadmin (nivel 1) ve TODAS las consultas (Etiguel) vía /admin; el cliente
+  // (nivel 2, incl. superadmin impersonando) ve solo las suyas vía /me.
+  const [base, setBase] = useState<string | null>(null)
 
-  async function load() {
+  async function load(b: string) {
     setError(null)
     try {
-      setItems(await api.get<Consulta[]>('/admin/consultas'))
+      setItems(await api.get<Consulta[]>(b))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al cargar')
     } finally {
@@ -44,20 +47,26 @@ export default function Preguntas() {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    api.get<{ nivel: number }>('/auth/me')
+      .then((me) => { const b = me.nivel === 1 ? '/admin/consultas' : '/me/consultas'; setBase(b); load(b) })
+      .catch(() => { setBase('/me/consultas'); load('/me/consultas') })
+  }, [])
 
   async function borrar(c: Consulta) {
+    if (!base) return
     if (!confirm(`¿Borrar la consulta #${c.id}? No se puede deshacer.`)) return
     const snap = items
     setItems((prev) => prev.filter((x) => x.id !== c.id))
     try {
-      await api.delete(`/admin/consultas/${c.id}`)
+      await api.delete(`${base}/${c.id}`)
     } catch {
       setItems(snap)
     }
   }
 
   async function borrarSeleccionadas() {
+    if (!base) return
     const ids = [...selected]
     if (!ids.length) return
     if (!confirm(`¿Borrar ${ids.length} consulta(s)? No se puede deshacer.`)) return
@@ -66,7 +75,7 @@ export default function Preguntas() {
     setSelected(new Set())
     setSelMode(false)
     try {
-      await api.post('/admin/consultas/eliminar', { ids })
+      await api.post(`${base}/eliminar`, { ids })
     } catch {
       setItems(snap)
     }
@@ -170,9 +179,10 @@ export default function Preguntas() {
         </div>
       )}
 
-      {abierta && (
+      {abierta && base && (
         <DetalleModal
           consulta={abierta}
+          base={base}
           onClose={() => setAbierta(null)}
           onBorrar={() => { const c = abierta; setAbierta(null); borrar(c) }}
           onContestada={(actualizada) => {
@@ -185,8 +195,9 @@ export default function Preguntas() {
   )
 }
 
-function DetalleModal({ consulta, onClose, onBorrar, onContestada }: {
+function DetalleModal({ consulta, base, onClose, onBorrar, onContestada }: {
   consulta: Consulta
+  base: string
   onClose: () => void
   onBorrar: () => void
   onContestada: (c: Consulta) => void
@@ -202,7 +213,7 @@ function DetalleModal({ consulta, onClose, onBorrar, onContestada }: {
     setEnviando(true)
     setErr(null)
     try {
-      const actualizada = await api.post<Consulta>(`/admin/consultas/${consulta.id}/responder`, { respuesta: txt })
+      const actualizada = await api.post<Consulta>(`${base}/${consulta.id}/responder`, { respuesta: txt })
       onContestada(actualizada)
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'No se pudo enviar la respuesta')

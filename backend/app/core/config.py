@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     # Key de Anthropic para los asistentes IA del relevamiento (Haiku). Fallback
     # si monitor_settings.anthropic_api_key está vacío. Se setea por DB en prod.
     ANTHROPIC_API_KEY: str = ""
+    # Resend: mails transaccionales (aviso de consulta a clientes). Sender único
+    # para todos los tenants. Si RESEND_API_KEY está vacío, no se manda mail.
+    RESEND_API_KEY: str = ""
+    RESEND_FROM: str = "Prospia <notificaciones@prospia.app>"
+    # Base pública de la web (para los links en los mails al cliente).
+    PROSPIA_WEB_URL: str = "https://prospia.app"
 
     class Config:
         env_file = ".env"

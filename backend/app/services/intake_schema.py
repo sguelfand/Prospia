@@ -144,6 +144,7 @@ SECCIONES = [
             {"id": "deriva_whatsapp", "label": "WhatsApp de esa persona", "tipo": "tel", "oblig": True},
             {"id": "deriva_email", "label": "Email de esa persona", "tipo": "email", "oblig": False},
             {"id": "notif_canal", "label": "¿Por dónde le avisamos cuando hay un interesado?", "tipo": "select", "oblig": True, "opciones": ["WhatsApp", "Email"], "ayuda": "Le mandamos el aviso al WhatsApp o email de arriba, según lo que elijas"},
+            {"id": "email_notificaciones", "label": "Email para avisos de consultas del asistente", "tipo": "email", "oblig": True, "ayuda": "Cuando tu asistente reciba una pregunta que no sabe responder, te avisamos a este mail para que entres y la contestes desde la sección Preguntas"},
             {"id": "info_para_seguir", "label": "¿Qué info necesita esa persona para seguir el lead?", "tipo": "textarea", "oblig": False},
             {"id": "horario_contacto", "label": "Horario en que se puede contactar prospects", "tipo": "text", "oblig": False, "ayuda": "Ej: 10 a 18 hs"},
             {"id": "crm", "label": "¿Usás algún CRM hoy?", "tipo": "text", "oblig": False, "ayuda": "Monday, HubSpot, Excel…"},

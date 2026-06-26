@@ -86,6 +86,10 @@ class TenantConfig(Base):
     # ── I. Notificaciones ─────────────────────────────────────────────────────
     notif_interesado_canal: Mapped[str] = mapped_column(String(20), default="whatsapp", server_default="whatsapp")
     notif_interesado_destino: Mapped[str | None] = mapped_column(String(255))
+    # Email donde el cliente recibe el aviso de "tenés una consulta sin responder"
+    # (la Camila del cliente escaló algo que no supo contestar). Se carga en el
+    # relevamiento y es editable desde la config del cliente.
+    notif_consultas_email: Mapped[str | None] = mapped_column(String(255))
 
     # ── J. Información del negocio (relevamiento) ──────────────────────────────
     # Documento estructurado del intake, editable por el cliente desde su

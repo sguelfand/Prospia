@@ -178,6 +178,16 @@ export default function Layout() {
                   </Link>
                 )
               })}
+              {nivel === 2 && (
+                <Link
+                  to="/preguntas"
+                  onClick={() => setMobileOpen(false)}
+                  className={navClass(location.pathname.startsWith('/preguntas'))}
+                >
+                  <MessageCircleQuestion size={16} />
+                  Preguntas
+                </Link>
+              )}
             </nav>
             {nivel === 1 && (
               <Link
@@ -277,6 +287,16 @@ export default function Layout() {
             )
           })}
         </nav>
+        {nivel === 2 && (
+          <Link
+            to="/preguntas"
+            title={collapsed ? 'Preguntas' : undefined}
+            className={navClass(location.pathname.startsWith('/preguntas'), collapsed)}
+          >
+            <MessageCircleQuestion size={16} />
+            {!collapsed && 'Preguntas'}
+          </Link>
+        )}
         {nivel === 1 && (
           <Link
             to="/pendientes"

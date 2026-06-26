@@ -84,6 +84,7 @@ def run_migrations():
             # I. Notificaciones
             "notif_interesado_canal VARCHAR(20) NOT NULL DEFAULT 'whatsapp'",
             "notif_interesado_destino VARCHAR(255)",
+            "notif_consultas_email VARCHAR(255)",
             # J. Información del negocio (relevamiento, editable por el cliente)
             "info_negocio JSONB NOT NULL DEFAULT '{}'::jsonb",
         ]

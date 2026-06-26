@@ -14,7 +14,9 @@ from app.database import get_db
 from app.models.agent_error import AgentError
 from app.models.consulta import Consulta
 from app.models.etiguel_mirror import EtiguelMirror, EtiguelMirrorMensaje
+from app.models.tenant import Tenant, TenantConfig
 from app.schemas.admin import AgentErrorIn, AvisoIn, ConsultaIn, EtiguelMirrorIn
+from app.services import email as email_svc
 from app.services import push
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
@@ -24,6 +26,24 @@ def _check_token(x_mirror_token: str | None):
     esperado = settings.ETIGUEL_MIRROR_TOKEN or settings.WEBHOOK_TOKEN
     if not x_mirror_token or x_mirror_token != esperado:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token inválido")
+
+
+def _resolver_dueno(x_mirror_token: str | None, db: Session):
+    """Resuelve el dueño de una consulta a partir del token (multi-tenant):
+    - token global (Etiguel) → (True, None, None)
+    - webhook_token de un cliente → (False, Tenant, TenantConfig)
+    El token es la autoridad (no se confía en tenant_id del payload). 403 si no matchea."""
+    if not x_mirror_token:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token inválido")
+    global_tok = settings.ETIGUEL_MIRROR_TOKEN or settings.WEBHOOK_TOKEN
+    if x_mirror_token == global_tok:
+        return True, None, None
+    cfg = db.query(TenantConfig).filter(TenantConfig.webhook_token == x_mirror_token).first()
+    if cfg:
+        tenant = db.get(Tenant, cfg.tenant_id)
+        if tenant:
+            return False, tenant, cfg
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token inválido")
 
 
 @router.post("/etiguel-mirror")
@@ -232,23 +252,34 @@ def ingest_consulta(
     x_mirror_token: str | None = Header(None),
     db: Session = Depends(get_db),
 ):
-    """El plugin camila-consulta-push reporta acá una pregunta que Camila no supo
-    responder (señal CAMILA_CONSULTA|num|pregunta), para que Sebi la conteste desde
-    la app/web y la respuesta vuelva al cliente. Dispara push con deep-link a la
-    ventana de contestar. Devuelve el `id` = el #número de la consulta."""
-    _check_token(x_mirror_token)
+    """El plugin camila-consulta-push reporta acá una pregunta que el agente no supo
+    responder (señal CAMILA_CONSULTA|num|pregunta). El TOKEN define el dueño:
+    - token global (Etiguel) → tenant_id None, fuente 'etiguel', avisa por PUSH a Sebi.
+    - webhook_token de un cliente → ese tenant, avisa por EMAIL al cliente.
+    Quien contesta entra a Preguntas (Sebi en app/web; el cliente en su web) y la
+    respuesta vuelve a su Camila. Devuelve el `id` = el #número de la consulta."""
+    es_etiguel, tenant, cfg = _resolver_dueno(x_mirror_token, db)
     c = Consulta(
         pregunta=(body.pregunta or "")[:5000],
         telefono=body.telefono,
-        fuente=body.fuente or "etiguel",
+        fuente="etiguel" if es_etiguel else (tenant.nombre if tenant else "cliente"),
         agente=body.agente,
-        tenant_id=body.tenant_id,
+        tenant_id=None if es_etiguel else tenant.id,
     )
     db.add(c)
     db.commit()
     db.refresh(c)
     try:
-        push.notificar_consulta_async(c.id, c.fuente, c.telefono, c.pregunta)
-    except Exception:
-        pass
+        if es_etiguel:
+            # Etiguel lo contesta Sebi → push con deep-link a Preguntas.
+            push.notificar_consulta_async(c.id, c.fuente, c.telefono, c.pregunta)
+        else:
+            # Cliente: avisa por email al destinatario que cargó en el relevamiento.
+            destino = (cfg.notif_consultas_email or "").strip() if cfg else ""
+            if destino:
+                email_svc.aviso_consulta(destino, c.fuente, c.telefono, c.pregunta)
+            else:
+                print(f"[CONSULTA] tenant {tenant.id} sin notif_consultas_email; consulta {c.id} sin aviso")
+    except Exception as e:
+        print(f"[CONSULTA] aviso falló: {type(e).__name__}: {e}")
     return {"ok": True, "id": c.id}

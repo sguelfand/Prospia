@@ -10,7 +10,9 @@ Configuración del cliente.
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 
+import requests
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -18,9 +20,11 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
 from app.database import get_db
+from app.models.consulta import Consulta
 from app.models.intake_submission import IntakeSubmission
 from app.models.tenant import TenantConfig
 from app.models.user import User
+from app.schemas.admin import ConsultaOut, ConsultaResponder, ConsultasEliminar
 from app.services import info_negocio as info_negocio_svc
 from app.services import intake_ai
 from app.services.intake_schema import secciones_config
@@ -35,6 +39,102 @@ class InfoNegocioUpdate(BaseModel):
 
 class AsistirBody(BaseModel):
     texto: str = ""
+
+
+def _relay_respuesta_tenant(cfg: TenantConfig, telefono: str, respuesta: str) -> None:
+    """Relaya la respuesta del cliente a SU propia Camila (sessions_send al gateway
+    del tenant) con RESPONDER_CONSULTA|num|texto, para que la reenvíe al cliente.
+    Levanta 502/422 si no se puede entregar (así no se marca 'contestada' algo que
+    no salió)."""
+    if not telefono:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail="La consulta no tiene teléfono, no se puede entregar la respuesta")
+    gw_url = (cfg.openclaw_gateway_url or "").strip()
+    gw_tok = (cfg.openclaw_gateway_token or "").strip()
+    session_key = (cfg.openclaw_session_id or "").strip()
+    if not (gw_url and gw_tok and session_key):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail="Tu asistente todavía no está configurado para recibir respuestas (falta gateway).")
+    target = telefono.lstrip("+").replace(" ", "").replace("-", "")
+    try:
+        r = requests.post(
+            gw_url,
+            headers={"Authorization": f"Bearer {gw_tok}", "Content-Type": "application/json"},
+            json={"tool": "sessions_send",
+                  "args": {"sessionKey": session_key, "message": f"RESPONDER_CONSULTA|{target}|{respuesta}"}},
+            timeout=15,
+        )
+    except requests.exceptions.Timeout:
+        return  # el agente tarda > timeout; el mensaje ya quedó encolado (esperado)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,
+                            detail=f"No se pudo contactar a tu asistente: {type(e).__name__}")
+    if r.status_code >= 300:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,
+                            detail=f"Tu asistente rechazó la respuesta (HTTP {r.status_code})")
+
+
+@router.get("/consultas", response_model=list[ConsultaOut])
+def listar_mis_consultas(
+    estado: str | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Consultas que la Camila de ESTE cliente escaló (scoped al tenant del usuario)."""
+    q = db.query(Consulta).filter(Consulta.tenant_id == user.tenant_id)
+    if estado:
+        q = q.filter(Consulta.estado == estado)
+    return q.order_by(Consulta.fecha.desc()).all()
+
+
+@router.post("/consultas/{consulta_id}/responder", response_model=ConsultaOut)
+def responder_mi_consulta(
+    consulta_id: int,
+    body: ConsultaResponder,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """El cliente contesta una consulta de su propia Camila. Relaya a su gateway y
+    recién si entrega OK la marca 'contestada' (502 si falla → queda pendiente)."""
+    c = db.get(Consulta, consulta_id)
+    if not c or c.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No existe esa consulta")
+    respuesta = (body.respuesta or "").strip()
+    if not respuesta:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="La respuesta está vacía")
+    cfg = _config_del_usuario(db, user)
+    c.respuesta = respuesta
+    _relay_respuesta_tenant(cfg, c.telefono, respuesta)  # 502 si no entregó → no marca contestada
+    c.estado = "contestada"
+    c.fecha_respuesta = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(c)
+    return c
+
+
+@router.delete("/consultas/{consulta_id}", status_code=status.HTTP_204_NO_CONTENT)
+def borrar_mi_consulta(
+    consulta_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    c = db.get(Consulta, consulta_id)
+    if c and c.tenant_id == user.tenant_id:
+        db.delete(c)
+        db.commit()
+
+
+@router.post("/consultas/eliminar", status_code=status.HTTP_204_NO_CONTENT)
+def eliminar_mis_consultas(
+    body: ConsultasEliminar,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if body.ids:
+        (db.query(Consulta)
+         .filter(Consulta.tenant_id == user.tenant_id, Consulta.id.in_(body.ids))
+         .delete(synchronize_session=False))
+        db.commit()
 
 
 def _config_del_usuario(db: Session, user: User) -> TenantConfig:

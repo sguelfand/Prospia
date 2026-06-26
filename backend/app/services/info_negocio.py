@@ -31,6 +31,7 @@ _MIRROR = {
     "deriva_nombre": "deriva_nombre",
     "deriva_whatsapp": "deriva_whatsapp",
     "numero_bot": "bot_numero_whatsapp",
+    "email_notificaciones": "notif_consultas_email",
 }
 
 
