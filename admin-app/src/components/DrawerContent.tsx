@@ -85,6 +85,12 @@ export default function DrawerContent({ navigation, state }: DrawerContentCompon
           active={activeRoute === "Pendientes"}
           onPress={() => navigation.navigate("Pendientes")}
         />
+        <NavItem
+          icon="flag"
+          label="Preguntas de Claude"
+          active={activeRoute === "PreguntasClaude"}
+          onPress={() => navigation.navigate("PreguntasClaude")}
+        />
 
         {/* Monitoreo desplegable → Servicios + Tokens */}
         <TouchableOpacity

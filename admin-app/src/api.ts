@@ -341,6 +341,40 @@ export const responderConsulta = (token: string, id: number, respuesta: string) 
 export const eliminarConsultas = (token: string, ids: number[]) =>
   request<void>("/admin/consultas/eliminar", { method: "POST", body: JSON.stringify({ ids }) }, token);
 
+// ── Preguntas de Claude Code (switch "Preguntas al cel") ──────────────────────
+export interface OpcionPregunta {
+  label: string;
+  description: string | null;
+}
+
+export interface PreguntaClaude {
+  id: number;
+  header: string | null;
+  pregunta: string;
+  opciones: OpcionPregunta[];
+  multiselect: boolean;
+  contexto: string | null;
+  elegida: string | null;          // label(s) elegido(s) o texto libre; null si pendiente
+  estado: "pendiente" | "respondida" | "cancelada";
+  fecha: string;
+  fecha_respuesta: string | null;
+}
+
+export const getPreguntasModo = (token: string) =>
+  request<{ activo: boolean }>("/admin/preguntas-modo", {}, token);
+
+export const setPreguntasModo = (token: string, activo: boolean) =>
+  request<{ activo: boolean }>("/admin/preguntas-modo", { method: "PATCH", body: JSON.stringify({ activo }) }, token);
+
+export const getPreguntasClaude = (token: string) =>
+  request<PreguntaClaude[]>("/admin/preguntas-claude", {}, token);
+
+export const getPreguntaClaude = (token: string, id: number) =>
+  request<PreguntaClaude>(`/admin/preguntas-claude/${id}`, {}, token);
+
+export const responderPreguntaClaude = (token: string, id: number, elegida: string) =>
+  request<PreguntaClaude>(`/admin/preguntas-claude/${id}/responder`, { method: "POST", body: JSON.stringify({ elegida }) }, token);
+
 // ── Inicializar prueba: borra todo rastro de un número de prueba del cliente ───
 // Etiguel y los tenants usan endpoints distintos; el campo del webhook también
 // difiere (webhook_ok vs webhook_estado) → la screen normaliza al leer.

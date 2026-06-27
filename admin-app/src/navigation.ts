@@ -17,6 +17,7 @@ export type DrawerParamList = {
   EtiguelMirrorDetail: { item: EtiguelMirrorItem };
   Errores: undefined;
   Preguntas: { consultaId?: number } | undefined;
+  PreguntasClaude: { preguntaId?: number } | undefined;
   Pendientes: undefined;
   Avisos: { avisoId?: number } | undefined;
   Configuracion: undefined;
@@ -38,6 +39,7 @@ export type ProspectDetailProps = DrawerScreenProps<DrawerParamList, "ProspectDe
 export type EtiguelMirrorDetailProps = DrawerScreenProps<DrawerParamList, "EtiguelMirrorDetail">;
 export type ErroresProps = DrawerScreenProps<DrawerParamList, "Errores">;
 export type PreguntasProps = DrawerScreenProps<DrawerParamList, "Preguntas">;
+export type PreguntasClaudeProps = DrawerScreenProps<DrawerParamList, "PreguntasClaude">;
 export type PendientesProps = DrawerScreenProps<DrawerParamList, "Pendientes">;
 export type AvisosProps = DrawerScreenProps<DrawerParamList, "Avisos">;
 export type ConfiguracionProps = DrawerScreenProps<DrawerParamList, "Configuracion">;
