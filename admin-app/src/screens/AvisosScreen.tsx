@@ -212,7 +212,7 @@ export default function AvisosScreen({ navigation, route }: AvisosProps) {
                   </View>
                 </View>
 
-                <View style={styles.modalBodyWrap}>
+                <View style={[styles.modalBodyWrap, expandido && styles.modalBodyWrapExp]}>
                   <Text style={styles.resumen}>{detalle.body || "(sin descripción)"}</Text>
                   {expandido && tieneDetalle && (
                     <>
@@ -297,7 +297,8 @@ const styles = StyleSheet.create({
   modalIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   modalTitle: { color: colors.text, fontSize: 16, fontWeight: "800", lineHeight: 20 },
   modalTiempo: { color: colors.textDim, fontSize: 12, marginTop: 3 },
-  modalBodyWrap: { paddingHorizontal: 18, paddingTop: 8, paddingBottom: 4, flex: 1, minHeight: 0 },
+  modalBodyWrap: { paddingHorizontal: 18, paddingTop: 8, paddingBottom: 4 },
+  modalBodyWrapExp: { flex: 1, minHeight: 0 }, // solo expandido: acota el ScrollView para que scrollee
   resumen: { color: colors.text, fontSize: 15, lineHeight: 22 },
   detalleBox: { flex: 1, minHeight: 0, marginTop: 14, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12 },
   detLabel: { color: colors.primary, fontSize: 10, fontWeight: "800", letterSpacing: 1, marginBottom: 8 },
