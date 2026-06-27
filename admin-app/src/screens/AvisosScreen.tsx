@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Dimensions, Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Aviso, eliminarAvisos, getAvisos, setNotifPref } from "../api";
@@ -9,6 +9,9 @@ import { AvisosProps } from "../navigation";
 import { Icon, IconName } from "../components/Icon";
 import { getCachedExpoToken, getExpoTokenAsync } from "../push";
 import { colors } from "../theme";
+
+// Alto concreto para el scroll del detalle (no depender de la cadena de flex).
+const DETALLE_MAX_H = Math.round(Dimensions.get("window").height * 0.42);
 
 function tiempoRelativo(iso: string): string {
   const d = new Date(iso);
@@ -197,7 +200,7 @@ export default function AvisosScreen({ navigation, route }: AvisosProps) {
       {/* Detalle del aviso: resumen corto + "Detalle" expande la conclusión completa */}
       <Modal visible={detalle != null} transparent animationType="fade" onRequestClose={() => setDetalle(null)}>
         <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setDetalle(null)}>
-          <TouchableOpacity style={[styles.modalCard, expandido && styles.modalCardExpanded]} activeOpacity={1} onPress={() => {}}>
+          <TouchableOpacity style={styles.modalCard} activeOpacity={1} onPress={() => {}}>
             {detalle && (
               <>
                 <View style={[styles.modalHeader, { backgroundColor: ico.color + "1A" }]}>
@@ -212,13 +215,18 @@ export default function AvisosScreen({ navigation, route }: AvisosProps) {
                   </View>
                 </View>
 
-                <View style={[styles.modalBodyWrap, expandido && styles.modalBodyWrapExp]}>
+                <View style={styles.modalBodyWrap}>
                   <Text style={styles.resumen}>{detalle.body || "(sin descripción)"}</Text>
                   {expandido && tieneDetalle && (
                     <>
                       <View style={styles.detalleBox}>
                         <Text style={styles.detLabel}>CONCLUSIÓN COMPLETA</Text>
-                        <ScrollView style={styles.detalleScroll} contentContainerStyle={{ paddingBottom: 4 }}>
+                        <ScrollView
+                          style={styles.detalleScroll}
+                          contentContainerStyle={{ paddingBottom: 4 }}
+                          nestedScrollEnabled
+                          showsVerticalScrollIndicator
+                        >
                           <Text style={styles.detalleText}>{detalle.detalle}</Text>
                         </ScrollView>
                       </View>
@@ -291,18 +299,16 @@ const styles = StyleSheet.create({
   delBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
 
   modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", alignItems: "center", justifyContent: "center", padding: 18 },
-  modalCard: { backgroundColor: colors.card, borderRadius: 20, width: "100%", maxWidth: 460, maxHeight: "86%", borderWidth: 1, borderColor: colors.border, overflow: "hidden" },
-  modalCardExpanded: { height: "82%" },
+  modalCard: { backgroundColor: colors.card, borderRadius: 20, width: "100%", maxWidth: 460, maxHeight: "88%", borderWidth: 1, borderColor: colors.border, overflow: "hidden" },
   modalHeader: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 14 },
   modalIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   modalTitle: { color: colors.text, fontSize: 16, fontWeight: "800", lineHeight: 20 },
   modalTiempo: { color: colors.textDim, fontSize: 12, marginTop: 3 },
   modalBodyWrap: { paddingHorizontal: 18, paddingTop: 8, paddingBottom: 4 },
-  modalBodyWrapExp: { flex: 1, minHeight: 0 }, // solo expandido: acota el ScrollView para que scrollee
   resumen: { color: colors.text, fontSize: 15, lineHeight: 22 },
-  detalleBox: { flex: 1, minHeight: 0, marginTop: 14, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12 },
+  detalleBox: { marginTop: 14, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12 },
   detLabel: { color: colors.primary, fontSize: 10, fontWeight: "800", letterSpacing: 1, marginBottom: 8 },
-  detalleScroll: { flex: 1 },
+  detalleScroll: { maxHeight: DETALLE_MAX_H },
   detalleText: { color: "#D7E0F0", fontSize: 14, lineHeight: 21 },
   desactivar: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 12, paddingVertical: 11, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
   desactivarText: { color: colors.textDim, fontSize: 13, fontWeight: "600" },
