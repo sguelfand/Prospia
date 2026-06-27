@@ -6,7 +6,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
-  OpcionPregunta, PreguntaClaude, getPreguntaClaude, getPreguntasClaude, responderPreguntaClaude,
+  OpcionPregunta, PreguntaClaude, PreguntaItem, getPreguntaClaude, getPreguntasClaude, responderPreguntaClaude,
 } from "../api";
 import { useAuth } from "../auth";
 import { ErrorBox, Loader } from "../components/ui";
@@ -53,7 +53,7 @@ export default function PreguntasClaudeScreen({ navigation, route }: PreguntasCl
 
   useEffect(() => { load(); }, [load]);
 
-  // Deep-link: si llegamos desde el push con preguntaId, abrir directo esa pregunta.
+  // Deep-link: si llegamos desde el push con preguntaId, abrir directo esa tanda.
   useEffect(() => {
     const id = route.params?.preguntaId;
     if (id == null || !token) return;
@@ -98,20 +98,29 @@ export default function PreguntasClaudeScreen({ navigation, route }: PreguntasCl
         {visibles.map((p) => {
           const respondida = p.estado === "respondida";
           const borderColor = respondida ? colors.green : colors.amber;
+          const qs = p.preguntas?.length ? p.preguntas : [{ pregunta: p.pregunta, opciones: [], header: p.header, multiselect: false }];
+          const primera = qs[0];
+          const varias = qs.length > 1;
           return (
             <TouchableOpacity key={p.id} style={[styles.card, { borderLeftColor: borderColor }]} onPress={() => setAbierta(p)} activeOpacity={0.7}>
               <View style={styles.row}>
                 <View style={styles.emoji}><Icon name="flag" size={18} color={borderColor} /></View>
                 <View style={styles.body}>
                   <View style={styles.headerRow}>
-                    <Text style={styles.titulo} numberOfLines={1}>{p.header || "Claude pregunta"}</Text>
+                    <Text style={styles.titulo} numberOfLines={1}>
+                      {primera.header || (varias ? `${qs.length} preguntas` : "Claude pregunta")}
+                    </Text>
                     <Text style={styles.tiempo}>{tiempoRelativo(p.fecha)}</Text>
                   </View>
-                  <Text style={styles.detalle} numberOfLines={3}>{p.pregunta}</Text>
+                  <Text style={styles.detalle} numberOfLines={3}>
+                    {varias ? `${qs.length} preguntas · ` : ""}{primera.pregunta}
+                  </Text>
                   {respondida ? (
                     <Text style={styles.badgeFixed} numberOfLines={1}>✓ {p.elegida}</Text>
                   ) : (
-                    <Text style={styles.badgePend}>Esperando tu respuesta · {p.opciones.length} opciones</Text>
+                    <Text style={styles.badgePend}>
+                      Esperando tu respuesta{varias ? ` · ${qs.length} preguntas` : ` · ${primera.opciones.length} opciones`}
+                    </Text>
                   )}
                 </View>
               </View>
@@ -147,35 +156,70 @@ function DetalleModal({ pregunta, token, onClose, onResuelta }: {
   onClose: () => void;
   onResuelta: (p: PreguntaClaude) => void;
 }) {
-  const [sel, setSel] = useState<Set<string>>(new Set());
-  const [otra, setOtra] = useState("");
+  const qs: PreguntaItem[] = pregunta?.preguntas?.length
+    ? pregunta.preguntas
+    : pregunta ? [{ pregunta: pregunta.pregunta, opciones: [], header: pregunta.header, multiselect: false }] : [];
+
+  // Selección por pregunta: single = string; multi = string[]. + texto libre por pregunta.
+  const [sel, setSel] = useState<(string | string[])[]>([]);
+  const [otra, setOtra] = useState<string[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  useEffect(() => { setSel(new Set()); setOtra(""); setErr(null); setEnviando(false); }, [pregunta?.id]);
+  useEffect(() => {
+    setSel(qs.map((q) => (q.multiselect ? [] : "")));
+    setOtra(qs.map(() => ""));
+    setErr(null);
+    setEnviando(false);
+  }, [pregunta?.id]);
 
   if (!pregunta) return null;
   const pendiente = pregunta.estado === "pendiente";
-  const multi = pregunta.multiselect;
+  const unaSingle = qs.length === 1 && !qs[0].multiselect;  // fast-path: tap = enviar
 
-  const toggle = (label: string) => {
-    if (multi) setSel((prev) => { const n = new Set(prev); n.has(label) ? n.delete(label) : n.add(label); return n; });
-    else enviar(label);  // single-select: tocar la opción = enviar directo
+  const respuestaDe = (i: number): string => {
+    const libre = (otra[i] || "").trim();
+    if (libre) return libre;
+    const s = sel[i];
+    return Array.isArray(s) ? s.join("\n") : (s || "");
+  };
+  const todasRespondidas = qs.every((_, i) => respuestaDe(i));
+
+  const setOtraI = (i: number, v: string) => setOtra((p) => p.map((x, j) => (j === i ? v : x)));
+
+  const toggle = (i: number, label: string) => {
+    const q = qs[i];
+    if (q.multiselect) {
+      setSel((p) => p.map((s, j) => {
+        if (j !== i) return s;
+        const arr = Array.isArray(s) ? s : [];
+        return arr.includes(label) ? arr.filter((x) => x !== label) : [...arr, label];
+      }));
+    } else if (unaSingle) {
+      enviar([label]);                 // 1 sola pregunta single-select → enviar directo
+    } else {
+      setSel((p) => p.map((s, j) => (j === i ? label : s)));
+    }
   };
 
-  const enviar = async (override?: string) => {
+  const enviar = async (override?: string[]) => {
     if (!token || enviando) return;
-    const elegida = override ?? (otra.trim() || [...sel].join("\n"));
-    if (!elegida) { setErr("Elegí una opción o escribí la tuya."); return; }
+    const respuestas = override ?? qs.map((_, i) => respuestaDe(i));
+    if (respuestas.some((r) => !r)) { setErr("Respondé todas las preguntas."); return; }
     setEnviando(true);
     setErr(null);
     try {
-      const actualizada = await responderPreguntaClaude(token, pregunta.id, elegida);
+      const actualizada = await responderPreguntaClaude(token, pregunta.id, respuestas);
       onResuelta(actualizada);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "No se pudo enviar la respuesta.");
       setEnviando(false);
     }
+  };
+
+  const selectedEn = (i: number, label: string) => {
+    const s = sel[i];
+    return Array.isArray(s) ? s.includes(label) : s === label;
   };
 
   return (
@@ -184,46 +228,50 @@ function DetalleModal({ pregunta, token, onClose, onResuelta }: {
         <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
         <View style={styles.modalCard}>
           <View style={styles.modalHeader}>
-            {pregunta.header ? <Text style={styles.chip}>{pregunta.header}</Text> : <View />}
+            <Text style={styles.modalTitle}>{qs.length > 1 ? `${qs.length} preguntas` : "Pregunta de Claude"}</Text>
             <TouchableOpacity onPress={onClose}><Icon name="x" size={18} color={colors.textDim} /></TouchableOpacity>
           </View>
-
-          <Text style={styles.pregunta}>{pregunta.pregunta}</Text>
           {pregunta.contexto ? <Text style={styles.contexto}>{pregunta.contexto}</Text> : null}
 
           {pendiente ? (
             <>
-              {multi ? <Text style={styles.hint}>Podés elegir varias</Text> : null}
-              <ScrollView style={styles.opcionesScroll}>
-                {pregunta.opciones.map((o: OpcionPregunta, i) => {
-                  const on = sel.has(o.label);
-                  return (
-                    <TouchableOpacity
-                      key={`${o.label}-${i}`}
-                      style={[styles.opt, on && styles.optSel]}
-                      onPress={() => toggle(o.label)}
-                      disabled={enviando}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.optK}>{i + 1}</Text>
-                      <View style={styles.optBody}>
-                        <Text style={styles.optLabel}>{o.label}</Text>
-                        {o.description ? <Text style={styles.optDesc}>{o.description}</Text> : null}
-                      </View>
-                      {multi && on ? <Icon name="check" size={16} color={colors.primary} /> : null}
-                    </TouchableOpacity>
-                  );
-                })}
+              <ScrollView style={styles.scroll}>
+                {qs.map((q, i) => (
+                  <View key={i} style={[styles.qBlock, i > 0 && styles.qBlockSep]}>
+                    {q.header ? <Text style={styles.chip}>{q.header}</Text> : null}
+                    <Text style={styles.pregunta}>{q.pregunta}</Text>
+                    {q.multiselect ? <Text style={styles.hint}>Podés elegir varias</Text> : null}
 
-                <Text style={styles.label}>Otra opción</Text>
-                <TextInput
-                  style={styles.input}
-                  value={otra}
-                  onChangeText={setOtra}
-                  placeholder="Escribí tu propia respuesta…"
-                  placeholderTextColor={colors.textDim}
-                  multiline
-                />
+                    {q.opciones.map((o: OpcionPregunta, k) => {
+                      const on = selectedEn(i, o.label);
+                      return (
+                        <TouchableOpacity
+                          key={`${o.label}-${k}`}
+                          style={[styles.opt, on && styles.optSel]}
+                          onPress={() => toggle(i, o.label)}
+                          disabled={enviando}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.optK}>{k + 1}</Text>
+                          <View style={styles.optBody}>
+                            <Text style={styles.optLabel}>{o.label}</Text>
+                            {o.description ? <Text style={styles.optDesc}>{o.description}</Text> : null}
+                          </View>
+                          {on ? <Icon name="check" size={16} color={colors.primary} /> : null}
+                        </TouchableOpacity>
+                      );
+                    })}
+
+                    <TextInput
+                      style={styles.input}
+                      value={otra[i] ?? ""}
+                      onChangeText={(v) => setOtraI(i, v)}
+                      placeholder="Otra opción (texto libre)…"
+                      placeholderTextColor={colors.textDim}
+                      multiline
+                    />
+                  </View>
+                ))}
               </ScrollView>
 
               {err ? <Text style={styles.errText}>{err}</Text> : null}
@@ -231,11 +279,11 @@ function DetalleModal({ pregunta, token, onClose, onResuelta }: {
                 <TouchableOpacity style={styles.modalBtnGhost} onPress={onClose}>
                   <Text style={styles.modalBtnGhostText}>Cerrar</Text>
                 </TouchableOpacity>
-                {(multi || otra.trim()) ? (
+                {!unaSingle || todasRespondidas ? (
                   <TouchableOpacity
-                    style={[styles.modalBtnPrimary, enviando && styles.btnOff]}
+                    style={[styles.modalBtnPrimary, (enviando || !todasRespondidas) && styles.btnOff]}
                     onPress={() => enviar()}
-                    disabled={enviando}
+                    disabled={enviando || !todasRespondidas}
                   >
                     <Icon name="send" size={14} color={colors.bg} />
                     <Text style={styles.modalBtnPrimaryText}>{enviando ? "Enviando…" : "Enviar"}</Text>
@@ -245,11 +293,19 @@ function DetalleModal({ pregunta, token, onClose, onResuelta }: {
             </>
           ) : (
             <>
-              <Text style={styles.label}>Elegiste {pregunta.fecha_respuesta ? `· ${tiempoRelativo(pregunta.fecha_respuesta)}` : ""}</Text>
-              <View style={styles.elegidaBox}>
-                <Icon name="check" size={15} color={colors.green} />
-                <Text style={styles.elegidaText}>{pregunta.elegida}</Text>
-              </View>
+              <Text style={styles.label}>Respondiste {pregunta.fecha_respuesta ? `· ${tiempoRelativo(pregunta.fecha_respuesta)}` : ""}</Text>
+              <ScrollView style={styles.scroll}>
+                {qs.map((q, i) => (
+                  <View key={i} style={[styles.qBlock, i > 0 && styles.qBlockSep]}>
+                    {q.header ? <Text style={styles.chip}>{q.header}</Text> : null}
+                    <Text style={styles.preguntaSm}>{q.pregunta}</Text>
+                    <View style={styles.elegidaBox}>
+                      <Icon name="check" size={15} color={colors.green} />
+                      <Text style={styles.elegidaText}>{(pregunta.respuestas?.[i] ?? pregunta.elegida ?? "").replace(/\n/g, ", ")}</Text>
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
               <View style={styles.modalActions}>
                 <TouchableOpacity style={[styles.modalBtnGhost, { flex: 1 }]} onPress={onClose}>
                   <Text style={styles.modalBtnGhostText}>Cerrar</Text>
@@ -285,13 +341,17 @@ const styles = StyleSheet.create({
   empty: { color: colors.textDim, textAlign: "center", marginTop: 40, paddingHorizontal: 24, lineHeight: 20 },
 
   modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center", padding: 22 },
-  modalCard: { backgroundColor: colors.card, borderRadius: 18, padding: 18, width: "100%", maxWidth: 440, maxHeight: "85%" },
-  modalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10, minHeight: 22 },
-  chip: { color: colors.bg, backgroundColor: colors.primary, fontSize: 11, fontWeight: "800", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, overflow: "hidden" },
-  pregunta: { color: colors.text, fontSize: 17, fontWeight: "700", lineHeight: 23 },
-  contexto: { color: colors.textDim, fontSize: 13, lineHeight: 18, marginTop: 6 },
-  hint: { color: colors.textDim, fontSize: 12, marginTop: 12, fontStyle: "italic" },
-  opcionesScroll: { maxHeight: 340, marginTop: 12 },
+  modalCard: { backgroundColor: colors.card, borderRadius: 18, padding: 18, width: "100%", maxWidth: 440, maxHeight: "88%" },
+  modalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6, minHeight: 22 },
+  modalTitle: { color: colors.text, fontSize: 17, fontWeight: "800" },
+  contexto: { color: colors.textDim, fontSize: 13, lineHeight: 18, marginBottom: 4 },
+  scroll: { maxHeight: 440, marginTop: 8 },
+  qBlock: { marginBottom: 6 },
+  qBlockSep: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: 14, paddingTop: 16 },
+  chip: { color: colors.bg, backgroundColor: colors.primary, fontSize: 11, fontWeight: "800", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, overflow: "hidden", alignSelf: "flex-start", marginBottom: 8 },
+  pregunta: { color: colors.text, fontSize: 16, fontWeight: "700", lineHeight: 22, marginBottom: 6 },
+  preguntaSm: { color: colors.text, fontSize: 15, fontWeight: "600", lineHeight: 20, marginBottom: 8 },
+  hint: { color: colors.textDim, fontSize: 12, marginBottom: 8, fontStyle: "italic" },
   opt: { flexDirection: "row", alignItems: "flex-start", gap: 12, backgroundColor: colors.cardAlt, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 14, marginBottom: 10 },
   optSel: { borderColor: colors.primary, backgroundColor: colors.card },
   optK: { color: colors.textDim, fontSize: 12, fontWeight: "700", borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 1, overflow: "hidden", marginTop: 1 },
@@ -299,7 +359,7 @@ const styles = StyleSheet.create({
   optLabel: { color: colors.text, fontSize: 15, fontWeight: "700", marginBottom: 2 },
   optDesc: { color: colors.textDim, fontSize: 13, lineHeight: 18 },
   label: { color: colors.textDim, fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5, marginTop: 8, marginBottom: 6 },
-  input: { backgroundColor: colors.cardAlt, borderRadius: 10, padding: 12, color: colors.text, fontSize: 15, minHeight: 52, textAlignVertical: "top", borderWidth: 1, borderColor: colors.border },
+  input: { backgroundColor: colors.cardAlt, borderRadius: 10, padding: 12, color: colors.text, fontSize: 15, minHeight: 48, textAlignVertical: "top", borderWidth: 1, borderColor: colors.border },
   errText: { color: colors.red, fontSize: 13, marginTop: 10 },
   modalActions: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8, marginTop: 16 },
   modalBtnGhost: { paddingVertical: 11, paddingHorizontal: 16, borderRadius: 10, borderWidth: 1, borderColor: colors.border, alignItems: "center" },
@@ -307,6 +367,6 @@ const styles = StyleSheet.create({
   modalBtnPrimary: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 11, paddingHorizontal: 16, borderRadius: 10, backgroundColor: colors.primary, flex: 1 },
   modalBtnPrimaryText: { color: colors.bg, fontSize: 14, fontWeight: "800" },
   btnOff: { opacity: 0.5 },
-  elegidaBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.cardAlt, borderRadius: 10, padding: 14, marginTop: 8 },
+  elegidaBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.cardAlt, borderRadius: 10, padding: 14 },
   elegidaText: { color: colors.text, fontSize: 15, fontWeight: "600", flex: 1 },
 });

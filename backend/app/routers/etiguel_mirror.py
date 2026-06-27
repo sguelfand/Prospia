@@ -333,19 +333,31 @@ def ingest_pregunta_claude(
     _check_token(x_mirror_token)
     if not preguntas_al_cel_activo(db):
         return {"mode": "local"}
-    opciones = [{"label": o.label, "description": o.description} for o in body.opciones]
+    items = body.normalizadas()
+    if not items:
+        raise HTTPException(status_code=422, detail="Mandá al menos una pregunta")
+    preguntas = [{
+        "header": (it.header or None) and it.header[:80],
+        "pregunta": (it.pregunta or "")[:5000],
+        "opciones": [{"label": o.label[:200], "description": o.description} for o in it.opciones],
+        "multiselect": bool(it.multiselect),
+    } for it in items]
+    primera = preguntas[0]
     p = PreguntaClaude(
-        header=(body.header or None) and body.header[:80],
-        pregunta=(body.pregunta or "")[:5000],
-        opciones=json.dumps(opciones, ensure_ascii=False),
-        multiselect=bool(body.multiselect),
+        preguntas=json.dumps(preguntas, ensure_ascii=False),
+        # resumen / compat: 1ª pregunta
+        header=primera["header"],
+        pregunta=primera["pregunta"],
+        opciones=json.dumps(primera["opciones"], ensure_ascii=False),
+        multiselect=primera["multiselect"],
         contexto=(body.contexto or None) and body.contexto[:5000],
     )
     db.add(p)
     db.commit()
     db.refresh(p)
     try:
-        push.notificar_pregunta_claude_async(p.id, p.header, p.pregunta, len(opciones))
+        push.notificar_pregunta_claude_async(p.id, primera["header"], primera["pregunta"],
+                                              len(primera["opciones"]), len(preguntas))
     except Exception as e:
         print(f"[PREGUNTA-CLAUDE] push falló: {type(e).__name__}: {e}")
     return {"mode": "remote", "id": p.id}
@@ -357,11 +369,18 @@ def poll_pregunta_claude(
     x_mirror_token: str | None = Header(None),
     db: Session = Depends(get_db),
 ):
-    """Long-poll del MCP: devuelve estado + elegida. Cuando estado == 'respondida',
-    `elegida` trae el/los label(s) que tocó Sebi (multiselect: separados por \\n).
-    Auth: token global."""
+    """Long-poll del MCP: devuelve estado + respuestas. Cuando estado ==
+    'respondida', `respuestas` es la lista alineada con las preguntas y `elegida`
+    el resumen legible. Auth: token global."""
     _check_token(x_mirror_token)
     p = db.get(PreguntaClaude, pregunta_id)
     if not p:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No existe esa pregunta")
-    return {"id": p.id, "estado": p.estado, "elegida": p.elegida}
+    from app.services.preguntas_claude import _parse_json_list, _preguntas_de
+    return {
+        "id": p.id,
+        "estado": p.estado,
+        "elegida": p.elegida,
+        "respuestas": _parse_json_list(p.respuestas) if p.respuestas else None,
+        "preguntas": _preguntas_de(p),
+    }

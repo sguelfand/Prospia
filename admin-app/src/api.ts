@@ -347,17 +347,25 @@ export interface OpcionPregunta {
   description: string | null;
 }
 
-export interface PreguntaClaude {
-  id: number;
-  header: string | null;
+export interface PreguntaItem {
   pregunta: string;
   opciones: OpcionPregunta[];
+  header: string | null;
   multiselect: boolean;
+}
+
+export interface PreguntaClaude {
+  id: number;
+  preguntas: PreguntaItem[];       // tanda (1 a ~4 preguntas)
+  respuestas: string[] | null;     // alineadas por índice; null si pendiente
   contexto: string | null;
-  elegida: string | null;          // label(s) elegido(s) o texto libre; null si pendiente
   estado: "pendiente" | "respondida" | "cancelada";
   fecha: string;
   fecha_respuesta: string | null;
+  // resumen / compat
+  header: string | null;
+  pregunta: string;
+  elegida: string | null;
 }
 
 export const getPreguntasModo = (token: string) =>
@@ -372,8 +380,8 @@ export const getPreguntasClaude = (token: string) =>
 export const getPreguntaClaude = (token: string, id: number) =>
   request<PreguntaClaude>(`/admin/preguntas-claude/${id}`, {}, token);
 
-export const responderPreguntaClaude = (token: string, id: number, elegida: string) =>
-  request<PreguntaClaude>(`/admin/preguntas-claude/${id}/responder`, { method: "POST", body: JSON.stringify({ elegida }) }, token);
+export const responderPreguntaClaude = (token: string, id: number, respuestas: string[]) =>
+  request<PreguntaClaude>(`/admin/preguntas-claude/${id}/responder`, { method: "POST", body: JSON.stringify({ respuestas }) }, token);
 
 // ── Inicializar prueba: borra todo rastro de un número de prueba del cliente ───
 // Etiguel y los tenants usan endpoints distintos; el campo del webhook también
