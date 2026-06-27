@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-import { MensajeRow, bloquearEtiguelMirror, desbloquearEtiguelMirror, getEtiguelMirrorMensajes } from "../api";
+import { MensajeRow, TokenConvCosto, bloquearEtiguelMirror, desbloquearEtiguelMirror, getConversacionCosto, getEtiguelMirrorMensajes } from "../api";
 import { useAuth } from "../auth";
 import { CollapsibleSection, Loader } from "../components/ui";
 import { EtiguelMirrorDetailProps } from "../navigation";
@@ -18,6 +18,7 @@ export default function EtiguelMirrorDetailScreen({ route, navigation }: Etiguel
   const [refreshing, setRefreshing] = useState(false);
   const [bloqueado, setBloqueado] = useState(!!item.bloqueado);
   const [bloqueando, setBloqueando] = useState(false);
+  const [costo, setCosto] = useState<TokenConvCosto | null>(null);
 
   useEffect(() => {
     navigation.setOptions({ title: item.nombre ?? "Conversación" });
@@ -30,6 +31,7 @@ export default function EtiguelMirrorDetailScreen({ route, navigation }: Etiguel
   useEffect(() => {
     setBloqueado(!!item.bloqueado);
     setBloqueando(false);
+    setCosto(null);
   }, [item.id, item.bloqueado]);
 
   const toggleBloqueo = useCallback(() => {
@@ -77,7 +79,11 @@ export default function EtiguelMirrorDetailScreen({ route, navigation }: Etiguel
       setLoading(false);
       setRefreshing(false);
     }
-  }, [token, item.id]);
+    // Costo de esta conversación (mismo dato del monitor, en vivo, best-effort).
+    if (item.telefono) {
+      try { setCosto(await getConversacionCosto(token, item.telefono)); } catch { /* sin costo */ }
+    }
+  }, [token, item.id, item.telefono]);
 
   useEffect(() => {
     load();
@@ -130,6 +136,19 @@ export default function EtiguelMirrorDetailScreen({ route, navigation }: Etiguel
           color={item.prox_contacto ? colors.primary : colors.textDim}
           textStyle={{ fontSize: 13, marginTop: 4 }}
         />
+        {item.telefono ? (
+          <IconText
+            name="tag"
+            text={
+              costo?.resumen
+                ? `Costo conversación: $${costo.resumen.costo.toFixed(3)} · ${costo.resumen.turnos} resp`
+                : "Costo conversación: calculando…"
+            }
+            size={14}
+            color={costo?.resumen ? colors.amber : colors.textDim}
+            textStyle={{ fontSize: 13, marginTop: 4 }}
+          />
+        ) : null}
       </View>
 
       <CollapsibleSection title="Conversación con Camila" count={mensajes.length}>
