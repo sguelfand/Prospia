@@ -15,6 +15,7 @@ import { useAuth } from "../auth";
 import { Icon, IconName } from "./Icon";
 import { ProspiaLogo } from "./Logo";
 import { colors } from "../theme";
+import { APP_VERSION } from "../version";
 
 /** Contenido del menú lateral: Dashboard (home) + cada cliente + Avisos + salir.
  *  Los clientes se traen del backend para que el menú liste todos los tenants. */
@@ -149,6 +150,7 @@ export default function DrawerContent({ navigation, state }: DrawerContentCompon
         />
         <TouchableOpacity style={[styles.logout, { paddingBottom: insets.bottom + 12 }]} onPress={signOut}>
           <Text style={styles.logoutText}>Salir</Text>
+          <Text style={styles.version}>{APP_VERSION}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -218,6 +220,7 @@ const styles = StyleSheet.create({
   },
   empty: { color: colors.textDim, marginLeft: 12, marginTop: 8 },
   footer: { borderTopColor: colors.border, borderTopWidth: 1, paddingHorizontal: 8, paddingTop: 6 },
-  logout: { borderTopColor: colors.border, borderTopWidth: 1, paddingTop: 14, paddingHorizontal: 16, marginTop: 4 },
+  logout: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderTopColor: colors.border, borderTopWidth: 1, paddingTop: 14, paddingHorizontal: 16, marginTop: 4 },
   logoutText: { color: colors.primary, fontSize: 15, fontWeight: "700" },
+  version: { color: colors.textDim, fontSize: 13, fontWeight: "600" },
 });

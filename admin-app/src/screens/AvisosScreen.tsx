@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, Dimensions, Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Dimensions, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Aviso, eliminarAvisos, getAvisos, setNotifPref } from "../api";
@@ -199,8 +199,11 @@ export default function AvisosScreen({ navigation, route }: AvisosProps) {
 
       {/* Detalle del aviso: resumen corto + "Detalle" expande la conclusión completa */}
       <Modal visible={detalle != null} transparent animationType="fade" onRequestClose={() => setDetalle(null)}>
-        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setDetalle(null)}>
-          <TouchableOpacity style={styles.modalCard} activeOpacity={1} onPress={() => {}}>
+        <View style={styles.modalBackdrop}>
+          {/* Capa de cierre DETRÁS de la tarjeta: tocar afuera cierra. La tarjeta
+              es un View normal (no Touchable) para no robarle el gesto al ScrollView. */}
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setDetalle(null)} />
+          <View style={styles.modalCard}>
             {detalle && (
               <>
                 <View style={[styles.modalHeader, { backgroundColor: ico.color + "1A" }]}>
@@ -267,8 +270,8 @@ export default function AvisosScreen({ navigation, route }: AvisosProps) {
                 </View>
               </>
             )}
-          </TouchableOpacity>
-        </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
     </View>
   );
