@@ -118,6 +118,8 @@ function Routes() {
             if (token && expoToken) await setNotifPref(token, expoToken, "claude_termino", false);
             else if (navigationRef.isReady()) navigationRef.navigate("Notificaciones");
           } catch { /* best-effort */ }
+          // Cerrar esa notificación del panel al desactivar.
+          Notifications.dismissNotificationAsync(response.notification.request.identifier).catch(() => {});
         })();
         return;
       }
