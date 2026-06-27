@@ -83,6 +83,10 @@ def _enviar(tokens: list[str], title: str, body: str, data: dict) -> None:
     if not tokens:
         print("[PUSH] sin devices registrados, no se envía nada")
         return
+    # categoryId habilita botones de acción en la notificación del sistema (la app
+    # registra la categoría con setNotificationCategoryAsync). claude_termino trae
+    # el botón "Desactivar avisos".
+    categoria = "claude_termino" if data.get("evento") == "claude_termino" else None
     messages = [
         {
             "to": t,
@@ -92,6 +96,7 @@ def _enviar(tokens: list[str], title: str, body: str, data: dict) -> None:
             "sound": "default",
             "priority": "high",
             "channelId": "default",
+            **({"categoryId": categoria} if categoria else {}),
         }
         for t in tokens
     ]
