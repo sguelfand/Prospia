@@ -16,6 +16,17 @@ Notifications.setNotificationHandler({
   }),
 });
 
+// Categoría con botón de acción para el push "Claude terminó": al expandir la
+// notificación en el panel de Android aparece "Desactivar avisos", que apaga el
+// evento claude_termino para este device (lo maneja el listener en App.tsx).
+Notifications.setNotificationCategoryAsync("claude_termino", [
+  {
+    identifier: "desactivar_claude_termino",
+    buttonTitle: "Desactivar avisos",
+    options: { opensAppToForeground: false, isDestructive: true },
+  },
+]).catch(() => {});
+
 function getProjectId(): string | undefined {
   // El projectId (de Expo/EAS) es necesario para obtener el push token.
   return (

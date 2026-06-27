@@ -12,13 +12,13 @@ import React, { useEffect } from "react";
 import { View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
-import { getEtiguelMirror, getProspect } from "./src/api";
+import { getEtiguelMirror, getProspect, setNotifPref } from "./src/api";
 import { AuthProvider, useAuth } from "./src/auth";
 import DrawerContent from "./src/components/DrawerContent";
 import { ProspiaMark } from "./src/components/Logo";
 import { Loader } from "./src/components/ui";
 import { AuthStackParamList, DrawerParamList } from "./src/navigation";
-import { registerForPush } from "./src/push";
+import { getCachedExpoToken, getExpoTokenAsync, registerForPush } from "./src/push";
 import AvisosScreen from "./src/screens/AvisosScreen";
 import ClienteNotificacionesScreen from "./src/screens/ClienteNotificacionesScreen";
 import ClienteViewScreen from "./src/screens/ClienteViewScreen";
@@ -109,6 +109,19 @@ function Routes() {
         prospect_id?: number; mirror_id?: number; cliente?: string; evento?: string;
         consulta_id?: number;
       };
+      // Botón de acción del panel de Android: "Desactivar avisos" del push
+      // claude_termino → apaga ese evento para este device (no abre nada).
+      if (response.actionIdentifier === "desactivar_claude_termino") {
+        (async () => {
+          try {
+            const expoToken = getCachedExpoToken() ?? (await getExpoTokenAsync());
+            if (token && expoToken) await setNotifPref(token, expoToken, "claude_termino", false);
+            else if (navigationRef.isReady()) navigationRef.navigate("Notificaciones");
+          } catch { /* best-effort */ }
+        })();
+        return;
+      }
+
       if (!navigationRef.isReady()) return;
       const { nav, evento } = data ?? {};
       const avisosFallback = () =>
@@ -117,7 +130,10 @@ function Routes() {
       // Deep-link: cada push abre la pantalla/registro donde vive lo notificado.
       (async () => {
         try {
-          if (nav === "error" || data?.tipo === "agent_error") {
+          if (evento === "claude_termino") {
+            // Tap normal en "Claude terminó" → abrir ESE aviso en la sección Avisos.
+            avisosFallback();
+          } else if (nav === "error" || data?.tipo === "agent_error") {
             navigationRef.navigate("Errores");
           } else if (nav === "preguntas" || data?.tipo === "consulta") {
             // Tap en el push de consulta → abrir DIRECTO la ventana de contestar.
