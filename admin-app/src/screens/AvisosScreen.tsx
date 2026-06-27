@@ -62,15 +62,29 @@ export default function AvisosScreen({ navigation, route }: AvisosProps) {
 
   useEffect(() => { load(); }, [load]);
 
-  // Deep-link: si llegamos desde una push con avisoId, abrir ese aviso apenas
-  // estén cargados. Después limpiamos el param para no reabrirlo.
+  // Refrescar la lista cada vez que la pantalla toma foco (volver desde el menú,
+  // tap en un push, etc.) para no mostrar avisos viejos.
+  useEffect(() => navigation.addListener("focus", () => { load(); }), [navigation, load]);
+
+  // Deep-link: si llegamos desde una push con avisoId, RECARGAR la lista fresca
+  // (el aviso recién llegado puede no estar en la cacheada) y abrir ese aviso.
+  // Limpiamos el param de una para no reabrirlo.
   useEffect(() => {
     const id = route.params?.avisoId;
-    if (id == null || avisos.length === 0) return;
-    const a = avisos.find((x) => x.id === id);
-    if (a) { setExpandido(false); setDetalle(a); }
+    if (id == null || !token) return;
     navigation.setParams({ avisoId: undefined });
-  }, [route.params?.avisoId, avisos]);
+    (async () => {
+      let lista: Aviso[];
+      try {
+        lista = await getAvisos(token);
+        setAvisos(lista);
+      } catch {
+        return;
+      }
+      const a = lista.find((x) => x.id === id);
+      if (a) { setExpandido(false); setDetalle(a); }
+    })();
+  }, [route.params?.avisoId, token]);
 
   const salirSeleccion = () => { setSelectMode(false); setSelected(new Set()); };
   const toggle = (id: number) =>
