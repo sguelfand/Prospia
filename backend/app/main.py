@@ -129,6 +129,13 @@ def run_migrations():
         conn.execute(text(
             "ALTER TABLE monitor_settings ADD COLUMN IF NOT EXISTS preguntas_al_cel BOOLEAN NOT NULL DEFAULT false"
         ))
+        # ── preguntas_claude: soporte multi-pregunta (tanda como el AskUserQuestion nativo) ──
+        conn.execute(text(
+            "ALTER TABLE preguntas_claude ADD COLUMN IF NOT EXISTS preguntas TEXT NOT NULL DEFAULT '[]'"
+        ))
+        conn.execute(text(
+            "ALTER TABLE preguntas_claude ADD COLUMN IF NOT EXISTS respuestas TEXT"
+        ))
 
         # ── prospects: verificación de envío real ("¿salió el WhatsApp?") ──
         conn.execute(text(

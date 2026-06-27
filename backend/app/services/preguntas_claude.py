@@ -30,7 +30,7 @@ def set_preguntas_al_cel(db, activo: bool) -> bool:
     return s.preguntas_al_cel
 
 
-def _parse_opciones(raw: str | None) -> list[dict]:
+def _parse_json_list(raw: str | None) -> list:
     try:
         data = json.loads(raw or "[]")
         return data if isinstance(data, list) else []
@@ -38,18 +38,44 @@ def _parse_opciones(raw: str | None) -> list[dict]:
         return []
 
 
-def pregunta_to_dict(p: PreguntaClaude) -> dict:
-    """Serializa una PreguntaClaude al shape de PreguntaClaudeOut (opciones como
-    lista de dicts, no el TEXT crudo de la DB)."""
-    return {
-        "id": p.id,
+def _preguntas_de(p: PreguntaClaude) -> list[dict]:
+    """Lista de preguntas de la tanda. Si el registro es viejo (sin `preguntas`),
+    la reconstruye desde los campos singular (compat)."""
+    lst = _parse_json_list(p.preguntas)
+    if lst:
+        return lst
+    return [{
         "header": p.header,
         "pregunta": p.pregunta,
-        "opciones": _parse_opciones(p.opciones),
-        "multiselect": p.multiselect,
+        "opciones": _parse_json_list(p.opciones),
+        "multiselect": bool(p.multiselect),
+    }]
+
+
+def pregunta_to_dict(p: PreguntaClaude) -> dict:
+    """Serializa una PreguntaClaude al shape de PreguntaClaudeOut."""
+    respuestas = _parse_json_list(p.respuestas) if p.respuestas else None
+    return {
+        "id": p.id,
+        "preguntas": _preguntas_de(p),
+        "respuestas": respuestas,
         "contexto": p.contexto,
-        "elegida": p.elegida,
         "estado": p.estado,
         "fecha": p.fecha,
         "fecha_respuesta": p.fecha_respuesta,
+        # resumen / compat
+        "header": p.header,
+        "pregunta": p.pregunta,
+        "elegida": p.elegida,
     }
+
+
+def resumen_respuestas(preguntas: list, respuestas: list[str]) -> str:
+    """Arma un resumen legible 'header/pregunta → respuesta' para la lista, el
+    push y el campo `elegida` (compat)."""
+    partes = []
+    for i, r in enumerate(respuestas):
+        q = preguntas[i] if i < len(preguntas) else {}
+        etiqueta = (q.get("header") or q.get("pregunta") or f"P{i+1}") if isinstance(q, dict) else f"P{i+1}"
+        partes.append(f"{etiqueta}: {r}" if len(respuestas) > 1 else str(r))
+    return " · ".join(partes)

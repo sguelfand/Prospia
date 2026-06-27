@@ -1513,19 +1513,23 @@ def get_pregunta_claude(pregunta_id: int, db: Session = Depends(get_db)):
 
 @router.post("/preguntas-claude/{pregunta_id}/responder", response_model=PreguntaClaudeOut)
 def responder_pregunta_claude(pregunta_id: int, body: PreguntaClaudeResponder, db: Session = Depends(get_db)):
-    """Sebi toca una opción (o escribe la suya) en el cel. Guarda la elección y
+    """Sebi responde la tanda desde el cel (una respuesta por pregunta). Guarda y
     marca 'respondida'; el MCP la levanta en su próximo poll y Claude continúa.
-    Si ya estaba respondida, devuelve la pregunta tal cual (idempotente)."""
+    Si ya estaba respondida, devuelve tal cual (idempotente)."""
+    import json as _json
     from app.models.pregunta_claude import PreguntaClaude
-    from app.services.preguntas_claude import pregunta_to_dict
+    from app.services.preguntas_claude import pregunta_to_dict, resumen_respuestas, _preguntas_de
     p = db.get(PreguntaClaude, pregunta_id)
     if not p:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No existe esa pregunta")
-    elegida = (body.elegida or "").strip()
-    if not elegida:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Elegí una opción")
+    respuestas = [(r or "").strip() for r in (body.respuestas or [])]
+    preguntas = _preguntas_de(p)
+    if not respuestas or len(respuestas) != len(preguntas) or any(not r for r in respuestas):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail="Respondé todas las preguntas")
     if p.estado == "pendiente":
-        p.elegida = elegida
+        p.respuestas = _json.dumps(respuestas, ensure_ascii=False)
+        p.elegida = resumen_respuestas(preguntas, respuestas)  # resumen / compat
         p.estado = "respondida"
         p.fecha_respuesta = datetime.now(timezone.utc)
         db.commit()

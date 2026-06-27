@@ -281,15 +281,16 @@ def notificar_consulta_async(consulta_id: int, fuente: str, telefono: str | None
     threading.Thread(target=_notificar_consulta, args=(consulta_id, fuente, telefono, pregunta), daemon=True).start()
 
 
-def _notificar_pregunta_claude(pregunta_id: int, header: str | None, pregunta: str, n_opciones: int) -> None:
+def _notificar_pregunta_claude(pregunta_id: int, header: str | None, pregunta: str,
+                               n_opciones: int, n_preguntas: int = 1) -> None:
     from app.database import SessionLocal
 
     db = SessionLocal()
     try:
         marca = f"{header} · " if header else ""
-        title = "🤔 Claude te pregunta algo"
+        title = "🤔 Claude te pregunta algo" if n_preguntas <= 1 else f"🤔 Claude te hace {n_preguntas} preguntas"
         resumen = (pregunta or "").strip().replace("\n", " ")
-        cola = f" · {n_opciones} opciones" if n_opciones else ""
+        cola = f" · +{n_preguntas - 1} más" if n_preguntas > 1 else (f" · {n_opciones} opciones" if n_opciones else "")
         body = (marca + resumen)[:140] + cola
         # Respeta el toggle de evento "pregunta_claude" (#38).
         tokens = _tokens_para_evento(db, "pregunta_claude")
@@ -303,12 +304,13 @@ def _notificar_pregunta_claude(pregunta_id: int, header: str | None, pregunta: s
         db.close()
 
 
-def notificar_pregunta_claude_async(pregunta_id: int, header: str | None, pregunta: str, n_opciones: int) -> None:
-    """Push de una pregunta nueva de Claude Code (switch "Preguntas al cel" ON).
-    Lleva `nav:pregunta_claude` + `pregunta_id` para que el tap abra directo la
-    pantalla de opciones. Background (no bloquea el POST del MCP)."""
+def notificar_pregunta_claude_async(pregunta_id: int, header: str | None, pregunta: str,
+                                    n_opciones: int, n_preguntas: int = 1) -> None:
+    """Push de una pregunta (o tanda) nueva de Claude Code (switch ON). Lleva
+    `nav:pregunta_claude` + `pregunta_id` para que el tap abra directo la pantalla.
+    Background (no bloquea el POST del MCP)."""
     threading.Thread(target=_notificar_pregunta_claude,
-                     args=(pregunta_id, header, pregunta, n_opciones), daemon=True).start()
+                     args=(pregunta_id, header, pregunta, n_opciones, n_preguntas), daemon=True).start()
 
 
 def _notificar_aviso(title: str, body: str, data: dict) -> None:

@@ -282,31 +282,53 @@ class OpcionPregunta(BaseModel):
     description: str | None = None
 
 
-class PreguntaClaudeIn(BaseModel):
-    """Lo que postea el MCP local `preguntar_a_sebi` (header X-Mirror-Token)."""
+class PreguntaItem(BaseModel):
+    """Una pregunta dentro de la tanda (como un item de AskUserQuestion)."""
     pregunta: str
     opciones: list[OpcionPregunta] = []
     header: str | None = None
     multiselect: bool = False
+
+
+class PreguntaClaudeIn(BaseModel):
+    """Lo que postea el MCP local `preguntar_a_sebi` (header X-Mirror-Token).
+    Forma nueva: `preguntas` (lista, hasta ~4). Compat: si llega `pregunta`
+    suelta (sin `preguntas`), se envuelve en una tanda de 1."""
+    preguntas: list[PreguntaItem] = []
     contexto: str | None = None
+    # compat 1-pregunta (deprecado; usar `preguntas`)
+    pregunta: str | None = None
+    opciones: list[OpcionPregunta] = []
+    header: str | None = None
+    multiselect: bool = False
+
+    def normalizadas(self) -> list[PreguntaItem]:
+        if self.preguntas:
+            return self.preguntas
+        if self.pregunta:
+            return [PreguntaItem(pregunta=self.pregunta, opciones=self.opciones,
+                                 header=self.header, multiselect=self.multiselect)]
+        return []
 
 
 class PreguntaClaudeOut(BaseModel):
     id: int
-    header: str | None
-    pregunta: str
-    opciones: list[OpcionPregunta]
-    multiselect: bool
+    preguntas: list[PreguntaItem]
+    respuestas: list[str] | None   # alineadas por índice; None si pendiente
     contexto: str | None
-    elegida: str | None        # label(s) elegido(s) o texto libre; None si pendiente
-    estado: str                # pendiente | respondida | cancelada
+    estado: str                    # pendiente | respondida | cancelada
     fecha: datetime
     fecha_respuesta: datetime | None
+    # resumen / compat
+    header: str | None
+    pregunta: str
+    elegida: str | None
 
 
 class PreguntaClaudeResponder(BaseModel):
-    """POST de la app cuando Sebi toca una opción (o escribe una propia)."""
-    elegida: str               # para multiselect: labels separados por "\n"
+    """POST de la app cuando Sebi responde la tanda. `respuestas` alineadas por
+    índice con `preguntas` (para multiselect: labels separados por "\n")."""
+    respuestas: list[str]
 
 
 class PreguntasModoOut(BaseModel):

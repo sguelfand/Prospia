@@ -16,12 +16,24 @@ class PreguntaClaude(Base):
     long-poll a GET /ingest/pregunta-claude/{id}, recibe la elección y se la
     devuelve a Claude, que sigue como si Sebi hubiera tocado en la compu.
 
-    `opciones` es la lista cruda del AskUserQuestion: [{"label","description"}].
-    `elegida` guarda lo que tocó Sebi (label, o texto libre si usó "otra opción");
-    para multiSelect se guardan labels separados por "\\n"."""
+    Soporta VARIAS preguntas en una sola "tanda" (como el AskUserQuestion nativo,
+    que agrupa hasta ~4). `preguntas` es la lista cruda:
+    [{"header","pregunta","opciones":[{"label","description"}],"multiselect"}].
+    `respuestas` es la lista alineada por índice con lo que eligió Sebi en cada una
+    (label, o texto libre; para multiselect labels separados por "\\n").
+
+    Compat: `pregunta`/`header`/`opciones`/`multiselect`/`elegida` (singular) se
+    mantienen como RESUMEN (la 1ª pregunta + un join de las respuestas) para el
+    push, la lista y registros viejos."""
     __tablename__ = "preguntas_claude"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # ── tanda completa (multi-pregunta) ──
+    # JSON: [{"header","pregunta","opciones":[{"label","description"}],"multiselect"}]
+    preguntas: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    # JSON: ["respuesta q1", "resp q2", …] alineado por índice. None hasta responder.
+    respuestas: Mapped[str | None] = mapped_column(Text)
+    # ── resumen / compat (1ª pregunta) ──
     # chip/encabezado corto (header de AskUserQuestion), p.ej. "Deploy scraper"
     header: Mapped[str | None] = mapped_column(String(80))
     pregunta: Mapped[str] = mapped_column(Text, nullable=False)
@@ -30,7 +42,7 @@ class PreguntaClaude(Base):
     multiselect: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # contexto opcional (qué está haciendo Claude) para mostrar en la pantalla
     contexto: Mapped[str | None] = mapped_column(Text)
-    # lo que eligió Sebi (label(s) o texto libre). None hasta que responde.
+    # resumen de lo que eligió Sebi (join de respuestas). None hasta que responde.
     elegida: Mapped[str | None] = mapped_column(Text)
     # pendiente (esperando) → respondida (Sebi eligió) → cancelada (timeout/abort)
     estado: Mapped[str] = mapped_column(
