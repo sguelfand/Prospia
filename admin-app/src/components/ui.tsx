@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { colors } from "../theme";
+import { Icon } from "./Icon";
 
 export function KpiCard({ label, value, accent, onPress }: { label: string; value: string | number; accent?: string; onPress?: () => void }) {
   const inner = (
@@ -116,7 +117,47 @@ export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () =
   );
 }
 
+/** Ícono "i" en círculo, tocable, que abre una ventanita con una descripción
+ *  breve. Se usa al lado de cada toggle de notificación (ver
+ *  feedback_notificacion_info_descripcion): toda notificación nueva lleva su "i". */
+export function InfoDot({ titulo, descripcion }: { titulo: string; descripcion: string }) {
+  const [abierto, setAbierto] = useState(false);
+  return (
+    <>
+      <TouchableOpacity
+        onPress={() => setAbierto(true)}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        accessibilityLabel={`Qué es ${titulo}`}
+        accessibilityRole="button"
+      >
+        <Icon name="info" size={18} color={colors.textDim} strokeWidth={1.9} />
+      </TouchableOpacity>
+      <Modal visible={abierto} transparent animationType="fade" onRequestClose={() => setAbierto(false)}>
+        <Pressable style={styles.infoBackdrop} onPress={() => setAbierto(false)}>
+          <Pressable style={styles.infoCard} onPress={() => {}}>
+            <View style={styles.infoHeader}>
+              <Icon name="info" size={18} color={colors.primary} strokeWidth={2} />
+              <Text style={styles.infoTitulo}>{titulo}</Text>
+            </View>
+            <Text style={styles.infoDesc}>{descripcion}</Text>
+            <TouchableOpacity style={styles.infoCerrar} onPress={() => setAbierto(false)}>
+              <Text style={styles.infoCerrarTxt}>Entendido</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
+  );
+}
+
 const styles = StyleSheet.create({
+  infoBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "center", padding: 28 },
+  infoCard: { backgroundColor: colors.card, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: colors.border },
+  infoHeader: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
+  infoTitulo: { color: colors.text, fontSize: 16, fontWeight: "700", marginLeft: 8, flex: 1 },
+  infoDesc: { color: colors.textDim, fontSize: 14, lineHeight: 20 },
+  infoCerrar: { alignSelf: "flex-end", marginTop: 18, paddingVertical: 6, paddingHorizontal: 14, borderRadius: 8, backgroundColor: colors.primary },
+  infoCerrarTxt: { color: colors.onPrimary, fontSize: 14, fontWeight: "700" },
   kpi: {
     flex: 1,
     backgroundColor: colors.card,

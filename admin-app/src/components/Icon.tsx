@@ -29,6 +29,7 @@ export type IconName =
   | "flag"
   | "settings"
   | "pulse"
+  | "info"
   | "refresh";
 
 export function Icon({
@@ -165,6 +166,13 @@ export function Icon({
       )}
       {name === "pulse" && (
         <Polyline points="22,12 18,12 15,21 9,3 6,12 2,12" {...p} />
+      )}
+      {name === "info" && (
+        <>
+          <Circle cx="12" cy="12" r="10" {...p} />
+          <Line x1="12" y1="16" x2="12" y2="11" {...p} />
+          <Line x1="12" y1="8" x2="12.01" y2="8" {...p} />
+        </>
       )}
       {name === "refresh" && (
         <>

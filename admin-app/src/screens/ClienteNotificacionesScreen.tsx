@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NotifEvento, getClienteNotifPrefs, setClienteNotifPref } from "../api";
 import { useAuth } from "../auth";
 import { getCachedExpoToken } from "../push";
-import { ErrorBox, Loader } from "../components/ui";
+import { ErrorBox, InfoDot, Loader } from "../components/ui";
 import { ClienteNotificacionesProps } from "../navigation";
 import { colors } from "../theme";
 
@@ -73,6 +73,7 @@ export default function ClienteNotificacionesScreen({ route, navigation }: Clien
       <View style={styles.card}>
         {eventos.map((e, i) => (
           <View key={e.evento} style={[styles.row, i > 0 && styles.rowBorder]}>
+            {e.descripcion ? <InfoDot titulo={e.label} descripcion={e.descripcion} /> : null}
             <Text style={styles.label}>{e.label}</Text>
             <Switch
               value={e.enabled}
@@ -96,7 +97,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: colors.card, borderRadius: 14, paddingHorizontal: 16 },
   row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14 },
   rowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
-  label: { color: colors.text, fontSize: 15, flex: 1, marginRight: 12 },
+  label: { color: colors.text, fontSize: 15, flex: 1, marginLeft: 10, marginRight: 12 },
   hint: { color: colors.textDim, fontSize: 12, marginTop: 14, lineHeight: 17 },
   empty: { color: colors.textDim, fontSize: 14, textAlign: "center", margin: 24 },
 });

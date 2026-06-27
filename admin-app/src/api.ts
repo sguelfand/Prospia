@@ -655,6 +655,7 @@ export const registerDevice = (token: string, expoToken: string, platform: strin
 export interface NotifEvento {
   evento: string;
   label: string;
+  descripcion?: string; // texto breve que abre el ícono "i" al lado del toggle
   enabled: boolean;
 }
 export interface NotifPrefs {

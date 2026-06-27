@@ -9,24 +9,27 @@ import requests
 
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 
-# Eventos de push toggleables por dispositivo (#38). label = lo que ve el usuario
-# en la config de notificaciones. El orden es el de la UI.
-EVENTOS_PUSH: list[tuple[str, str]] = [
-    ("interesado", "Interesado"),
-    ("respuesta", "Primera respuesta"),
-    ("mensaje_entrante", "Cada mensaje entrante"),
-    ("error_camila", "Error de Camila"),
-    ("consulta_camila", "Consulta de Camila (no sabe qué responder)"),
-    ("standby", "Pendiente en espera (standby)"),
-    ("cola_terminada", "Cola de pendientes terminada"),
-    ("claude_termino", "Claude terminó una tarea (Prospia)"),
-    ("necesita_autorizacion", "Necesita tu autorización"),
-    ("servicio_caido", "Servicio caído (monitoreo)"),
-    ("servicio_recuperado", "Servicio recuperado (monitoreo)"),
-    ("tokens_oportunidad", "Oportunidad de mejora de consumo (tokens)"),
-    ("pregunta_claude", "Claude te pregunta algo (responder desde el cel)"),
+# Eventos de push toggleables por dispositivo (#38). Cada tupla es
+# (key, label, descripcion): label = lo que ve el usuario en la config; descripcion
+# = el texto breve que abre el ícono "i" al lado del toggle (app + web). El orden es
+# el de la UI. REGLA: toda notificación nueva se agrega CON su descripción (la "i"
+# de la UI se alimenta de acá; sin descripción queda un toggle sin explicar).
+EVENTOS_PUSH: list[tuple[str, str, str]] = [
+    ("interesado", "Interesado", "Un prospecto pasó a interesado: mostró intención de compra."),
+    ("respuesta", "Primera respuesta", "Un prospecto respondió por primera vez a un contacto."),
+    ("mensaje_entrante", "Cada mensaje entrante", "Cada mensaje nuevo de un prospecto que ya está en conversación."),
+    ("error_camila", "Error de Camila", "Camila tuvo un error y quedó reportado para revisar."),
+    ("consulta_camila", "Consulta de Camila (no sabe qué responder)", "Camila no supo qué responder y te consulta para que la destrabes."),
+    ("standby", "Pendiente en espera (standby)", "Frené un pendiente de la cola porque me falta info tuya para terminarlo."),
+    ("cola_terminada", "Cola de pendientes terminada", "Terminé de procesar toda la cola de pendientes."),
+    ("claude_termino", "Claude terminó una tarea (Prospia)", "Claude terminó cualquier tarea de Prospia, no solo la cola."),
+    ("necesita_autorizacion", "Necesita tu autorización", "Me trabé en una tarea de la cola esperando tu OK para seguir."),
+    ("servicio_caido", "Servicio caído (monitoreo)", "Un servicio monitoreado se cayó."),
+    ("servicio_recuperado", "Servicio recuperado (monitoreo)", "Un servicio que estaba caído volvió a funcionar."),
+    ("tokens_oportunidad", "Oportunidad de mejora de consumo (tokens)", "Detecté una oportunidad de bajar el consumo de tokens (costo)."),
+    ("pregunta_claude", "Claude te pregunta algo (responder desde el cel)", "Claude te hace una pregunta con opciones para que respondas desde el cel."),
 ]
-EVENTOS_PUSH_KEYS = [k for k, _ in EVENTOS_PUSH]
+EVENTOS_PUSH_KEYS = [k for k, _, _ in EVENTOS_PUSH]
 
 # Eventos OPT-IN: arrancan APAGADOS y solo llegan a los devices que los prenden.
 # El resto de EVENTOS_PUSH es opt-out (sin fila en push_event_mutes = activado).
@@ -37,11 +40,11 @@ EVENTOS_PUSH_KEYS = [k for k, _ in EVENTOS_PUSH]
 EVENTOS_PUSH_DEFAULT_OFF = {"claude_termino"}
 
 # Eventos configurables POR CLIENTE (#44) + su default cuando no hay fila.
-# mensaje_entrante arranca OFF para no inundar; el resto ON.
-EVENTOS_CLIENTE: list[tuple[str, str]] = [
-    ("interesado", "Interesado"),
-    ("respuesta", "Primera respuesta"),
-    ("mensaje_entrante", "Cada mensaje entrante"),
+# (key, label, descripcion) — ver EVENTOS_PUSH. mensaje_entrante arranca OFF.
+EVENTOS_CLIENTE: list[tuple[str, str, str]] = [
+    ("interesado", "Interesado", "Este cliente: un prospecto pasó a interesado."),
+    ("respuesta", "Primera respuesta", "Este cliente: un prospecto respondió por primera vez."),
+    ("mensaje_entrante", "Cada mensaje entrante", "Este cliente: cada mensaje nuevo de un prospecto en conversación. Arranca apagado."),
 ]
 DEFAULT_CLIENTE_EVENTO = {"interesado": True, "respuesta": True, "mensaje_entrante": False}
 

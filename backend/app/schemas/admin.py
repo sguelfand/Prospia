@@ -77,9 +77,11 @@ class DeviceOut(BaseModel):
 
 
 class NotifEvento(BaseModel):
-    """Un evento de push con su estado (on/off) para un device."""
+    """Un evento de push con su estado (on/off) para un device. `descripcion` es el
+    texto breve que abre el ícono "i" al lado del toggle (app + web)."""
     evento: str
     label: str
+    descripcion: str = ""
     enabled: bool
 
 

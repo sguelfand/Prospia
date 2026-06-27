@@ -226,9 +226,35 @@ export default function Configuracion() {
 }
 
 // ── Notificaciones push por dispositivo (#38) ────────────────────────────────
-type NotifEvento = { evento: string; label: string; enabled: boolean }
+type NotifEvento = { evento: string; label: string; descripcion?: string; enabled: boolean }
 type NotifPrefs = { expo_token: string; platform: string | null; eventos: NotifEvento[] }
 type Device = { expo_token: string; platform: string | null }
+
+// Ícono "i" con descripción breve al lado de cada notificación (ver
+// feedback_notificacion_info_descripcion): toda notificación nueva lleva su "i".
+function InfoDot({ titulo, descripcion }: { titulo: string; descripcion: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen((o) => !o) }}
+        onBlur={() => setOpen(false)}
+        title={descripcion}
+        aria-label={`Qué es ${titulo}`}
+        className="flex h-4 w-4 items-center justify-center rounded-full border border-muted text-[10px] font-bold leading-none text-muted hover:border-primary hover:text-primary"
+      >
+        i
+      </button>
+      {open && (
+        <span className="absolute left-0 top-6 z-10 w-60 rounded-lg border border-line bg-card p-3 text-xs leading-relaxed text-ink-soft shadow-lg">
+          <span className="mb-1 block font-semibold text-ink">{titulo}</span>
+          {descripcion}
+        </span>
+      )}
+    </span>
+  )
+}
 
 function NotificacionesPush() {
   const [devices, setDevices] = useState<Device[] | null>(null)
@@ -287,7 +313,10 @@ function NotificacionesPush() {
           <div className="space-y-2">
             {(prefs[d.expo_token] ?? []).map((e) => (
               <label key={e.evento} className="flex items-center justify-between gap-3 cursor-pointer">
-                <span className="text-sm text-ink-soft">{e.label}</span>
+                <span className="flex items-center gap-2">
+                  {e.descripcion && <InfoDot titulo={e.label} descripcion={e.descripcion} />}
+                  <span className="text-sm text-ink-soft">{e.label}</span>
+                </span>
                 <input
                   type="checkbox"
                   checked={e.enabled}

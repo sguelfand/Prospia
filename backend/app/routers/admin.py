@@ -1350,10 +1350,10 @@ def get_cliente_notif_prefs(tenant_id: int, expo_token: str = Query(...), db: Se
     }
     eventos = [
         NotifEvento(
-            evento=k, label=label,
+            evento=k, label=label, descripcion=descripcion,
             enabled=rows[k] if k in rows else push.DEFAULT_CLIENTE_EVENTO.get(k, True),
         )
-        for k, label in push.EVENTOS_CLIENTE
+        for k, label, descripcion in push.EVENTOS_CLIENTE
     ]
     return ClienteNotifPrefsOut(tenant_id=tenant_id, eventos=eventos)
 
@@ -1361,7 +1361,7 @@ def get_cliente_notif_prefs(tenant_id: int, expo_token: str = Query(...), db: Se
 @router.put("/clientes/{tenant_id}/notif-prefs", response_model=ClienteNotifPrefsOut)
 def set_cliente_notif_pref(tenant_id: int, body: ClienteNotifPrefUpdate, db: Session = Depends(get_db)):
     """Activa/desactiva un evento de push de un cliente para un device (upsert)."""
-    if body.evento not in [k for k, _ in push.EVENTOS_CLIENTE]:
+    if body.evento not in [k for k, _, _ in push.EVENTOS_CLIENTE]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Evento desconocido")
     row = (
         db.query(PushClienteEvento)
@@ -1428,9 +1428,10 @@ def get_notif_prefs(expo_token: str = Query(...), db: Session = Depends(get_db))
         NotifEvento(
             evento=k,
             label=label,
+            descripcion=descripcion,
             enabled=(k in con_fila) if k in push.EVENTOS_PUSH_DEFAULT_OFF else (k not in con_fila),
         )
-        for k, label in push.EVENTOS_PUSH
+        for k, label, descripcion in push.EVENTOS_PUSH
     ]
     return NotifPrefsOut(expo_token=expo_token, platform=device.platform if device else None, eventos=eventos)
 
