@@ -48,6 +48,11 @@ class MonitorSettings(Base):
     # texto libre del relevamiento + chat de ayuda del formulario). Se guarda acá
     # —no en Coolify— para setearla por SQL; fallback a settings.ANTHROPIC_API_KEY.
     anthropic_api_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Switch "Preguntas al cel": cuando está ON, las preguntas de Claude Code se
+    # rutean al celular (push + pantalla de opciones) en vez de la cajita nativa
+    # de la terminal. Lo prende/apaga Sebi desde la app; lo lee el MCP local antes
+    # de cada pregunta. Default OFF = comportamiento normal en la compu.
+    preguntas_al_cel: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

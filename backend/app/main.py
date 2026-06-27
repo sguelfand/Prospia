@@ -125,6 +125,10 @@ def run_migrations():
         conn.execute(text(
             "ALTER TABLE monitor_settings ADD COLUMN IF NOT EXISTS anthropic_api_key VARCHAR(255)"
         ))
+        # ── monitor_settings: switch "Preguntas al cel" (Claude Code → push) ──
+        conn.execute(text(
+            "ALTER TABLE monitor_settings ADD COLUMN IF NOT EXISTS preguntas_al_cel BOOLEAN NOT NULL DEFAULT false"
+        ))
 
         # ── prospects: verificación de envío real ("¿salió el WhatsApp?") ──
         conn.execute(text(

@@ -39,6 +39,10 @@ from app.schemas.admin import (
     ConsultaOut,
     ConsultaResponder,
     ConsultasEliminar,
+    PreguntaClaudeOut,
+    PreguntaClaudeResponder,
+    PreguntasModoOut,
+    PreguntasModoUpdate,
     ClienteComparativa,
     ClienteConfigOut,
     ClienteConfigUpdate,
@@ -1466,6 +1470,67 @@ def notify(body: NotifyIn):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Evento desconocido")
     n = push.notificar_global(body.evento, body.title[:120], body.body[:300])
     return {"enviado_a_devices": n}
+
+
+# ── Preguntas de Claude Code (switch "Preguntas al cel") ──────────────────────
+@router.get("/preguntas-modo", response_model=PreguntasModoOut)
+def get_preguntas_modo(db: Session = Depends(get_db)):
+    """Estado del switch "Preguntas al cel" (lo muestra el toggle de ajustes)."""
+    from app.services.preguntas_claude import preguntas_al_cel_activo
+    return {"activo": preguntas_al_cel_activo(db)}
+
+
+@router.patch("/preguntas-modo", response_model=PreguntasModoOut)
+def set_preguntas_modo(body: PreguntasModoUpdate, db: Session = Depends(get_db)):
+    """Sebi prende/apaga el switch desde la app. Con ON, las preguntas de Claude
+    Code van al cel; con OFF, vuelven a la cajita nativa de la terminal."""
+    from app.services.preguntas_claude import set_preguntas_al_cel
+    return {"activo": set_preguntas_al_cel(db, body.activo)}
+
+
+@router.get("/preguntas-claude", response_model=list[PreguntaClaudeOut])
+def listar_preguntas_claude(estado: str | None = Query(None), db: Session = Depends(get_db)):
+    """Preguntas de Claude (pendientes arriba). Filtrable por estado
+    (pendiente|respondida|cancelada). Alimenta la pantalla de Preguntas de Claude."""
+    from app.models.pregunta_claude import PreguntaClaude
+    from app.services.preguntas_claude import pregunta_to_dict
+    q = db.query(PreguntaClaude)
+    if estado:
+        q = q.filter(PreguntaClaude.estado == estado)
+    return [pregunta_to_dict(p) for p in q.order_by(PreguntaClaude.fecha.desc()).limit(50).all()]
+
+
+@router.get("/preguntas-claude/{pregunta_id}", response_model=PreguntaClaudeOut)
+def get_pregunta_claude(pregunta_id: int, db: Session = Depends(get_db)):
+    """Una pregunta puntual (la app la abre desde el deep-link del push)."""
+    from app.models.pregunta_claude import PreguntaClaude
+    from app.services.preguntas_claude import pregunta_to_dict
+    p = db.get(PreguntaClaude, pregunta_id)
+    if not p:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No existe esa pregunta")
+    return pregunta_to_dict(p)
+
+
+@router.post("/preguntas-claude/{pregunta_id}/responder", response_model=PreguntaClaudeOut)
+def responder_pregunta_claude(pregunta_id: int, body: PreguntaClaudeResponder, db: Session = Depends(get_db)):
+    """Sebi toca una opción (o escribe la suya) en el cel. Guarda la elección y
+    marca 'respondida'; el MCP la levanta en su próximo poll y Claude continúa.
+    Si ya estaba respondida, devuelve la pregunta tal cual (idempotente)."""
+    from app.models.pregunta_claude import PreguntaClaude
+    from app.services.preguntas_claude import pregunta_to_dict
+    p = db.get(PreguntaClaude, pregunta_id)
+    if not p:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No existe esa pregunta")
+    elegida = (body.elegida or "").strip()
+    if not elegida:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Elegí una opción")
+    if p.estado == "pendiente":
+        p.elegida = elegida
+        p.estado = "respondida"
+        p.fecha_respuesta = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(p)
+    return pregunta_to_dict(p)
 
 
 @router.get("/eventos", response_model=list[EventoOut])

@@ -24,6 +24,7 @@ EVENTOS_PUSH: list[tuple[str, str]] = [
     ("servicio_caido", "Servicio caído (monitoreo)"),
     ("servicio_recuperado", "Servicio recuperado (monitoreo)"),
     ("tokens_oportunidad", "Oportunidad de mejora de consumo (tokens)"),
+    ("pregunta_claude", "Claude te pregunta algo (responder desde el cel)"),
 ]
 EVENTOS_PUSH_KEYS = [k for k, _ in EVENTOS_PUSH]
 
@@ -278,6 +279,36 @@ def notificar_consulta_async(consulta_id: int, fuente: str, telefono: str | None
     `nav:preguntas` + `consulta_id` para que el tap abra directo la ventana de
     contestar. Background (no bloquea el ingest)."""
     threading.Thread(target=_notificar_consulta, args=(consulta_id, fuente, telefono, pregunta), daemon=True).start()
+
+
+def _notificar_pregunta_claude(pregunta_id: int, header: str | None, pregunta: str, n_opciones: int) -> None:
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        marca = f"{header} · " if header else ""
+        title = "🤔 Claude te pregunta algo"
+        resumen = (pregunta or "").strip().replace("\n", " ")
+        cola = f" · {n_opciones} opciones" if n_opciones else ""
+        body = (marca + resumen)[:140] + cola
+        # Respeta el toggle de evento "pregunta_claude" (#38).
+        tokens = _tokens_para_evento(db, "pregunta_claude")
+        aviso_id = _log_aviso(db, "pregunta_claude", title, body) if tokens else None
+        # deep-link: tocar la push abre DIRECTO la pantalla de la pregunta.
+        _enviar(tokens, title, body, {"tipo": "pregunta_claude", "pregunta_id": pregunta_id,
+                                      "aviso_id": aviso_id, "nav": "pregunta_claude"})
+    except Exception as e:
+        print(f"[PUSH] error armando pregunta de Claude: {type(e).__name__}: {e}")
+    finally:
+        db.close()
+
+
+def notificar_pregunta_claude_async(pregunta_id: int, header: str | None, pregunta: str, n_opciones: int) -> None:
+    """Push de una pregunta nueva de Claude Code (switch "Preguntas al cel" ON).
+    Lleva `nav:pregunta_claude` + `pregunta_id` para que el tap abra directo la
+    pantalla de opciones. Background (no bloquea el POST del MCP)."""
+    threading.Thread(target=_notificar_pregunta_claude,
+                     args=(pregunta_id, header, pregunta, n_opciones), daemon=True).start()
 
 
 def _notificar_aviso(title: str, body: str, data: dict) -> None:

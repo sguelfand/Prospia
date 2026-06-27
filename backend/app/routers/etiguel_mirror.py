@@ -9,15 +9,19 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 
+import json
+
 from app.core.config import settings
 from app.database import get_db
 from app.models.agent_error import AgentError
 from app.models.consulta import Consulta
 from app.models.etiguel_mirror import EtiguelMirror, EtiguelMirrorMensaje
+from app.models.pregunta_claude import PreguntaClaude
+from app.schemas.admin import AgentErrorIn, AvisoIn, ConsultaIn, EtiguelMirrorIn, PreguntaClaudeIn
 from app.models.tenant import Tenant, TenantConfig
-from app.schemas.admin import AgentErrorIn, AvisoIn, ConsultaIn, EtiguelMirrorIn
 from app.services import email as email_svc
 from app.services import push
+from app.services.preguntas_claude import preguntas_al_cel_activo
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 
@@ -304,3 +308,60 @@ def ingest_consulta(
     except Exception as e:
         print(f"[CONSULTA] aviso falló: {type(e).__name__}: {e}")
     return {"ok": True, "id": c.id}
+
+
+# ── Preguntas de Claude Code (switch "Preguntas al cel") ──────────────────────
+@router.get("/preguntas-modo")
+def preguntas_modo(x_mirror_token: str | None = Header(None), db: Session = Depends(get_db)):
+    """El MCP local consulta si el switch está prendido (para decidir si ruteás la
+    pregunta al cel o usás la cajita nativa de la terminal). Auth: token global."""
+    _check_token(x_mirror_token)
+    return {"activo": preguntas_al_cel_activo(db)}
+
+
+@router.post("/pregunta-claude")
+def ingest_pregunta_claude(
+    body: PreguntaClaudeIn,
+    x_mirror_token: str | None = Header(None),
+    db: Session = Depends(get_db),
+):
+    """El MCP local `preguntar_a_sebi` postea acá una pregunta de Claude. Si el
+    switch está APAGADO, no crea nada y devuelve {"mode":"local"} (Claude usa la
+    cajita nativa). Si está PRENDIDO, persiste la pregunta, dispara el push con
+    deep-link a la pantalla de opciones y devuelve {"mode":"remote","id":...} para
+    que el MCP haga long-poll a GET /ingest/pregunta-claude/{id}. Auth: token global."""
+    _check_token(x_mirror_token)
+    if not preguntas_al_cel_activo(db):
+        return {"mode": "local"}
+    opciones = [{"label": o.label, "description": o.description} for o in body.opciones]
+    p = PreguntaClaude(
+        header=(body.header or None) and body.header[:80],
+        pregunta=(body.pregunta or "")[:5000],
+        opciones=json.dumps(opciones, ensure_ascii=False),
+        multiselect=bool(body.multiselect),
+        contexto=(body.contexto or None) and body.contexto[:5000],
+    )
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    try:
+        push.notificar_pregunta_claude_async(p.id, p.header, p.pregunta, len(opciones))
+    except Exception as e:
+        print(f"[PREGUNTA-CLAUDE] push falló: {type(e).__name__}: {e}")
+    return {"mode": "remote", "id": p.id}
+
+
+@router.get("/pregunta-claude/{pregunta_id}")
+def poll_pregunta_claude(
+    pregunta_id: int,
+    x_mirror_token: str | None = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Long-poll del MCP: devuelve estado + elegida. Cuando estado == 'respondida',
+    `elegida` trae el/los label(s) que tocó Sebi (multiselect: separados por \\n).
+    Auth: token global."""
+    _check_token(x_mirror_token)
+    p = db.get(PreguntaClaude, pregunta_id)
+    if not p:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No existe esa pregunta")
+    return {"id": p.id, "estado": p.estado, "elegida": p.elegida}

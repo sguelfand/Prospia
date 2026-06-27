@@ -276,6 +276,47 @@ class ConsultasEliminar(BaseModel):
     ids: list[int]
 
 
+# ── Preguntas de Claude Code (switch "Preguntas al cel") ──────────────────────
+class OpcionPregunta(BaseModel):
+    label: str
+    description: str | None = None
+
+
+class PreguntaClaudeIn(BaseModel):
+    """Lo que postea el MCP local `preguntar_a_sebi` (header X-Mirror-Token)."""
+    pregunta: str
+    opciones: list[OpcionPregunta] = []
+    header: str | None = None
+    multiselect: bool = False
+    contexto: str | None = None
+
+
+class PreguntaClaudeOut(BaseModel):
+    id: int
+    header: str | None
+    pregunta: str
+    opciones: list[OpcionPregunta]
+    multiselect: bool
+    contexto: str | None
+    elegida: str | None        # label(s) elegido(s) o texto libre; None si pendiente
+    estado: str                # pendiente | respondida | cancelada
+    fecha: datetime
+    fecha_respuesta: datetime | None
+
+
+class PreguntaClaudeResponder(BaseModel):
+    """POST de la app cuando Sebi toca una opción (o escribe una propia)."""
+    elegida: str               # para multiselect: labels separados por "\n"
+
+
+class PreguntasModoOut(BaseModel):
+    activo: bool
+
+
+class PreguntasModoUpdate(BaseModel):
+    activo: bool
+
+
 class PendienteIn(BaseModel):
     """Alta de un pendiente desde la app o la web."""
     texto: str
