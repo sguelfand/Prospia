@@ -141,6 +141,9 @@ export default function Tokens() {
               <div key={o.id} className="border border-line rounded-xl p-4">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded border" style={{ color: sev.color, borderColor: sev.color + '66', backgroundColor: sev.color + '18' }}>{sev.label}</span>
+                  {o.tipo === 'ia' && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-primary/50 text-primary bg-primary/10" title="Detectada por el analista de costos (IA), no por reglas fijas">IA</span>
+                  )}
                   <span className="text-sm font-medium text-ink">{o.titulo}</span>
                   <span className="text-[11px] text-muted ml-auto">detectada {haceDias(o.primera_vez)}</span>
                 </div>

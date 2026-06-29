@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, BarChart2, ChevronDown, ChevronLeft, ChevronRight, Coins, Eye, ListTodo, LogOut, Menu, MessageCircleQuestion, Search, Server, Settings, ShieldCheck, Users, X } from 'lucide-react'
+import { Activity, AlertTriangle, BarChart2, ChevronDown, ChevronLeft, ChevronRight, Coins, Eye, ListTodo, LogOut, Menu, MessageCircleQuestion, MessageSquareWarning, Search, Server, Settings, ShieldCheck, Users, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
@@ -121,6 +121,10 @@ export default function Layout() {
             <Link to="/monitoreo/tokens" onClick={onNav} className={subClass(location.pathname.startsWith('/monitoreo/tokens'))}>
               <Coins size={14} />
               Tokens
+            </Link>
+            <Link to="/monitoreo/calidad" onClick={onNav} className={subClass(location.pathname.startsWith('/monitoreo/calidad'))}>
+              <MessageSquareWarning size={14} />
+              Calidad
             </Link>
           </>
         )}

@@ -36,6 +36,7 @@ import PreguntasScreen from "./src/screens/PreguntasScreen";
 import PreguntasClaudeScreen from "./src/screens/PreguntasClaudeScreen";
 import ProspectDetailScreen from "./src/screens/ProspectDetailScreen";
 import TokensScreen from "./src/screens/TokensScreen";
+import CalidadScreen from "./src/screens/CalidadScreen";
 import { colors } from "./src/theme";
 
 const Drawer = createDrawerNavigator<DrawerParamList>();
@@ -90,6 +91,7 @@ function AppDrawer() {
       <Drawer.Screen name="Notificaciones" component={NotificacionesScreen} options={{ title: "Notificaciones" }} />
       <Drawer.Screen name="Monitoreo" component={MonitoreoScreen} options={{ title: "Servicios" }} />
       <Drawer.Screen name="Tokens" component={TokensScreen} options={{ title: "Tokens" }} />
+      <Drawer.Screen name="Calidad" component={CalidadScreen} options={{ title: "Calidad" }} />
       <Drawer.Screen name="ClienteNotificaciones" component={ClienteNotificacionesScreen} options={{ title: "" }} />
     </Drawer.Navigator>
   );
@@ -147,6 +149,8 @@ function Routes() {
             navigationRef.navigate("PreguntasClaude", data?.pregunta_id != null ? { preguntaId: data.pregunta_id } : undefined);
           } else if (nav === "tokens" || data?.tipo === "tokens" || evento === "tokens_oportunidad") {
             navigationRef.navigate("Tokens");
+          } else if (nav === "calidad" || data?.tipo === "calidad" || evento === "calidad_revision") {
+            navigationRef.navigate("Calidad");
           } else if (nav === "monitoreo_servicios" || evento === "servicio_caido" || evento === "servicio_recuperado") {
             navigationRef.navigate("Monitoreo");
           } else if (nav === "pendientes" || evento === "standby" || evento === "cola_terminada" || evento === "necesita_autorizacion") {

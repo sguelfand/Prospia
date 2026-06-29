@@ -92,15 +92,15 @@ export default function DrawerContent({ navigation, state }: DrawerContentCompon
           onPress={() => navigation.navigate("PreguntasClaude")}
         />
 
-        {/* Monitoreo desplegable → Servicios + Tokens */}
+        {/* Monitoreo desplegable → Servicios + Tokens + Calidad */}
         <TouchableOpacity
-          style={[styles.item, (activeRoute === "Monitoreo" || activeRoute === "Tokens") ? styles.itemActive : null]}
+          style={[styles.item, (activeRoute === "Monitoreo" || activeRoute === "Tokens" || activeRoute === "Calidad") ? styles.itemActive : null]}
           onPress={() => setMonOpen((v) => !v)}
         >
           <View style={styles.itemIcon}>
-            <Icon name="pulse" size={18} color={(activeRoute === "Monitoreo" || activeRoute === "Tokens") ? colors.primary : colors.textDim} />
+            <Icon name="pulse" size={18} color={(activeRoute === "Monitoreo" || activeRoute === "Tokens" || activeRoute === "Calidad") ? colors.primary : colors.textDim} />
           </View>
-          <Text style={[styles.itemText, (activeRoute === "Monitoreo" || activeRoute === "Tokens") ? styles.itemTextActive : null]}>
+          <Text style={[styles.itemText, (activeRoute === "Monitoreo" || activeRoute === "Tokens" || activeRoute === "Calidad") ? styles.itemTextActive : null]}>
             Monitoreo
           </Text>
           <Text style={styles.chevron}>{monOpen ? "▾" : "▸"}</Text>
@@ -118,6 +118,12 @@ export default function DrawerContent({ navigation, state }: DrawerContentCompon
               onPress={() => navigation.navigate("Tokens")}
             >
               <Text style={[styles.subText, activeRoute === "Tokens" ? styles.itemTextActive : null]}>Tokens</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.subItem, activeRoute === "Calidad" ? styles.itemActive : null]}
+              onPress={() => navigation.navigate("Calidad")}
+            >
+              <Text style={[styles.subText, activeRoute === "Calidad" ? styles.itemTextActive : null]}>Calidad</Text>
             </TouchableOpacity>
           </>
         )}

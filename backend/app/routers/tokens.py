@@ -82,6 +82,20 @@ def backfill(source: str = Query("etiguel"), meses: int = Query(6, ge=1, le=12))
         raise HTTPException(status_code=502, detail=f"{type(e).__name__}: {e}")
 
 
+@router.post("/diagnostico-ia")
+def diagnostico_ia(source: str = Query("etiguel"), fecha: str | None = Query(None)):
+    """Corre el diagnóstico de costos por IA sobre un día (default: ayer): busca
+    oportunidades de ahorro NUEVAS, distintas a las reglas. Las acumula como
+    oportunidades tipo='ia'. Sin push si es manual."""
+    if source not in camila_audit.SOURCES:
+        raise HTTPException(status_code=404, detail="source desconocido")
+    from app.services import camila_cost_ai
+    try:
+        return camila_cost_ai.diagnosticar(source, fecha, notify=False)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"{type(e).__name__}: {e}")
+
+
 @router.post("/oportunidades/{op_id}/resolver")
 def resolver(op_id: int, abrir: bool = Query(False)):
     """Marca una oportunidad como resuelta (o la re-abre con abrir=true)."""

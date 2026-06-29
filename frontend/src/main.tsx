@@ -12,6 +12,7 @@ import Errores from './pages/Errores'
 import Preguntas from './pages/Preguntas'
 import MonitoreoPage from './pages/MonitoreoPage'
 import Tokens from './pages/Tokens'
+import Calidad from './pages/Calidad'
 import Layout from './components/Layout'
 import { ThemeProvider } from './theme'
 import './index.css'
@@ -39,6 +40,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="monitoreo" element={<Navigate to="/monitoreo/servicios" replace />} />
           <Route path="monitoreo/servicios" element={<MonitoreoPage />} />
           <Route path="monitoreo/tokens" element={<Tokens />} />
+          <Route path="monitoreo/calidad" element={<Calidad />} />
         </Route>
       </Routes>
     </BrowserRouter>
