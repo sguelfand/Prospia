@@ -147,6 +147,24 @@ def _textos_evento(evento: str, cliente: str, nombre: str, detalle: str | None) 
     return f"{cliente}", resumen[:120]
 
 
+def _push_reciente(db, tipo: str, title: str, minutos: int = 5) -> bool:
+    """¿Ya se mandó un push del mismo tipo+título hace menos de `minutos`? Sirve para
+    no inundar: si el cliente manda 4 mensajes seguidos, el title de mensaje_entrante
+    es siempre el mismo (cliente + nombre) → un solo push cada 5 min en vez de 4 (#63).
+    Usa el historial de avisos (#42): robusto ante reinicios y multi-worker (vive en
+    la DB, no en memoria de proceso)."""
+    from datetime import datetime, timedelta, timezone
+    from app.models.aviso import Aviso
+
+    corte = datetime.now(timezone.utc) - timedelta(minutes=minutos)
+    return (
+        db.query(Aviso.id)
+        .filter(Aviso.tipo == tipo, Aviso.title == title, Aviso.fecha >= corte)
+        .first()
+        is not None
+    )
+
+
 def _enviar_evento_filtrado(db, evento: str, title: str, body: str, tenant_id: int,
                             cliente: str | None = None, prospect_id: int | None = None,
                             extra: dict | None = None) -> int:
@@ -156,6 +174,11 @@ def _enviar_evento_filtrado(db, evento: str, title: str, body: str, tenant_id: i
     mergea en el `data` de la push (deep-link: nav + ids). Devuelve a cuántos
     devices se mandó."""
     from app.models.device import Device
+    # Debounce de mensaje_entrante (#63): solo este evento "spamea" (un push por
+    # mensaje). interesado/respuesta son one-shot por transición, no se debouncean.
+    if evento == "mensaje_entrante" and _push_reciente(db, evento, title):
+        print(f"[PUSH] debounce: {evento} '{title[:60]}' ya enviado hace <5min, se omite")
+        return 0
     permitidos = set(_tokens_para_evento(db, evento))
     tokens = [
         d.expo_token for d in db.query(Device).all()
