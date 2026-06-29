@@ -41,7 +41,8 @@ def _anthropic_key() -> str:
     return settings.ANTHROPIC_API_KEY or ""
 
 
-def _post(system: str, messages: list[dict], max_tokens: int, timeout: int = 30) -> str | None:
+def _post(system: str, messages: list[dict], max_tokens: int, timeout: int = 30,
+          funcion: str = "Relevamiento (intake)") -> str | None:
     key = _anthropic_key()
     if not key:
         return None
@@ -64,6 +65,8 @@ def _post(system: str, messages: list[dict], max_tokens: int, timeout: int = 30)
         return None
     try:
         data = resp.json()
+        from app.services import anthropic_usage
+        anthropic_usage.registrar(funcion, MODEL, data.get("usage"))
         return (data.get("content") or [{}])[0].get("text", "")
     except Exception as e:
         print(f"[INTAKE_AI ERROR] parse: {e}")
@@ -117,7 +120,8 @@ def clasificar_texto(texto: str, secciones: list, valores_actuales: dict) -> dic
         "Respondé SOLO con un JSON válido (sin texto alrededor, sin ```), con esta forma:\n"
         '{"asignaciones": [{"campo": "<id>", "valor": "<texto>", "accion": "completar"|"agregar"}], "nota_libre": "<texto o vacío>"}'
     )
-    raw = _post(system, [{"role": "user", "content": texto[:4000]}], max_tokens=1500)
+    raw = _post(system, [{"role": "user", "content": texto[:4000]}], max_tokens=1500,
+                funcion="Relevamiento: clasificar texto")
     if not raw:
         return {"asignaciones": [], "nota_libre": texto, "error": "ia_no_disponible"}
 
@@ -209,4 +213,4 @@ def ayuda_chat(mensajes: list[dict], secciones: list, empresa: str = "") -> str 
             msgs.append({"role": role, "content": content})
     if not msgs or msgs[-1]["role"] != "user":
         return None
-    return _post(system, msgs, max_tokens=600)
+    return _post(system, msgs, max_tokens=600, funcion="Relevamiento: chat de ayuda")

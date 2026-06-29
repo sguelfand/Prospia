@@ -84,6 +84,8 @@ def clasificar(
 
     try:
         data = resp.json()
+        from app.services import anthropic_usage
+        anthropic_usage.registrar("Clasificación de prospectos", ANTHROPIC_MODEL, data.get("usage"))
         text = (data.get("content") or [{}])[0].get("text", "").strip().lower()
         text = re.sub(r'[^a-z_\s]', '', text).strip()
     except Exception as e:

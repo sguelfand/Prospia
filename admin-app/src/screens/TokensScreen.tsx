@@ -11,12 +11,14 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
+  AnthUsage,
   MensajeRow,
   TokenAudit,
   TokenConv,
   TokenDia,
   TokenMesTrend,
   TokenSource,
+  getAnthropicUsage,
   getEtiguelMirrorMensajes,
   getTokenAudit,
   getTokenDia,
@@ -49,6 +51,7 @@ export default function TokensScreen() {
   const [sources, setSources] = useState<TokenSource[]>([]);
   const [source, setSource] = useState("etiguel");
   const [data, setData] = useState<TokenAudit | null>(null);
+  const [apiUsage, setApiUsage] = useState<AnthUsage | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [recomputando, setRecomputando] = useState(false);
@@ -75,6 +78,7 @@ export default function TokensScreen() {
   }, [convAbierta, token, convMsgs]);
 
   useEffect(() => { if (token) getTokenSources(token).then(setSources).catch(() => {}); }, [token]);
+  useEffect(() => { if (token) getAnthropicUsage(token, 30).then(setApiUsage).catch(() => {}); }, [token]);
   useEffect(() => { setDiaSel(null); setDiaData(null); setConvAbierta(null); }, [source]);
 
   // Al abrir un día distinto del último, traer su detalle completo.
@@ -161,6 +165,31 @@ export default function TokensScreen() {
           })
         )}
       </View>
+
+      {/* Costos internos: API de Anthropic (funciones de Prospia, NO Camila) */}
+      {apiUsage ? (
+        <View style={styles.card}>
+          <View style={styles.apiHead}>
+            <Text style={styles.cardTitle}>Costos internos · API Anthropic</Text>
+            <Text style={styles.apiTotal}>{usd3(apiUsage.total_usd)} <Text style={styles.sub}>/ {apiUsage.dias}d</Text></Text>
+          </View>
+          <Text style={styles.sub}>Funciones de Prospia (Especialista, intake, clasificación…), NO Camila.</Text>
+          {apiUsage.por_funcion.length === 0 ? (
+            <Text style={styles.ok}>Sin uso en los últimos {apiUsage.dias} días.</Text>
+          ) : (
+            apiUsage.por_funcion.map((f, i) => (
+              <View key={f.funcion} style={[styles.apiRow, i > 0 && styles.border]}>
+                <View style={{ flex: 1, paddingRight: 8 }}>
+                  <Text style={styles.apiFn}>{f.funcion}</Text>
+                  <Text style={styles.apiMeta}>{f.llamadas} llamada(s) · {fmt(f.tokens)} tok · {f.modelos.join(", ")}</Text>
+                </View>
+                <Text style={styles.apiCost}>{usd3(f.costo_usd)}</Text>
+              </View>
+            ))
+          )}
+          <Text style={styles.apiNota}>Precio oficial de Anthropic (key directa, sin el 10% off de MyClaw).</Text>
+        </View>
+      ) : null}
 
       {!u ? <Text style={styles.empty}>Sin datos del día. Tocá recalcular.</Text> : (
         <>
@@ -345,6 +374,13 @@ const styles = StyleSheet.create({
   opTitle: { color: colors.text, fontSize: 14, fontWeight: "600", flex: 1 },
   opDetail: { color: colors.textDim, fontSize: 12, marginTop: 5 },
   opMeta: { color: colors.textDim, fontSize: 11, marginTop: 4, fontStyle: "italic" },
+  apiHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  apiTotal: { color: colors.text, fontSize: 14, fontWeight: "700" },
+  apiRow: { flexDirection: "row", alignItems: "center", paddingVertical: 8 },
+  apiFn: { color: colors.text, fontSize: 13 },
+  apiMeta: { color: colors.textDim, fontSize: 11, marginTop: 2 },
+  apiCost: { color: colors.text, fontSize: 13, fontWeight: "600" },
+  apiNota: { color: colors.textDim, fontSize: 10, marginTop: 8 },
   legendRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   legend: {},
   legItem: { color: colors.textDim, fontSize: 11 },

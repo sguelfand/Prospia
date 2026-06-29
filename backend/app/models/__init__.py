@@ -14,5 +14,6 @@ from app.models.pendiente import Pendiente
 from app.models.intake_submission import IntakeSubmission
 from app.models.pregunta_claude import PreguntaClaude
 from app.models.camila_revision import CamilaRevision, CamilaConsolidacion
+from app.models.anthropic_usage import AnthropicUsage
 
-__all__ = ["Tenant", "TenantConfig", "User", "Rubro", "Termino", "Prospect", "ProspectHistorial", "ProspectMensaje", "Device", "PushMute", "EtiguelMirror", "EtiguelMirrorMensaje", "AgentError", "Consulta", "Pendiente", "IntakeSubmission", "PreguntaClaude", "CamilaRevision", "CamilaConsolidacion"]
+__all__ = ["Tenant", "TenantConfig", "User", "Rubro", "Termino", "Prospect", "ProspectHistorial", "ProspectMensaje", "Device", "PushMute", "EtiguelMirror", "EtiguelMirrorMensaje", "AgentError", "Consulta", "Pendiente", "IntakeSubmission", "PreguntaClaude", "CamilaRevision", "CamilaConsolidacion", "AnthropicUsage"]

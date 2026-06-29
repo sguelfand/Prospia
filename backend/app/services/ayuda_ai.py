@@ -66,7 +66,7 @@ def ayuda_chat(mensajes: list[dict], pantalla_titulo: str, pantalla_funciones: s
     msgs = _historial(mensajes)
     if not msgs or msgs[-1]["role"] != "user":
         return None
-    return _post(system, msgs, max_tokens=600)
+    return _post(system, msgs, max_tokens=600, funcion="Asistente de ayuda (cliente)")
 
 
 # ── 2) Chat de reporte de error → ticket ──────────────────────────────────────
@@ -103,7 +103,7 @@ def reporte_chat(mensajes: list[dict], pantalla_titulo: str = "") -> dict:
     msgs = _historial(mensajes)
     if not msgs or msgs[-1]["role"] != "user":
         return {"listo": False, "respuesta": "Contame qué fue lo que no funcionó."}
-    raw = _post(system, msgs, max_tokens=700) or ""
+    raw = _post(system, msgs, max_tokens=700, funcion="Reporte de error (asistente)") or ""
     if REPORTE_MARKER not in raw:
         return {"listo": False, "respuesta": raw.strip() or "¿Me das un poco más de detalle?"}
     # Extraer el bloque JSON que sigue al marcador.
