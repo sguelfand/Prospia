@@ -7,7 +7,8 @@ import { useAuth } from "../auth";
 import { ErrorBox, Loader } from "../components/ui";
 import { AvisosProps } from "../navigation";
 import { Icon, IconName } from "../components/Icon";
-import { getCachedExpoToken, getExpoTokenAsync } from "../push";
+import { ReagendarSheet, formatWhen } from "../components/ReagendarSheet";
+import { getCachedExpoToken, getExpoTokenAsync, programarReaviso } from "../push";
 import { colors } from "../theme";
 
 // Alto concreto para el scroll del detalle (no depender de la cadena de flex).
@@ -35,6 +36,33 @@ function iconoPara(tipo: string): { name: IconName; color: string } {
   return { name: "bell", color: colors.textDim };
 }
 
+// Botón de acción solo-ícono (logo + micro-etiqueta) para la barra del aviso.
+function Accion({
+  icon,
+  label,
+  onPress,
+  primary,
+  danger,
+}: {
+  icon: IconName;
+  label: string;
+  onPress: () => void;
+  primary?: boolean;
+  danger?: boolean;
+}) {
+  const tint = primary ? colors.onPrimary : danger ? colors.red : colors.textDim;
+  return (
+    <TouchableOpacity style={styles.accion} onPress={onPress} activeOpacity={0.7}>
+      <View style={[styles.accionBtn, primary && styles.accionPrimary, danger && styles.accionDanger]}>
+        <Icon name={icon} size={primary ? 23 : 21} color={tint} />
+      </View>
+      <Text style={[styles.accionCap, primary && styles.accionCapPrimary, danger && styles.accionCapDanger]}>
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 export default function AvisosScreen({ navigation, route }: AvisosProps) {
   const { token } = useAuth();
   const insets = useSafeAreaInsets();
@@ -46,6 +74,7 @@ export default function AvisosScreen({ navigation, route }: AvisosProps) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [detalle, setDetalle] = useState<Aviso | null>(null);
   const [expandido, setExpandido] = useState(false); // "Detalle" abierto (conclusión completa)
+  const [reagendar, setReagendar] = useState<Aviso | null>(null); // sheet de reagendado
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -129,6 +158,20 @@ export default function AvisosScreen({ navigation, route }: AvisosProps) {
     setAvisos((prev) => prev.filter((x) => x.id !== a.id));
     setDetalle(null);
     try { await eliminarAvisos(token, [a.id]); } catch { load(); }
+  };
+
+  // Reagendar: agenda el MISMO aviso como notificación local para `when`.
+  const onReagendar = async (when: Date) => {
+    const a = reagendar;
+    setReagendar(null);
+    if (!a) return;
+    const id = await programarReaviso(a, when);
+    setDetalle(null);
+    if (id) {
+      Alert.alert("Reagendado", `Te vuelvo a avisar ${formatWhen(when)}.`);
+    } else {
+      Alert.alert("No se pudo", "Activá las notificaciones del sistema para reagendar avisos.");
+    }
   };
 
   const irACliente = (a: Aviso) => {
@@ -257,36 +300,39 @@ export default function AvisosScreen({ navigation, route }: AvisosProps) {
                   )}
                 </View>
 
+                {/* Acciones solo-íconos, centradas y repartidas parejo según cuántas haya */}
                 <View style={styles.modalActions}>
                   {detalle.tenant_id != null && (
-                    <TouchableOpacity style={styles.modalBtnGhost} onPress={() => irACliente(detalle)}>
-                      <Text style={styles.modalBtnGhostText}>Ver cliente</Text>
-                    </TouchableOpacity>
+                    <Accion icon="user" label="Cliente" onPress={() => irACliente(detalle)} />
                   )}
                   {!expandido && tieneDetalle && (
-                    <TouchableOpacity style={styles.modalBtnGhost} onPress={() => setExpandido(true)}>
-                      <Text style={styles.modalBtnGhostText}>Detalle</Text>
-                    </TouchableOpacity>
+                    <Accion icon="list" label="Detalle" onPress={() => setExpandido(true)} />
                   )}
-                  <TouchableOpacity
-                    style={styles.modalBtnDanger}
+                  <Accion icon="clock" label="Reagendar" primary onPress={() => setReagendar(detalle)} />
+                  <Accion
+                    icon="trash"
+                    label="Eliminar"
+                    danger
                     onPress={() => Alert.alert("Eliminar", "¿Eliminar este aviso?", [
                       { text: "Cancelar", style: "cancel" },
                       { text: "Eliminar", style: "destructive", onPress: () => eliminarUno(detalle) },
                     ])}
-                  >
-                    <Icon name="x" size={14} color="#fff" />
-                    <Text style={styles.modalBtnDangerText}>Eliminar</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.modalBtnPrimary} onPress={() => setDetalle(null)}>
-                    <Text style={styles.modalBtnPrimaryText}>Cerrar</Text>
-                  </TouchableOpacity>
+                  />
+                  <Accion icon="x" label="Cerrar" onPress={() => setDetalle(null)} />
                 </View>
               </>
             )}
           </View>
         </View>
       </Modal>
+
+      {/* Reagendar: re-disparar el aviso (+30 min, +1 h, o personalizado) */}
+      <ReagendarSheet
+        visible={reagendar != null}
+        titulo={reagendar?.title ?? ""}
+        onClose={() => setReagendar(null)}
+        onConfirm={onReagendar}
+      />
     </View>
   );
 }
@@ -329,11 +375,12 @@ const styles = StyleSheet.create({
   detalleText: { color: "#D7E0F0", fontSize: 14, lineHeight: 21 },
   desactivar: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 12, paddingVertical: 11, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
   desactivarText: { color: colors.textDim, fontSize: 13, fontWeight: "600" },
-  modalActions: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8, paddingHorizontal: 18, paddingTop: 14, paddingBottom: 16, flexWrap: "wrap" },
-  modalBtnGhost: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: colors.border, marginRight: "auto" },
-  modalBtnGhostText: { color: colors.text, fontSize: 14, fontWeight: "700" },
-  modalBtnDanger: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, backgroundColor: colors.red },
-  modalBtnDangerText: { color: "#fff", fontSize: 14, fontWeight: "700" },
-  modalBtnPrimary: { paddingVertical: 10, paddingHorizontal: 18, borderRadius: 10, backgroundColor: colors.primary },
-  modalBtnPrimaryText: { color: colors.bg, fontSize: 14, fontWeight: "800" },
+  modalActions: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-evenly", paddingHorizontal: 12, paddingTop: 14, paddingBottom: 18 },
+  accion: { alignItems: "center", gap: 6, flex: 1 },
+  accionBtn: { width: 52, height: 52, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.cardAlt, alignItems: "center", justifyContent: "center" },
+  accionPrimary: { backgroundColor: colors.primary, borderColor: colors.primary },
+  accionDanger: { borderColor: "rgba(239,68,68,0.45)" },
+  accionCap: { fontSize: 10.5, fontWeight: "700", color: colors.textDim },
+  accionCapPrimary: { color: colors.primary },
+  accionCapDanger: { color: colors.red },
 });

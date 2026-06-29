@@ -30,7 +30,9 @@ export type IconName =
   | "settings"
   | "pulse"
   | "info"
-  | "refresh";
+  | "refresh"
+  | "user"
+  | "trash";
 
 export function Icon({
   name,
@@ -179,6 +181,18 @@ export function Icon({
           <Polyline points="23,4 23,10 17,10" {...p} />
           <Polyline points="1,20 1,14 7,14" {...p} />
           <Path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" {...p} />
+        </>
+      )}
+      {name === "user" && (
+        <>
+          <Circle cx="12" cy="8" r="4" {...p} />
+          <Path d="M4 21c0-4 4-6 8-6s8 2 8 6" {...p} />
+        </>
+      )}
+      {name === "trash" && (
+        <>
+          <Polyline points="3,6 21,6" {...p} />
+          <Path d="M8 6V4h8v2M6 6l1 14h10l1-14" {...p} />
         </>
       )}
     </Svg>

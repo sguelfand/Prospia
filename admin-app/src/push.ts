@@ -59,6 +59,69 @@ export async function getExpoTokenAsync(): Promise<string | null> {
 }
 
 /**
+ * Reagenda (re-dispara) un aviso como notificación LOCAL en este device para el
+ * momento `when`. Reusa el mismo `data` que un push real (aviso_id, tipo, etc.)
+ * para que al tocarla el deep-link de App.tsx reabra el aviso. Devuelve el id de
+ * la notificación agendada, o null si no se pudo (sin permiso / error). No rompe.
+ */
+export async function programarReaviso(
+  aviso: {
+    id: number;
+    tipo: string;
+    title: string;
+    body: string;
+    tenant_id: number | null;
+    cliente: string | null;
+    prospect_id: number | null;
+  },
+  when: Date,
+): Promise<string | null> {
+  try {
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    let status = existing;
+    if (existing !== "granted") {
+      const req = await Notifications.requestPermissionsAsync();
+      status = req.status;
+    }
+    if (status !== "granted") return null;
+
+    if (Platform.OS === "android") {
+      // Asegurar el canal (puede no existir si nunca se registró push acá).
+      await Notifications.setNotificationChannelAsync("default", {
+        name: "Avisos",
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+      }).catch(() => {});
+    }
+
+    return await Notifications.scheduleNotificationAsync({
+      content: {
+        title: aviso.title,
+        body: aviso.body || "",
+        sound: true,
+        data: {
+          aviso_id: aviso.id,
+          tipo: aviso.tipo,
+          evento: aviso.tipo,
+          tenant_id: aviso.tenant_id ?? undefined,
+          cliente: aviso.cliente ?? undefined,
+          prospect_id: aviso.prospect_id ?? undefined,
+          reagendado: true,
+        },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: when,
+        channelId: "default",
+      },
+    });
+  } catch (e) {
+    console.log("[push] no se pudo reagendar el aviso:", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+/**
  * Pide permiso, obtiene el push token de Expo y lo registra en el backend.
  * Es tolerante a fallos: si algo no está (emulador, sin permiso, sin projectId)
  * NO rompe la app, solo loguea. El resto de la app funciona igual.
