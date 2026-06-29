@@ -601,6 +601,30 @@ export const setEstadoError = (token: string, id: number, estado: EstadoError) =
 export const deleteError = (token: string, id: number) =>
   request<void>(`/admin/errores/${id}`, { method: "DELETE" }, token);
 
+// ── Calidad (especialista del negocio que revisa las conversaciones) ──────────
+export type EstadoRevision = "nuevo" | "revisado";
+export type VeredictoRevision = "acierto" | "falso_positivo" | null;
+export interface RevisionCalidad {
+  id: number; source: string; mirror_id: number | null;
+  telefono: string | null; nombre: string | null; fecha: string;
+  categoria: string; severidad: "alta" | "media" | "baja";
+  titulo: string; detalle: string; fragmento: string; sugerencia: string;
+  estado: EstadoRevision; veredicto: VeredictoRevision; nota_sebi: string | null;
+  created_at: string | null; revisado_at: string | null;
+}
+
+export const getRevisiones = (token: string, source = "etiguel") =>
+  request<RevisionCalidad[]>(`/admin/calidad/revisiones?source=${encodeURIComponent(source)}`, {}, token);
+
+export const confirmarRevision = (token: string, id: number, veredicto: "acierto" | "falso_positivo", nota?: string) =>
+  request<RevisionCalidad>(`/admin/calidad/revisiones/${id}/confirmar`, {
+    method: "POST",
+    body: JSON.stringify({ veredicto, nota }),
+  }, token);
+
+export const deleteRevision = (token: string, id: number) =>
+  request<void>(`/admin/calidad/revisiones/${id}`, { method: "DELETE" }, token);
+
 // ── Pendientes ───────────────────────────────────────────────────────────────
 export const getPendientes = (token: string, incluirHechos = false) =>
   request<Pendiente[]>(`/admin/pendientes?incluir_hechos=${incluirHechos}`, {}, token);

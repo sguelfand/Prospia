@@ -13,5 +13,6 @@ from app.models.consulta import Consulta
 from app.models.pendiente import Pendiente
 from app.models.intake_submission import IntakeSubmission
 from app.models.pregunta_claude import PreguntaClaude
+from app.models.camila_revision import CamilaRevision
 
-__all__ = ["Tenant", "TenantConfig", "User", "Rubro", "Termino", "Prospect", "ProspectHistorial", "ProspectMensaje", "Device", "PushMute", "EtiguelMirror", "EtiguelMirrorMensaje", "AgentError", "Consulta", "Pendiente", "IntakeSubmission", "PreguntaClaude"]
+__all__ = ["Tenant", "TenantConfig", "User", "Rubro", "Termino", "Prospect", "ProspectHistorial", "ProspectMensaje", "Device", "PushMute", "EtiguelMirror", "EtiguelMirrorMensaje", "AgentError", "Consulta", "Pendiente", "IntakeSubmission", "PreguntaClaude", "CamilaRevision"]

@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine
 import app.models  # noqa: F401  (registra todas las tablas para create_all)
-from app.routers import admin, auth, dashboard, etiguel_mirror, me, monitoring, prospects, public, terminos, tokens
+from app.routers import admin, auth, calidad, dashboard, etiguel_mirror, me, monitoring, prospects, public, terminos, tokens
 
 
 def run_migrations():
@@ -176,6 +176,7 @@ app.include_router(monitoring.router)
 app.include_router(tokens.router)
 app.include_router(public.router)
 app.include_router(me.router)
+app.include_router(calidad.router)
 
 
 from app.services import cadence
@@ -189,6 +190,12 @@ monitoring_service.start()
 
 from app.services import camila_audit
 camila_audit.start()
+
+from app.services import camila_quality
+camila_quality.start()
+
+from app.services import camila_cost_ai
+camila_cost_ai.start()
 
 
 @app.get("/")
