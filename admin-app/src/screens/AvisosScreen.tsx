@@ -7,7 +7,8 @@ import { useAuth } from "../auth";
 import { ErrorBox, Loader } from "../components/ui";
 import { AvisosProps } from "../navigation";
 import { Icon, IconName } from "../components/Icon";
-import { getCachedExpoToken, getExpoTokenAsync } from "../push";
+import { ReagendarSheet, formatWhen } from "../components/ReagendarSheet";
+import { getCachedExpoToken, getExpoTokenAsync, programarReaviso } from "../push";
 import { colors } from "../theme";
 
 // Alto concreto para el scroll del detalle (no depender de la cadena de flex).
@@ -46,6 +47,7 @@ export default function AvisosScreen({ navigation, route }: AvisosProps) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [detalle, setDetalle] = useState<Aviso | null>(null);
   const [expandido, setExpandido] = useState(false); // "Detalle" abierto (conclusión completa)
+  const [reagendar, setReagendar] = useState<Aviso | null>(null); // sheet de reagendado
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -129,6 +131,20 @@ export default function AvisosScreen({ navigation, route }: AvisosProps) {
     setAvisos((prev) => prev.filter((x) => x.id !== a.id));
     setDetalle(null);
     try { await eliminarAvisos(token, [a.id]); } catch { load(); }
+  };
+
+  // Reagendar: agenda el MISMO aviso como notificación local para `when`.
+  const onReagendar = async (when: Date) => {
+    const a = reagendar;
+    setReagendar(null);
+    if (!a) return;
+    const id = await programarReaviso(a, when);
+    setDetalle(null);
+    if (id) {
+      Alert.alert("Reagendado", `Te vuelvo a avisar ${formatWhen(when)}.`);
+    } else {
+      Alert.alert("No se pudo", "Activá las notificaciones del sistema para reagendar avisos.");
+    }
   };
 
   const irACliente = (a: Aviso) => {
@@ -263,6 +279,10 @@ export default function AvisosScreen({ navigation, route }: AvisosProps) {
                       <Text style={styles.modalBtnGhostText}>Ver cliente</Text>
                     </TouchableOpacity>
                   )}
+                  <TouchableOpacity style={styles.modalBtnGhostIcon} onPress={() => setReagendar(detalle)}>
+                    <Icon name="clock" size={14} color={colors.text} />
+                    <Text style={styles.modalBtnGhostText}>Reagendar</Text>
+                  </TouchableOpacity>
                   {!expandido && tieneDetalle && (
                     <TouchableOpacity style={styles.modalBtnGhost} onPress={() => setExpandido(true)}>
                       <Text style={styles.modalBtnGhostText}>Detalle</Text>
@@ -287,6 +307,14 @@ export default function AvisosScreen({ navigation, route }: AvisosProps) {
           </View>
         </View>
       </Modal>
+
+      {/* Reagendar: re-disparar el aviso (+30 min, +1 h, o personalizado) */}
+      <ReagendarSheet
+        visible={reagendar != null}
+        titulo={reagendar?.title ?? ""}
+        onClose={() => setReagendar(null)}
+        onConfirm={onReagendar}
+      />
     </View>
   );
 }
@@ -331,6 +359,7 @@ const styles = StyleSheet.create({
   desactivarText: { color: colors.textDim, fontSize: 13, fontWeight: "600" },
   modalActions: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8, paddingHorizontal: 18, paddingTop: 14, paddingBottom: 16, flexWrap: "wrap" },
   modalBtnGhost: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: colors.border, marginRight: "auto" },
+  modalBtnGhostIcon: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
   modalBtnGhostText: { color: colors.text, fontSize: 14, fontWeight: "700" },
   modalBtnDanger: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, backgroundColor: colors.red },
   modalBtnDangerText: { color: "#fff", fontSize: 14, fontWeight: "700" },
