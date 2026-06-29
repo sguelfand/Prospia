@@ -267,9 +267,16 @@ def reportar_error(
         telefono=None,
         patron="reporte_cliente",
         contenido=contenido,
-        estado="reportado",   # entra directo a la cola que revisa Sebi
+        # estado por default = 'nuevo': entra al sector "Nuevos" para que Sebi lo
+        # lea y recién al "Reportar" pase a la cola que reviso. NO directo a reportado.
     )
     db.add(err)
     db.commit()
     db.refresh(err)
+    # Push de alerta a la app (mismo canal que los errores de Camila; best-effort).
+    try:
+        from app.services import push
+        push.notificar_error_async(err.id, err.fuente, err.contenido)
+    except Exception:
+        pass
     return {"respuesta": out.get("respuesta", ""), "cargado": True, "ticket_id": err.id}
