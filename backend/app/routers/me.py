@@ -20,11 +20,13 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
 from app.database import get_db
+from app.models.agent_error import AgentError
 from app.models.consulta import Consulta
 from app.models.intake_submission import IntakeSubmission
-from app.models.tenant import TenantConfig
+from app.models.tenant import Tenant, TenantConfig
 from app.models.user import User
 from app.schemas.admin import ConsultaOut, ConsultaResponder, ConsultasEliminar
+from app.services import ayuda_ai
 from app.services import info_negocio as info_negocio_svc
 from app.services import intake_ai
 from app.services.intake_schema import secciones_config
@@ -207,3 +209,74 @@ def descargar_archivo(
                     filename=a.get("nombre_original") or "archivo",
                 )
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archivo no encontrado")
+
+
+# ── Asistente de ayuda + reporte de errores (Haiku, solo para el cliente) ──────
+
+class AyudaBody(BaseModel):
+    mensajes: list[dict] = []          # historial [{role, content}]
+    pantalla_titulo: str = ""          # nombre legible de la pantalla activa
+    pantalla_funciones: str = ""       # qué se puede hacer en esa pantalla
+
+
+class ReporteBody(BaseModel):
+    mensajes: list[dict] = []
+    pantalla_titulo: str = ""
+
+
+@router.post("/ayuda")
+def ayuda_uso(
+    body: AyudaBody,
+    user: User = Depends(get_current_user),
+):
+    """Chat de ayuda contextual ("¿cómo uso esto?"). Acotado a cómo usar Prospia y
+    a las funciones de la pantalla donde está el cliente."""
+    resp = ayuda_ai.ayuda_chat(body.mensajes, body.pantalla_titulo, body.pantalla_funciones)
+    if resp is None:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail="La ayuda no está disponible en este momento.")
+    return {"respuesta": resp}
+
+
+@router.post("/reportar-error")
+def reportar_error(
+    body: ReporteBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Chat que toma un error reportado por el cliente. Cuando Haiku ya tiene la
+    info necesaria, carga el ticket en la cola de errores (AgentError, fuente =
+    slug del tenant, estado 'reportado') y le confirma al cliente. Devuelve la
+    respuesta para el chat y, si se cargó, el id del ticket."""
+    out = ayuda_ai.reporte_chat(body.mensajes, body.pantalla_titulo)
+    if not out.get("listo"):
+        return {"respuesta": out.get("respuesta", ""), "cargado": False}
+
+    t = out["ticket"]
+    tenant = db.get(Tenant, user.tenant_id)
+    slug = (tenant.slug if tenant else "cliente")[:30]
+    contenido = (
+        f"[Reporte del cliente] {t.get('titulo', '')}\n"
+        f"Pantalla/función: {t.get('pantalla', '')}\n\n"
+        f"{t.get('resumen', '')}\n\n"
+        f"Reportado por: usuario '{getattr(user, 'email', '') or user.id}' (tenant {slug})."
+    )
+    err = AgentError(
+        fuente=slug,
+        agente="cliente",
+        telefono=None,
+        patron="reporte_cliente",
+        contenido=contenido,
+        # estado por default = 'nuevo': entra al sector "Nuevos" para que Sebi lo
+        # lea y recién al "Reportar" pase a la cola que reviso. NO directo a reportado.
+    )
+    db.add(err)
+    db.commit()
+    db.refresh(err)
+    # Push de alerta a la app (mismo canal que los errores de Camila; best-effort).
+    try:
+        from app.services import push
+        push.notificar_error_async(err.id, err.fuente, err.contenido)
+    except Exception:
+        pass
+    return {"respuesta": out.get("respuesta", ""), "cargado": True, "ticket_id": err.id}

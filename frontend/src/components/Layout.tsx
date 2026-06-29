@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import { SaveStatusIndicator, SaveStatusProvider } from '../context/SaveStatus'
+import { AyudaFlotante, ReportarErrorButton } from './AsistenteCliente'
 import { ProspiaLogo, ProspiaMark } from './Logo'
 import ThemeToggle from './ThemeToggle'
 
@@ -157,7 +158,7 @@ export default function Layout() {
           <Menu size={20} />
         </button>
         <ProspiaLogo markSize={22} className="text-fog" />
-        <div className="ml-auto flex items-center gap-3"><SaveStatusIndicator /><ThemeToggle /></div>
+        <div className="ml-auto flex items-center gap-3"><SaveStatusIndicator />{nivel === 2 && <ReportarErrorButton />}<ThemeToggle /></div>
       </div>
 
       {/* ── Mobile drawer ── */}
@@ -367,6 +368,7 @@ export default function Layout() {
         {/* Top bar desktop con el indicador de guardado + el toggle a la derecha */}
         <div className="hidden md:flex items-center justify-end gap-4 px-6 h-12 border-b border-line bg-card/60 shrink-0">
           <SaveStatusIndicator />
+          {nivel === 2 && <ReportarErrorButton />}
           <ThemeToggle />
         </div>
         <main className="flex-1 overflow-auto p-4 md:p-6 pt-16 md:pt-6">
@@ -384,6 +386,9 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Asistente de ayuda flotante — solo cliente normal (nivel 2) */}
+      {nivel === 2 && <AyudaFlotante />}
     </div>
     </SaveStatusProvider>
   )
