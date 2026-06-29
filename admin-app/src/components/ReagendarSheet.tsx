@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { Icon } from "./Icon";
 import { colors } from "../theme";
 
 // Reagendar (re-disparar) un aviso por push: +30 min, +1 h, o elegir día (calendario)
@@ -175,6 +176,7 @@ function Inner({ titulo, onClose, onConfirm }: { titulo: string; onClose: () => 
   const [sel, setSel] = useState(() => medianoche(new Date()));
   const [hour, setHour] = useState(base.getHours());
   const [minute, setMinute] = useState(0);
+  const [custom, setCustom] = useState(false); // false = opciones rápidas; true = calendario + hora
 
   const when = useMemo(() => {
     const d = new Date(sel);
@@ -183,25 +185,44 @@ function Inner({ titulo, onClose, onConfirm }: { titulo: string; onClose: () => 
   }, [sel, hour, minute]);
   const valido = when.getTime() > Date.now() + 30000;
 
+  // Paso 1: opciones rápidas + "Personalizar"
+  if (!custom) {
+    return (
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
+        <TouchableOpacity style={styles.back} onPress={onClose}>
+          <Text style={styles.backTxt}>‹ Volver</Text>
+        </TouchableOpacity>
+        <Text style={styles.titulo}>Reagendar aviso</Text>
+        {!!titulo && <Text style={styles.sub} numberOfLines={1}>{titulo}</Text>}
+
+        <View style={[styles.quickRow, { marginTop: 16 }]}>
+          <TouchableOpacity style={styles.quick} onPress={() => onConfirm(new Date(Date.now() + 30 * 60000))}>
+            <Text style={styles.quickTxt}>+30 min</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quick} onPress={() => onConfirm(new Date(Date.now() + 60 * 60000))}>
+            <Text style={styles.quickTxt}>+1 hora</Text>
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity style={styles.personalizar} onPress={() => setCustom(true)}>
+          <Icon name="calendar" size={17} color={colors.text} />
+          <Text style={styles.personalizarTxt}>Personalizar</Text>
+          <Text style={styles.personalizarChevron}>›</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    );
+  }
+
+  // Paso 2: calendario + hora
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
-      <TouchableOpacity style={styles.back} onPress={onClose}>
-        <Text style={styles.backTxt}>‹ Volver</Text>
+      <TouchableOpacity style={styles.back} onPress={() => setCustom(false)}>
+        <Text style={styles.backTxt}>‹ Opciones rápidas</Text>
       </TouchableOpacity>
-      {!!titulo && <Text style={styles.sub} numberOfLines={1}>{titulo}</Text>}
 
       <View style={styles.readout}>
         <Text style={[styles.readBig, !valido && styles.readBad]}>{formatWhen(when)}</Text>
         <Text style={styles.readSmall}>{valido ? "te aviso de nuevo" : "elegí un momento futuro"}</Text>
-      </View>
-
-      <View style={styles.quickRow}>
-        <TouchableOpacity style={styles.quick} onPress={() => onConfirm(new Date(Date.now() + 30 * 60000))}>
-          <Text style={styles.quickTxt}>+30 min</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.quick} onPress={() => onConfirm(new Date(Date.now() + 60 * 60000))}>
-          <Text style={styles.quickTxt}>+1 hora</Text>
-        </TouchableOpacity>
       </View>
 
       <Text style={styles.lbl}>DÍA</Text>
@@ -270,7 +291,12 @@ const styles = StyleSheet.create({
 
   back: { paddingVertical: 6 },
   backTxt: { color: colors.textDim, fontSize: 14, fontWeight: "700" },
+  titulo: { color: colors.text, fontSize: 18, fontWeight: "800", marginTop: 4 },
   sub: { color: colors.textDim, fontSize: 13, marginTop: 2 },
+
+  personalizar: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 12, paddingVertical: 15, paddingHorizontal: 16, borderRadius: 13, borderWidth: 1, borderColor: colors.border },
+  personalizarTxt: { color: colors.text, fontSize: 15, fontWeight: "700", flex: 1 },
+  personalizarChevron: { color: colors.textDim, fontSize: 22, fontWeight: "700" },
 
   readout: { alignItems: "center", paddingTop: 6, paddingBottom: 12 },
   readBig: { fontFamily: MONO, fontSize: 30, color: colors.primary, letterSpacing: 0.5 },
