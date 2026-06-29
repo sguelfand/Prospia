@@ -47,7 +47,7 @@ export default function Pendientes() {
   const [filter, setFilter] = useState<'pending' | 'done' | 'all'>('pending')
   const [areaFilter, setAreaFilter] = useState<Area | ''>('')
   const [orden, setOrden] = useState<'fecha' | 'prioridad'>('fecha')
-  const [vista, setVista] = useState<'areas' | 'todas'>('areas')
+  const [vista, setVista] = useState<'areas' | 'todas'>('todas')
   const [openIds, setOpenIds] = useState<Record<number, boolean>>({})
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [modal, setModal] = useState<{ editing: Pendiente | null; rejecting: boolean } | null>(null)
