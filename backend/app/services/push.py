@@ -316,7 +316,7 @@ def notificar_pregunta_claude_async(pregunta_id: int, header: str | None, pregun
                      args=(pregunta_id, header, pregunta, n_opciones, n_preguntas), daemon=True).start()
 
 
-def _notificar_aviso(title: str, body: str, data: dict) -> None:
+def _notificar_aviso(title: str, body: str, data: dict, detalle: str | None = None) -> None:
     from app.database import SessionLocal
     from app.models.device import Device
 
@@ -325,7 +325,8 @@ def _notificar_aviso(title: str, body: str, data: dict) -> None:
         # Aviso al dueño (primer contacto, consulta de Camila, alertas técnicas):
         # va a TODOS los devices, sin filtro de silencio por cliente.
         tokens = [d.expo_token for d in db.query(Device).all()]
-        aviso_id = _log_aviso(db, (data or {}).get("tipo", "aviso"), title, body) if tokens else None
+        aviso_id = _log_aviso(db, (data or {}).get("tipo", "aviso"), title, body,
+                              detalle=detalle) if tokens else None
         _enviar(tokens, title, body, {**(data or {}), "aviso_id": aviso_id})
     except Exception as e:
         print(f"[PUSH] error armando aviso: {type(e).__name__}: {e}")
@@ -333,9 +334,13 @@ def _notificar_aviso(title: str, body: str, data: dict) -> None:
         db.close()
 
 
-def notificar_aviso_async(title: str, body: str, data: dict | None = None) -> None:
-    """Push genérico de aviso (reemplaza los mails de notificación). Background."""
-    threading.Thread(target=_notificar_aviso, args=(title, body, data or {}), daemon=True).start()
+def notificar_aviso_async(title: str, body: str, data: dict | None = None,
+                          detalle: str | None = None) -> None:
+    """Push genérico de aviso (reemplaza los mails de notificación). Background.
+    `detalle` = texto largo opcional (p.ej. reporte completo del smoke) que la
+    pantalla de Avisos muestra al tocar "Detalle"; el push solo lleva `body`."""
+    threading.Thread(target=_notificar_aviso, args=(title, body, data or {}, detalle),
+                     daemon=True).start()
 
 
 def _notificar_global(evento: str, title: str, body: str, data: dict, detalle=None) -> None:

@@ -153,7 +153,8 @@ def ingest_aviso(
     if body.categoria:
         data["categoria"] = body.categoria
     try:
-        push.notificar_aviso_async(body.title[:120], body.body[:300], data)
+        push.notificar_aviso_async(body.title[:120], body.body[:300], data,
+                                   detalle=body.detalle)
     except Exception:
         pass
     return {"ok": True}
