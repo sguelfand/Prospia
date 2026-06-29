@@ -274,13 +274,23 @@ def _aggregate_day(source: str, fecha: str, eventos: list) -> dict:
 
 def _detectar(resumen: dict) -> list[dict]:
     t = resumen["totales"]; ops = []
-    if t["timeouts"] > 0:
-        ops.append({"tipo": "timeouts", "clave": "", "severidad": "alta",
-                    "titulo": f"{t['timeouts']} llamada(s) con timeout/idle",
+    llamadas = t.get("llamadas", 0)
+
+    def _frac(n: int) -> float:
+        return (n / llamadas) if llamadas else 0.0
+
+    # timeouts/errores: 1-2 aislados por día son ruido normal en un bot de WhatsApp.
+    # Solo alertar si hay ≥3 en el día, o ≥10% de las llamadas con muestra suficiente
+    # (≥10 llamadas). Severidad alta solo si es grave (≥5 o ≥25%); si no, media.
+    if t["timeouts"] >= 3 or (_frac(t["timeouts"]) >= 0.10 and llamadas >= 10):
+        sev = "alta" if (t["timeouts"] >= 5 or _frac(t["timeouts"]) >= 0.25) else "media"
+        ops.append({"tipo": "timeouts", "clave": "", "severidad": sev,
+                    "titulo": f"{t['timeouts']} llamada(s) con timeout/idle ({_frac(t['timeouts'])*100:.0f}% del día)",
                     "detalle": "Gastan tokens sin respuesta útil. Revisar modelo/fallbacks/timeout del provider."})
-    if t["errores"] > 0:
-        ops.append({"tipo": "errores", "clave": "", "severidad": "alta",
-                    "titulo": f"{t['errores']} llamada(s) con error",
+    if t["errores"] >= 3 or (_frac(t["errores"]) >= 0.10 and llamadas >= 10):
+        sev = "alta" if (t["errores"] >= 5 or _frac(t["errores"]) >= 0.25) else "media"
+        ops.append({"tipo": "errores", "clave": "", "severidad": sev,
+                    "titulo": f"{t['errores']} llamada(s) con error ({_frac(t['errores'])*100:.0f}% del día)",
                     "detalle": "Fallaron (promptErrorSource). Revisar causa para no re-gastar."})
     caros = {m: v for m, v in resumen["por_modelo"].items() if ("opus" in m.lower() or "gpt" in m.lower())}
     if caros:
@@ -336,6 +346,35 @@ def _upsert_oportunidades(source: str, ops: list[dict]) -> int:
     finally:
         db.close()
     return nuevas
+
+
+def _auto_resolver_inactivas(source: str, detectadas: list[dict], dias: int = 2) -> int:
+    """Cierra solas las oportunidades abiertas que ya no vuelven a ocurrir: las que
+    (a) NO se re-detectaron en el día auditado y (b) llevan > `dias` sin re-aparecer
+    (ultima_vez vieja). Sin esto, un timeout puntual quedaba 'abierto' para siempre.
+    Devuelve cuántas cerró."""
+    from app.models.camila_audit import CamilaOportunidad
+    from app.database import SessionLocal
+    keys = {(o["tipo"], o.get("clave", "")) for o in detectadas}
+    ahora = datetime.now(timezone.utc)
+    corte = ahora - timedelta(days=dias)
+    n = 0
+    db = SessionLocal()
+    try:
+        rows = (db.query(CamilaOportunidad)
+                .filter(CamilaOportunidad.source == source,
+                        CamilaOportunidad.estado == "abierta").all())
+        for row in rows:
+            if (row.tipo, row.clave) in keys:
+                continue  # se volvió a detectar hoy → sigue viva
+            if row.ultima_vez and row.ultima_vez >= corte:
+                continue  # ocurrió hace poco → darle margen por si vuelve
+            row.estado = "resuelta"; row.resuelta_at = ahora
+            n += 1
+        db.commit()
+    finally:
+        db.close()
+    return n
 
 
 def get_oportunidades(source: str, incluir_resueltas: bool = False) -> list[dict]:
@@ -398,7 +437,9 @@ def run_audit(source: str, fecha: str, notify: bool = True) -> dict:
         row.llamadas = t["llamadas"]; row.errores = t["errores"]
         row.data = json.dumps(resumen, ensure_ascii=False)
         row.generated_at = datetime.now(timezone.utc)
-        nuevas = _upsert_oportunidades(source, _detectar(resumen))
+        detectadas = _detectar(resumen)
+        nuevas = _upsert_oportunidades(source, detectadas)
+        _auto_resolver_inactivas(source, detectadas)
         row.oportunidades = len(get_oportunidades(source))
         db.commit()
     finally:
