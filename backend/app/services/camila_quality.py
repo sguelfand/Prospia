@@ -195,8 +195,9 @@ def _system_prompt(source: str, calibracion: str) -> str:
     negocio = _NEGOCIO.get(source, _NEGOCIO["etiguel"])
     cats = "\n".join(f"  - {k}: {v}" for k, v in CATEGORIAS.items())
     return (
-        "Sos un especialista en el modelo de negocio que audita la calidad de la "
-        "atención de Camila (una agente de IA que atiende WhatsApp). Tu trabajo es "
+        "Sos 'Especialista Negocio', un especialista en el modelo de negocio que "
+        "audita la calidad de la atención de Camila (una agente de IA que atiende "
+        "WhatsApp por el negocio). Tu trabajo es "
         "leer una conversación y juzgar, con criterio comercial, si lo que respondió "
         "Camila estuvo bien o si hay algo que el dueño del negocio (Sebi) debería "
         "revisar. Sos exigente pero NO marcás cualquier cosa: solo lo que realmente "
@@ -277,8 +278,8 @@ def revisar_dia(source: str = "etiguel", fecha: str | None = None, notify: bool 
             from app.services import push
             push.notificar_global(
                 "calidad_revision",
-                f"🔎 Calidad: {nuevas} conversación(es) para revisar",
-                "El especialista del negocio marcó respuestas de Camila para que confirmes.",
+                f"🔎 Especialista Negocio: {nuevas} conversación(es) para revisar",
+                "Marqué respuestas de Camila para que confirmes si estuvieron bien o mal.",
                 {"tipo": "calidad", "source": source, "nav": "calidad"},
             )
         except Exception as e:

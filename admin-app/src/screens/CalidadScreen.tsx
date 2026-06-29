@@ -3,8 +3,9 @@ import { Alert, FlatList, RefreshControl, StyleSheet, Text, TextInput, Touchable
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
-  MensajeRow, RevisionCalidad, confirmarRevision, deleteRevision,
-  getEtiguelMirrorMensajes, getRevisiones,
+  AprendizajeEstado, MensajeRow, RevisionCalidad, aprobarAprendizaje,
+  confirmarRevision, consolidarAprendizajes, deleteRevision, descartarAprendizaje,
+  getAprendizajes, getEtiguelMirrorMensajes, getRevisiones,
 } from "../api";
 import { useAuth } from "../auth";
 import { Icon, IconText } from "../components/Icon";
@@ -41,12 +42,17 @@ export default function CalidadScreen(_props: CalidadProps) {
   const [error, setError] = useState<string | null>(null);
   const [notas, setNotas] = useState<Record<number, string>>({});
   const [conv, setConv] = useState<Record<number, MensajeRow[] | "loading">>({});
+  const [apr, setApr] = useState<AprendizajeEstado | null>(null);
+  const [verBloque, setVerBloque] = useState(false);
+  const [aprBusy, setAprBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
     setError(null);
     try {
-      setRevisiones(await getRevisiones(token));
+      const [revs, aprE] = await Promise.all([getRevisiones(token), getAprendizajes(token)]);
+      setRevisiones(revs);
+      setApr(aprE);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al cargar.");
     } finally {
@@ -54,6 +60,29 @@ export default function CalidadScreen(_props: CalidadProps) {
       setRefreshing(false);
     }
   }, [token]);
+
+  const consolidar = async () => {
+    if (!token) return;
+    setAprBusy(true);
+    try { await consolidarAprendizajes(token); await load(); } finally { setAprBusy(false); }
+  };
+  const aprobarApr = (id: number) => {
+    Alert.alert("Enseñar a Camila", "¿Aplicar estos aprendizajes al prompt de Camila? Hay backup automático y es reversible.", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Aplicar", onPress: async () => {
+        if (!token) return;
+        setAprBusy(true);
+        try { await aprobarAprendizaje(token, id); setVerBloque(false); await load(); }
+        catch (e) { Alert.alert("No se pudo", e instanceof Error ? e.message : "Error"); }
+        finally { setAprBusy(false); }
+      } },
+    ]);
+  };
+  const descartarApr = async (id: number) => {
+    if (!token) return;
+    setAprBusy(true);
+    try { await descartarAprendizaje(token, id); setVerBloque(false); await load(); } finally { setAprBusy(false); }
+  };
 
   useEffect(() => { load(); }, [load]);
 
@@ -170,6 +199,49 @@ export default function CalidadScreen(_props: CalidadProps) {
 
   return (
     <View style={styles.container}>
+      <Text style={styles.intro}>
+        <Text style={{ fontWeight: "700", color: colors.text }}>Especialista Negocio</Text> marcó respuestas de Camila. Confirmá si estuvo bien o mal — así afina su criterio.
+      </Text>
+
+      {apr ? (
+        <View style={[styles.aprCard, apr.propuesta ? styles.aprCardProp : null]}>
+          <View style={styles.aprHeader}>
+            <Text style={styles.aprTitle}>🎓 Aprendizajes de Camila</Text>
+            {apr.propuesta
+              ? <Text style={styles.aprBadge}>Propuesta lista</Text>
+              : <Text style={styles.meta}>{apr.pendientes}/{apr.umbral} lecciones</Text>}
+          </View>
+          {apr.propuesta ? (
+            <>
+              <Text style={styles.aprDesc}>Consolidé {apr.propuesta.n_lecciones} lección(es) en un bloque para el prompt de Camila.</Text>
+              <TouchableOpacity onPress={() => setVerBloque((v) => !v)}>
+                <Text style={styles.linkText}>{verBloque ? "Ocultar" : "Ver"} bloque propuesto</Text>
+              </TouchableOpacity>
+              {verBloque ? <Text style={styles.aprBloque}>{apr.propuesta.bloque_propuesto}</Text> : null}
+              <View style={styles.aprActions}>
+                <TouchableOpacity disabled={aprBusy} style={[styles.actionBtn, { borderColor: colors.green, flex: 1 }]} onPress={() => aprobarApr(apr.propuesta!.id)}>
+                  <Text style={[styles.actionLabel, { color: colors.green }]}>Aprobar y enseñar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity disabled={aprBusy} style={[styles.actionBtn, { borderColor: colors.border }]} onPress={() => descartarApr(apr.propuesta!.id)}>
+                  <Text style={[styles.actionLabel, { color: colors.textDim }]}>Descartar</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : (
+            <View style={styles.aprRow}>
+              <Text style={styles.aprDesc}>
+                {apr.pendientes === 0
+                  ? "Cuando confirmes errores, se juntan acá para enseñárselos."
+                  : `Al llegar a ${apr.umbral} (o cuando quieras) te propongo un bloque.`}
+              </Text>
+              <TouchableOpacity disabled={aprBusy || apr.pendientes === 0} style={[styles.actionBtn, { borderColor: colors.primary, opacity: apr.pendientes === 0 ? 0.4 : 1 }]} onPress={consolidar}>
+                <Text style={[styles.actionLabel, { color: colors.primary }]}>Consolidar</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      ) : null}
+
       <View style={styles.tabs}>
         {tabs.map(([k, l]) => (
           <TouchableOpacity key={k} style={[styles.tab, filtro === k ? styles.tabActive : null]} onPress={() => setFiltro(k)}>
@@ -215,6 +287,17 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 12, paddingBottom: 40 },
   empty: { color: colors.textDim, textAlign: "center", marginTop: 40 },
+  intro: { color: colors.textDim, fontSize: 12, paddingHorizontal: 12, paddingTop: 12 },
+
+  aprCard: { marginHorizontal: 12, marginTop: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 12, padding: 12 },
+  aprCardProp: { borderColor: colors.primary, backgroundColor: colors.cardAlt },
+  aprHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  aprTitle: { color: colors.text, fontSize: 14, fontWeight: "700" },
+  aprBadge: { color: colors.primary, fontSize: 11, fontWeight: "700", borderColor: colors.primary, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  aprDesc: { color: colors.textDim, fontSize: 12, marginTop: 6, flex: 1 },
+  aprBloque: { color: colors.text, fontSize: 11, fontFamily: "monospace", backgroundColor: colors.bg, borderRadius: 8, padding: 10, marginTop: 8 },
+  aprActions: { flexDirection: "row", gap: 8, marginTop: 10 },
+  aprRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4 },
 
   tabs: { flexDirection: "row", padding: 8, gap: 8 },
   tab: { flex: 1, paddingVertical: 9, borderRadius: 9, borderWidth: 1, borderColor: colors.border, alignItems: "center" },

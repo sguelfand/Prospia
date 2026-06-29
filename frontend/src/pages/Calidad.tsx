@@ -27,6 +27,16 @@ type Revision = {
 
 type Mensaje = { id: number; direccion: 'in' | 'out'; texto: string; fecha: string }
 
+type Consolidacion = {
+  id: number; estado: string; bloque_propuesto: string; bloque_anterior: string
+  n_lecciones: number; lecciones_ids: number[]; created_at: string | null; aplicada_at: string | null
+}
+type AprEstado = {
+  pendientes: number; umbral: number
+  propuesta: Consolidacion | null; ultima_aplicada: Consolidacion | null
+  lecciones_pendientes: { id: number; titulo: string; categoria: string }[]
+}
+
 const CAT_LABEL: Record<string, string> = {
   lead_perdido: 'Lead perdido',
   info_incorrecta: 'Info incorrecta',
@@ -43,6 +53,12 @@ const SEV_CLASS: Record<string, string> = {
   baja: 'border-l-sky-500',
 }
 
+function fmtFecha(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
+}
+
 export default function Calidad() {
   const [revisiones, setRevisiones] = useState<Revision[]>([])
   const [filtro, setFiltro] = useState<Estado>('nuevo')
@@ -50,11 +66,19 @@ export default function Calidad() {
   const [error, setError] = useState<string | null>(null)
   const [notas, setNotas] = useState<Record<number, string>>({})
   const [conv, setConv] = useState<Record<number, Mensaje[] | 'loading'>>({})
+  const [apr, setApr] = useState<AprEstado | null>(null)
+  const [verBloque, setVerBloque] = useState(false)
+  const [aprBusy, setAprBusy] = useState(false)
 
   async function load() {
     setError(null)
     try {
-      setRevisiones(await api.get<Revision[]>('/admin/calidad/revisiones'))
+      const [revs, aprE] = await Promise.all([
+        api.get<Revision[]>('/admin/calidad/revisiones'),
+        api.get<AprEstado>('/admin/calidad/aprendizajes'),
+      ])
+      setRevisiones(revs)
+      setApr(aprE)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al cargar')
     } finally {
@@ -63,6 +87,24 @@ export default function Calidad() {
   }
 
   useEffect(() => { load() }, [])
+
+  async function consolidar() {
+    setAprBusy(true)
+    try { await api.post('/admin/calidad/aprendizajes/proponer'); await load() }
+    finally { setAprBusy(false) }
+  }
+  async function aprobarApr(id: number) {
+    if (!confirm('¿Aplicar estos aprendizajes al prompt de Camila? Se hace backup automático y es reversible.')) return
+    setAprBusy(true)
+    try { await api.post(`/admin/calidad/aprendizajes/${id}/aprobar`); setVerBloque(false); await load() }
+    catch (e) { alert(e instanceof Error ? e.message : 'No se pudo aplicar') }
+    finally { setAprBusy(false) }
+  }
+  async function descartarApr(id: number) {
+    setAprBusy(true)
+    try { await api.post(`/admin/calidad/aprendizajes/${id}/descartar`); setVerBloque(false); await load() }
+    finally { setAprBusy(false) }
+  }
 
   async function confirmar(r: Revision, veredicto: 'acierto' | 'falso_positivo') {
     const nota = notas[r.id]?.trim() || undefined
@@ -112,9 +154,57 @@ export default function Calidad() {
     <div className="max-w-3xl mx-auto">
       <h1 className="text-xl font-semibold text-ink mb-1">Calidad de Camila</h1>
       <p className="text-xs text-muted mb-4">
-        El especialista del negocio revisó las conversaciones y marcó respuestas que conviene mirar.
-        Confirmá si Camila estuvo bien o mal — con eso el agente aprende y afina su criterio.
+        <span className="font-semibold text-ink">Especialista Negocio</span> revisó las conversaciones y marcó
+        respuestas que conviene mirar. Confirmá si Camila estuvo bien o mal — con eso afina su criterio.
       </p>
+
+      {/* Aprendizajes de Camila (Capa B) */}
+      {apr && (
+        <div className={`rounded-xl border p-4 mb-5 ${apr.propuesta ? 'border-primary bg-primary/5' : 'border-line bg-card'}`}>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-semibold text-ink">🎓 Aprendizajes de Camila</span>
+            {apr.propuesta ? (
+              <span className="text-[11px] font-bold text-primary border border-primary/50 rounded px-1.5 py-0.5">Propuesta lista</span>
+            ) : (
+              <span className="text-xs text-muted">{apr.pendientes}/{apr.umbral} lecciones confirmadas</span>
+            )}
+            {apr.ultima_aplicada?.aplicada_at && (
+              <span className="text-[11px] text-muted ml-auto">última: {fmtFecha(apr.ultima_aplicada.aplicada_at)}</span>
+            )}
+          </div>
+
+          {apr.propuesta ? (
+            <div className="mt-2">
+              <p className="text-xs text-muted mb-2">Consolidé {apr.propuesta.n_lecciones} lección(es) en un bloque para el prompt de Camila. Revisalo y aprobalo.</p>
+              <button onClick={() => setVerBloque((v) => !v)} className="text-xs text-primary hover:underline mb-2">
+                {verBloque ? 'Ocultar' : 'Ver'} bloque propuesto
+              </button>
+              {verBloque && (
+                <pre className="text-xs text-ink whitespace-pre-wrap break-words bg-black/20 rounded-lg p-3 mb-2 max-h-80 overflow-y-auto font-mono">{apr.propuesta.bloque_propuesto}</pre>
+              )}
+              <div className="flex gap-2">
+                <button disabled={aprBusy} onClick={() => aprobarApr(apr.propuesta!.id)} className="text-xs font-semibold border border-emerald-500/50 text-emerald-500 rounded-lg px-3 py-1.5 hover:bg-emerald-500/10 disabled:opacity-50">
+                  Aprobar y enseñar a Camila
+                </button>
+                <button disabled={aprBusy} onClick={() => descartarApr(apr.propuesta!.id)} className="text-xs font-semibold border border-line text-muted rounded-lg px-3 py-1.5 hover:text-ink disabled:opacity-50">
+                  Descartar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-2 flex items-center gap-3">
+              <p className="text-xs text-muted flex-1">
+                {apr.pendientes === 0
+                  ? 'Cuando confirmes errores de Camila, se juntan acá para enseñárselos.'
+                  : `Al llegar a ${apr.umbral} (o cuando quieras) consolido y te propongo un bloque para Camila.`}
+              </p>
+              <button disabled={aprBusy || apr.pendientes === 0} onClick={consolidar} className="text-xs font-semibold border border-primary/50 text-primary rounded-lg px-3 py-1.5 hover:bg-primary/10 disabled:opacity-40">
+                Consolidar ahora
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex gap-2 mb-5">
         {tabs.map(([k, l]) => (

@@ -54,3 +54,29 @@ class CamilaRevision(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
     )
     revisado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Cuándo esta lección (veredicto 'acierto') se incorporó al prompt de Camila.
+    # Lección pendiente = veredicto 'acierto' + incorporada_at NULL.
+    incorporada_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CamilaConsolidacion(Base):
+    """Una propuesta de bloque de 'Aprendizajes del negocio' para el prompt de
+    Camila, consolidada a partir de las lecciones confirmadas (Capa B).
+
+    Prospia es dueño del bloque: el `bloque_propuesto` se consolida (dedup +
+    generalización) y, al aprobarse, se inyecta en una sección marcada del prompt
+    de Camila. `bloque_anterior` guarda lo que había para diff/rollback."""
+    __tablename__ = "camila_consolidacion"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source: Mapped[str] = mapped_column(String(60), nullable=False, index=True, default="etiguel")
+    estado: Mapped[str] = mapped_column(String(12), nullable=False, default="propuesta", server_default="propuesta", index=True)  # propuesta|aplicada|descartada
+    bloque_propuesto: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    bloque_anterior: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # IDs de las CamilaRevision que cubre (JSON list serializado).
+    lecciones_ids: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    n_lecciones: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
+    aplicada_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

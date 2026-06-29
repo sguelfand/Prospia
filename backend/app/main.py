@@ -152,6 +152,11 @@ def run_migrations():
             "UPDATE agent_errors SET estado = 'fixed' WHERE resuelto = true AND estado = 'nuevo'"
         ))
 
+        # ── camila_revision: marca de lección incorporada al prompt de Camila (Capa B) ──
+        conn.execute(text(
+            "ALTER TABLE camila_revision ADD COLUMN IF NOT EXISTS incorporada_at TIMESTAMPTZ"
+        ))
+
 
 Base.metadata.create_all(bind=engine)
 run_migrations()
@@ -196,6 +201,9 @@ camila_quality.start()
 
 from app.services import camila_cost_ai
 camila_cost_ai.start()
+
+from app.services import camila_aprendizaje
+camila_aprendizaje.start()
 
 
 @app.get("/")
