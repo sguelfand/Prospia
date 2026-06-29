@@ -23,6 +23,11 @@ type DiaTrend = { fecha: string; costo_usd: number; costo_mensajes: number; cost
 type MesTrend = { mes: string; costo_usd: number; conversaciones: number; llamadas: number; costo_por_conversacion: number }
 type Oportunidad = { id: number; tipo: string; clave: string; severidad: 'alta' | 'media' | 'baja'; titulo: string; detalle: string; estado: string; primera_vez: string | null }
 type Source = { id: string; nombre: string }
+type AnthFuncion = { funcion: string; llamadas: number; tokens: number; costo_usd: number; modelos: string[] }
+type AnthUsage = {
+  dias: number; total_usd: number; tokens_total: number; llamadas_total: number
+  por_funcion: AnthFuncion[]; por_dia: { fecha: string; costo_usd: number }[]
+}
 type Audit = {
   source: string; ultimo: Ultimo | null; tendencia: DiaTrend[]
   serie_mensual: MesTrend[]; por_modelo_mes: Record<string, { tokens: number; costo_usd: number; llamadas: number }>
@@ -69,7 +74,9 @@ export default function Tokens() {
     }
   }, [convAbierta, convMsgs])
 
+  const [apiUsage, setApiUsage] = useState<AnthUsage | null>(null)
   useEffect(() => { api.get<Source[]>('/admin/tokens/sources').then(setSources).catch(() => {}) }, [])
+  useEffect(() => { api.get<AnthUsage>('/admin/tokens/anthropic?dias=30').then(setApiUsage).catch(() => {}) }, [])
   const cargar = useCallback(async () => {
     try { setData(await api.get<Audit>(`/admin/tokens/audit?source=${source}&days=14`)); setError(null) }
     catch (e) { setError(e instanceof Error ? e.message : 'Error al cargar') }
@@ -153,6 +160,33 @@ export default function Tokens() {
           })
         )}
       </div>
+
+      {/* Costos internos: API de Anthropic (funciones de Prospia, NO Camila) */}
+      {apiUsage && (
+        <div className="bg-card border border-line rounded-2xl p-6 space-y-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Costos internos · API Anthropic</h2>
+            <span className="text-xs text-muted">funciones de Prospia (Especialista, intake, clasificación…) — NO Camila</span>
+            <span className="ml-auto text-sm font-semibold text-ink">{usd3(apiUsage.total_usd)} <span className="text-xs font-normal text-muted">/ {apiUsage.dias}d</span></span>
+          </div>
+          {apiUsage.por_funcion.length === 0 ? (
+            <p className="text-sm text-muted">Sin uso de la API en los últimos {apiUsage.dias} días.</p>
+          ) : (
+            <div className="divide-y divide-line">
+              {apiUsage.por_funcion.map((f) => (
+                <div key={f.funcion} className="flex items-center gap-3 py-2">
+                  <div className="min-w-0">
+                    <p className="text-sm text-ink truncate">{f.funcion}</p>
+                    <p className="text-[11px] text-muted">{f.llamadas} llamada(s) · {fmt(f.tokens)} tok · {f.modelos.join(', ')}</p>
+                  </div>
+                  <span className="ml-auto text-sm font-medium text-ink">{usd3(f.costo_usd)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="text-[11px] text-muted">Precio oficial de Anthropic (key directa, sin el 10% off de MyClaw). Camila va por MyClaw y se mide aparte.</p>
+        </div>
+      )}
 
       {!u ? (
         <div className="bg-card border border-line rounded-2xl p-6 text-sm text-muted">Sin datos del día todavía. Tocá “Recalcular hoy”.</div>

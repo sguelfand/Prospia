@@ -6,8 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.deps import get_superadmin
 # Importar los modelos al tope registra las tablas en Base.metadata (create_all).
+from app.models.anthropic_usage import AnthropicUsage  # noqa: F401
 from app.models.camila_audit import CamilaAudit, CamilaAuditMensual, CamilaOportunidad  # noqa: F401
-from app.services import camila_audit
+from app.services import anthropic_usage, camila_audit
 
 router = APIRouter(prefix="/admin/tokens", tags=["tokens"],
                    dependencies=[Depends(get_superadmin)])
@@ -94,6 +95,14 @@ def diagnostico_ia(source: str = Query("etiguel"), fecha: str | None = Query(Non
         return camila_cost_ai.diagnosticar(source, fecha, notify=False)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"{type(e).__name__}: {e}")
+
+
+@router.get("/anthropic")
+def anthropic(dias: int = Query(30, ge=1, le=180)):
+    """Costo del uso de la API de Anthropic por las funciones internas de Prospia
+    (Especialista Negocio, diagnóstico de costos, relevamiento, clasificación,
+    asistente de ayuda…). Separado del costo de Camila (que va por MyClaw)."""
+    return anthropic_usage.resumen(dias)
 
 
 @router.post("/oportunidades/{op_id}/resolver")

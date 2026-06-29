@@ -77,7 +77,8 @@ def _anthropic_key() -> str:
     return settings.ANTHROPIC_API_KEY or ""
 
 
-def _post(system: str, user: str, max_tokens: int = 1200, timeout: int = 40) -> str | None:
+def _post(system: str, user: str, max_tokens: int = 1200, timeout: int = 40,
+          funcion: str = "Especialista Negocio (calidad)") -> str | None:
     key = _anthropic_key()
     if not key:
         return None
@@ -98,6 +99,8 @@ def _post(system: str, user: str, max_tokens: int = 1200, timeout: int = 40) -> 
         return None
     try:
         data = resp.json()
+        from app.services import anthropic_usage
+        anthropic_usage.registrar(funcion, MODEL, data.get("usage"))
         return (data.get("content") or [{}])[0].get("text", "")
     except Exception as e:
         print(f"[CAMILA-QUALITY] parse: {e}")
