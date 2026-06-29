@@ -213,12 +213,12 @@ export default function PendientesScreen(_props: PendientesProps) {
 
   const renderRow = (item: Pendiente) => (
     <SwipeRow
-      left={
+      left={{ icon: "x", color: colors.red, onTrigger: () => confirmarBorrar(item) }}
+      right={
         item.hecho
           ? { icon: "undo", color: colors.amber, onTrigger: () => setHecho(item, false) }
           : { icon: "check", color: colors.green, onTrigger: () => setHecho(item, true) }
       }
-      right={{ icon: "x", color: colors.red, onTrigger: () => confirmarBorrar(item) }}
     >
       <PendienteCard item={item} onPress={() => abrirEditar(item)} />
     </SwipeRow>

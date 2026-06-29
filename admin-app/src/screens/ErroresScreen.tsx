@@ -98,12 +98,12 @@ export default function ErroresScreen(_props: ErroresProps) {
         }
         renderItem={({ item }) => (
           <SwipeRow
-            left={
+            left={{ icon: "x", color: colors.red, onTrigger: () => confirmarBorrar(item) }}
+            right={
               item.estado === "nuevo"
-                ? { icon: "flag", color: colors.red, onTrigger: () => cambiarEstado(item, "reportado") }
+                ? { icon: "flag", color: colors.amber, onTrigger: () => cambiarEstado(item, "reportado") }
                 : { icon: "undo", color: colors.amber, onTrigger: () => cambiarEstado(item, "nuevo") }
             }
-            right={{ icon: "x", color: colors.red, onTrigger: () => confirmarBorrar(item) }}
           >
             <ErrorCard err={item} onEstado={cambiarEstado} />
           </SwipeRow>
