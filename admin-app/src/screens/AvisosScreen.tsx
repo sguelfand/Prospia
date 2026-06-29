@@ -8,6 +8,7 @@ import { ErrorBox, Loader } from "../components/ui";
 import { AvisosProps } from "../navigation";
 import { Icon, IconName } from "../components/Icon";
 import { ReagendarSheet, formatWhen } from "../components/ReagendarSheet";
+import { SwipeRow } from "../components/SwipeRow";
 import { getCachedExpoToken, getExpoTokenAsync, programarReaviso } from "../push";
 import { colors } from "../theme";
 
@@ -160,6 +161,14 @@ export default function AvisosScreen({ navigation, route }: AvisosProps) {
     try { await eliminarAvisos(token, [a.id]); } catch { load(); }
   };
 
+  // Deslizar una fila para eliminar (cualquier lado elimina: es la única acción
+  // posible), con confirmación. Ver regla de swipe del proyecto.
+  const confirmarEliminarUno = (a: Aviso) =>
+    Alert.alert("Eliminar", "¿Eliminar este aviso?", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Eliminar", style: "destructive", onPress: () => eliminarUno(a) },
+    ]);
+
   // Reagendar: agenda el MISMO aviso como notificación local para `when`.
   const onReagendar = async (when: Date) => {
     const a = reagendar;
@@ -213,8 +222,8 @@ export default function AvisosScreen({ navigation, route }: AvisosProps) {
         {avisos.map((a) => {
           const ico = iconoPara(a.tipo);
           const isSel = selected.has(a.id);
-          return (
-            <TouchableOpacity key={a.id} style={[styles.card, isSel && styles.cardSel]} onPress={() => onCard(a)} activeOpacity={0.7}>
+          const card = (
+            <TouchableOpacity style={[styles.card, isSel && styles.cardSel]} onPress={() => onCard(a)} activeOpacity={0.7}>
               <View style={styles.row}>
                 {selectMode ? (
                   <View style={[styles.selBox, isSel && styles.selBoxOn]}>{isSel && <Icon name="check" size={13} color="#fff" />}</View>
@@ -230,6 +239,15 @@ export default function AvisosScreen({ navigation, route }: AvisosProps) {
                 </View>
               </View>
             </TouchableOpacity>
+          );
+          // En modo selección no hay swipe (interferiría con tildar). Fuera de él,
+          // deslizar para cualquier lado elimina (única acción → ambos lados).
+          if (selectMode) return <View key={a.id}>{card}</View>;
+          const del = { icon: "x" as IconName, color: colors.red, onTrigger: () => confirmarEliminarUno(a) };
+          return (
+            <SwipeRow key={a.id} left={del} right={del}>
+              {card}
+            </SwipeRow>
           );
         })}
 
