@@ -292,12 +292,32 @@ def _detectar(resumen: dict) -> list[dict]:
         ops.append({"tipo": "errores", "clave": "", "severidad": sev,
                     "titulo": f"{t['errores']} llamada(s) con error ({_frac(t['errores'])*100:.0f}% del día)",
                     "detalle": "Fallaron (promptErrorSource). Revisar causa para no re-gastar."})
-    caros = {m: v for m, v in resumen["por_modelo"].items() if ("opus" in m.lower() or "gpt" in m.lower())}
-    if caros:
-        n = sum(v["llamadas"] for v in caros.values())
+    # Modelo caro = opus (el resto del catálogo —gpt-5.4, minimax— cuesta ≈igual o
+    # menos que sonnet, y de hecho son los fallbacks deseados). Distinguir si el opus
+    # lo usa Camila (cayó a un fallback caro → problema de atención al cliente) o el
+    # agente de sistema 'main' (tarea interna → otra decisión, no atención a clientes).
+    convs = resumen.get("conversaciones") or resumen.get("top_conversaciones") or []
+    caro_cliente = caro_sistema = 0
+    modelos_cliente: set[str] = set(); modelos_sistema: set[str] = set()
+    for c in convs:
+        for m, mv in c.get("por_modelo", {}).items():
+            if "opus" not in m.lower():
+                continue
+            if c.get("es_sistema"):
+                caro_sistema += mv.get("llamadas", 0); modelos_sistema.add(m)
+            else:
+                caro_cliente += mv.get("llamadas", 0); modelos_cliente.add(m)
+    if caro_cliente:
         ops.append({"tipo": "modelo_caro", "clave": "", "severidad": "media",
-                    "titulo": f"{n} llamada(s) en modelo caro (fallback)",
-                    "detalle": f"Modelos: {', '.join(caros)}. Revisar por qué cae al fallback."})
+                    "titulo": f"Camila usó modelo caro: {caro_cliente} llamada(s)",
+                    "detalle": f"Modelos: {', '.join(sorted(modelos_cliente))}. Camila cayó a un "
+                               "fallback caro — revisar por qué (sonnet saturado/no disponible)."})
+    if caro_sistema:
+        ops.append({"tipo": "modelo_caro_sistema", "clave": "", "severidad": "baja",
+                    "titulo": f"El agente de sistema usó modelo caro: {caro_sistema} llamada(s)",
+                    "detalle": f"Modelos: {', '.join(sorted(modelos_sistema))}. Son tareas internas "
+                               "(agente 'main'), no atención a clientes. Revisar el primary del agente "
+                               "de sistema en openclaw.json."})
     if t["cacheWrite"] > max(t["cacheRead"], 1) * 0.8 and t["cacheWrite"] > 100_000:
         ops.append({"tipo": "cache", "clave": "", "severidad": "media",
                     "titulo": "Caché ineficiente (mucho cacheWrite)",
