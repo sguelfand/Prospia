@@ -61,23 +61,42 @@ WA_TEMPLATES = [
     "¿Podrían pasarme el contacto del responsable de compras? Gracias y buen día!",
 ]
 
+# Templates de RECONTACTO (2°+ contacto: el prospect no respondió el mensaje
+# anterior). Se mandan con el prefijo ENVIAR_RECONTACTO para que el bot del tenant
+# NO los dedupee como duplicado del 1er contacto (mismo fix que el webhook Etiguel).
+WA_TEMPLATES_RECONTACTO = [
+    "Hola! Soy {agente} de {empresa}, quería saber si pudiste ver el mensaje que te mandé.",
+    "Hola, te escribo de nuevo de {empresa} (soy {agente}), llegaste a ver mi mensaje anterior?",
+    "Hola! Soy {agente} de {empresa}. Te había escrito hace unos días, pudiste verlo?",
+]
+
 
 def _get_template(
     agente: str = "Camila",
     empresa: str = "nuestra empresa",
     templates: list[str] | None = None,
+    recontacto: bool = False,
 ) -> str:
-    """Elige un template al azar de los del tenant (rotación anti-ban). Si el tenant
-    no tiene templates cargados, cae a los 5 genéricos. Reemplazo tolerante: solo
-    sustituye {agente}/{empresa} si están, sin romper si el template trae otras llaves."""
-    pool = templates if templates else WA_TEMPLATES
+    """Elige un template al azar (rotación anti-ban). Reemplazo tolerante de
+    {agente}/{empresa}. `recontacto=True` (2°+ contacto sin respuesta) usa el set
+    de recontacto ("viste mi último mensaje?") en vez del de presentación. Para
+    recontacto se ignoran los templates de presentación del tenant (son intro)."""
+    if recontacto:
+        pool = WA_TEMPLATES_RECONTACTO
+    else:
+        pool = templates if templates else WA_TEMPLATES
     template = random.choice(pool)
     return template.replace("{agente}", agente).replace("{empresa}", empresa)
 
 
-def _send_whatsapp(numero: str, mensaje: str, gateway_url: str, gateway_token: str, session_key: str) -> tuple[bool, str]:
+def _send_whatsapp(numero: str, mensaje: str, gateway_url: str, gateway_token: str,
+                   session_key: str, recontacto: bool = False) -> tuple[bool, str]:
     target = numero.lstrip('+').replace(' ', '').replace('-', '')
-    payload_message = f"ENVIAR_PROSPECCION|{target}|{mensaje}"
+    # recontacto=True → prefijo ENVIAR_RECONTACTO: señal explícita al bot del tenant
+    # de que es un recontacto intencional (mandarlo aunque ya haya contactado el
+    # número, NO dedupear). 1er contacto → ENVIAR_PROSPECCION como siempre.
+    prefijo = "ENVIAR_RECONTACTO" if recontacto else "ENVIAR_PROSPECCION"
+    payload_message = f"{prefijo}|{target}|{mensaje}"
 
     # Anti-ráfaga: espaciar envíos para no saturar la sesión del agente del tenant.
     _wa_send_throttle()
@@ -115,7 +134,7 @@ def _send_whatsapp(numero: str, mensaje: str, gateway_url: str, gateway_token: s
     return False, f"HTTP {resp.status_code}: {resp.text[:200]}"
 
 
-def _send_whatsapp_con_retry(numero: str, mensaje: str, gateway_url: str, gateway_token: str, session_key: str) -> tuple[bool, str]:
+def _send_whatsapp_con_retry(numero: str, mensaje: str, gateway_url: str, gateway_token: str, session_key: str, recontacto: bool = False) -> tuple[bool, str]:
     """_send_whatsapp con reintentos + backoff ante fallo transitorio del gateway.
 
     Reintenta hasta WA_SEND_MAX_INTENTOS veces con WA_SEND_RETRY_DELAY_S de espera
@@ -123,7 +142,7 @@ def _send_whatsapp_con_retry(numero: str, mensaje: str, gateway_url: str, gatewa
     espera no bloquea el response. Si se agotan los intentos retorna (False, motivo)."""
     ultimo_info = ""
     for intento in range(1, WA_SEND_MAX_INTENTOS + 1):
-        ok, info = _send_whatsapp(numero, mensaje, gateway_url, gateway_token, session_key)
+        ok, info = _send_whatsapp(numero, mensaje, gateway_url, gateway_token, session_key, recontacto=recontacto)
         if ok:
             if intento > 1:
                 return True, f"{info} (OK en intento {intento}/{WA_SEND_MAX_INTENTOS})"
@@ -188,9 +207,13 @@ def contactar_prospect(prospect_id: int):
             agente  = (config.agente_nombre if config else None) or "Camila"
             empresa = (config.empresa_nombre_msg if config else None) or "nuestra empresa"
             templates = (config.wa_templates if config else None) or None
-            mensaje = _get_template(agente=agente, empresa=empresa, templates=templates)
-            wa_enviado, wa_info = _send_whatsapp_con_retry(wa, mensaje, gateway_url, gateway_token, session_key)
-            print(f"[CONTACT] WA {wa} → ok={wa_enviado} {wa_info}")
+            # 2°+ contacto sin respuesta → recontacto (template "viste mi mensaje?"
+            # + prefijo ENVIAR_RECONTACTO para que el bot no lo dedupee).
+            mensaje = _get_template(agente=agente, empresa=empresa, templates=templates,
+                                    recontacto=es_segundo_o_mas)
+            wa_enviado, wa_info = _send_whatsapp_con_retry(wa, mensaje, gateway_url, gateway_token,
+                                                          session_key, recontacto=es_segundo_o_mas)
+            print(f"[CONTACT] WA {wa} → ok={wa_enviado} {wa_info} (recontacto={es_segundo_o_mas})")
 
         # Email: 1° contacto solo si WA no se mandó (cascada). 2°+ siempre que haya mail.
         debe_mandar_email = bool(email) and (es_segundo_o_mas or not wa_enviado)
@@ -257,13 +280,14 @@ def contactar_prospect(prospect_id: int):
 WA_CONFIRM_WINDOW_S = int(os.environ.get("WA_CONFIRM_WINDOW_S", "300"))
 
 
-def _reintentar_envio_async(wa, mensaje, gateway_url, gateway_token, session_key, etiqueta):
+def _reintentar_envio_async(wa, mensaje, gateway_url, gateway_token, session_key, etiqueta, recontacto=False):
     """Re-inyecta un envío en un thread daemon (no bloquea el loop de monitoreo).
     Pasa por el mismo throttle anti-ráfaga. Si falla, el próximo barrido lo agarra
     (ya con los reintentos agotados → avisa)."""
     def _run():
         try:
-            ok, info = _send_whatsapp_con_retry(wa, mensaje, gateway_url, gateway_token, session_key)
+            ok, info = _send_whatsapp_con_retry(wa, mensaje, gateway_url, gateway_token, session_key,
+                                                recontacto=recontacto)
             print(f"[CONTACT SWEEP] reintento {etiqueta} → ok={ok} {info}")
         except Exception as e:
             print(f"[CONTACT SWEEP] reintento {etiqueta} ERROR: {e}")
@@ -304,11 +328,15 @@ def barrer_envios_sin_confirmar():
             puede_reintentar = bool(wa and gateway_url and gateway_token and session_key)
 
             if (p.envio_reintentos or 0) < WA_CONFIRM_MAX_REINTENTOS and puede_reintentar:
-                # Parte B: re-inyectar. Regenera un template (prospección genérica).
+                # Parte B: re-inyectar. Si el prospect ya iba por su 2°+ contacto,
+                # es un recontacto → mismo template/prefijo (si no, el reintento
+                # mandaría una presentación y el bot lo dedupea).
+                es_recontacto = (p.cant_contactos or 0) >= 2
                 agente = (config.agente_nombre if config else None) or "Camila"
                 empresa = (config.empresa_nombre_msg if config else None) or "nuestra empresa"
                 templates = (config.wa_templates if config else None) or None
-                mensaje = _get_template(agente=agente, empresa=empresa, templates=templates)
+                mensaje = _get_template(agente=agente, empresa=empresa, templates=templates,
+                                        recontacto=es_recontacto)
                 n = (p.envio_reintentos or 0) + 1
                 p.envio_reintentos = n
                 p.envio_pendiente_desde = ahora   # reinicia el reloj para este reintento
@@ -318,7 +346,7 @@ def barrer_envios_sin_confirmar():
                     f"{n}/{WA_CONFIRM_MAX_REINTENTOS}, re-inyectando a {wa}.",
                 )
                 reintentos.append((wa, mensaje, gateway_url, gateway_token, session_key,
-                                   f"prospect {p.id} ({n}/{WA_CONFIRM_MAX_REINTENTOS})"))
+                                   f"prospect {p.id} ({n}/{WA_CONFIRM_MAX_REINTENTOS})", es_recontacto))
             else:
                 # Agotó reintentos (o no se puede reintentar) → aviso final.
                 p.envio_no_confirmado = True
