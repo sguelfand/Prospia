@@ -92,6 +92,26 @@ def estado(source: str = "etiguel") -> dict:
         db.close()
 
 
+def historial(source: str = "etiguel", limit: int = 30) -> list[dict]:
+    """Consolidaciones YA aplicadas (lo que se le enseñó a Camila), más nuevas primero.
+    Para la pestaña de Historial: cada una con fecha, cuántas lecciones y el bloque."""
+    from app.database import SessionLocal
+    from app.models.camila_revision import CamilaConsolidacion
+    db = SessionLocal()
+    try:
+        rows = (db.query(CamilaConsolidacion)
+                .filter(CamilaConsolidacion.source == source,
+                        CamilaConsolidacion.estado == "aplicada")
+                .order_by(CamilaConsolidacion.aplicada_at.desc()).limit(limit).all())
+        return [{
+            "id": c.id, "n_lecciones": c.n_lecciones,
+            "aplicada_at": c.aplicada_at.isoformat() if c.aplicada_at else None,
+            "bloque": c.bloque_propuesto,
+        } for c in rows]
+    finally:
+        db.close()
+
+
 def _bloque_vigente(db, source: str) -> str:
     from app.models.camila_revision import CamilaConsolidacion
     ultima = (db.query(CamilaConsolidacion)

@@ -5,8 +5,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   AprendizajeEstado, AuditEstado, CalidadSource, MensajeRow, RevisionCalidad, aprobarAprendizaje,
   confirmarRevision, consolidarAprendizajes, correrAuditoriaPrompt, deleteRevision, descartarAprendizaje,
-  getAprendizajes, getAuditoriaPrompt, getCalidadSources, getEtiguelMirrorMensajes, getPreferences,
-  getRevisiones, putPreferences, reportarCalidadManual,
+  getAprendizajes, getAprendizajesHistorial, getAuditoriaPrompt, getCalidadSources, getEtiguelMirrorMensajes, getPreferences,
+  getRevisiones, putPreferences, reportarCalidadManual, type AprendizajeHist,
 } from "../api";
 import { useAuth } from "../auth";
 import { pickImageBase64, type PickedImage } from "../imagePicker";
@@ -74,6 +74,9 @@ export default function CalidadScreen(_props: CalidadProps) {
   const [nuevoTexto, setNuevoTexto] = useState("");
   const [nuevoBusy, setNuevoBusy] = useState(false);
   const [nuevoImg, setNuevoImg] = useState<PickedImage | null>(null);
+  const [historial, setHistorial] = useState<AprendizajeHist[]>([]);
+  const [verHistorial, setVerHistorial] = useState(false);
+  const [histExpandida, setHistExpandida] = useState<number | null>(null);
   const [audit, setAudit] = useState<AuditEstado | null>(null);
   const [auditBusy, setAuditBusy] = useState(false);
   const [verReporte, setVerReporte] = useState(false);
@@ -169,7 +172,11 @@ export default function CalidadScreen(_props: CalidadProps) {
       { text: "Aplicar", onPress: async () => {
         if (!token) return;
         setAprBusy(true);
-        try { await aprobarAprendizaje(token, id); setVerBloque(false); await load(); }
+        try {
+          await aprobarAprendizaje(token, id); setVerBloque(false); await load();
+          if (verHistorial) { try { setHistorial(await getAprendizajesHistorial(token, source)); } catch { /* noop */ } }
+          Alert.alert("Listo ✓", "Le enseñé las mejoras a Camila. Quedó aplicado en su prompt.");
+        }
         catch (e) { Alert.alert("No se pudo", e instanceof Error ? e.message : "Error"); }
         finally { setAprBusy(false); }
       } },
@@ -179,6 +186,12 @@ export default function CalidadScreen(_props: CalidadProps) {
     if (!token) return;
     setAprBusy(true);
     try { await descartarAprendizaje(token, id); setVerBloque(false); await load(); } finally { setAprBusy(false); }
+  };
+
+  const toggleHistorial = async () => {
+    const nuevo = !verHistorial;
+    setVerHistorial(nuevo);
+    if (nuevo && token) { try { setHistorial(await getAprendizajesHistorial(token, source)); } catch { /* noop */ } }
   };
 
   useEffect(() => { load(); }, [load]);
@@ -347,29 +360,26 @@ export default function CalidadScreen(_props: CalidadProps) {
         <View style={[styles.aprCard, apr.propuesta ? styles.aprCardProp : null]}>
           <View style={styles.aprHeader}>
             <Text style={styles.aprTitle}>🎓 Aprendizajes de Camila</Text>
-            {apr.propuesta
-              ? <Text style={styles.aprBadge}>Propuesta lista</Text>
-              : <Text style={styles.meta}>{apr.pendientes}/{apr.umbral} lecciones</Text>}
+            <TouchableOpacity onPress={toggleHistorial}>
+              <Text style={styles.linkText}>{verHistorial ? "Ocultar historial" : "Ver historial"}</Text>
+            </TouchableOpacity>
           </View>
-          {/* Progreso: cuántas modificaciones ya están cargadas de las {umbral} antes de pasarlas al código de Camila */}
-          <View style={styles.progRow}>
-            <View style={styles.progSegs}>
-              {Array.from({ length: apr.umbral }).map((_, i) => (
-                <View key={i} style={[styles.progSeg, i < apr.pendientes ? styles.progSegOn : null]} />
-              ))}
-            </View>
-            <Text style={styles.progText}><Text style={{ fontWeight: "700", color: colors.text }}>{apr.pendientes} de {apr.umbral}</Text> modificaciones cargadas</Text>
-          </View>
+
           {apr.propuesta ? (
+            /* Paso 2: propuesta esperando aprobación */
             <>
-              <Text style={styles.aprDesc}>Consolidé {apr.propuesta.n_lecciones} lección(es) en un bloque para el prompt de Camila.</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8 }}>
+                <Text style={styles.aprBadge}>Falta aprobar</Text>
+                <Text style={{ color: colors.text, fontSize: 13, fontWeight: "700" }}>Propuesta: {apr.propuesta.n_lecciones} mejora(s)</Text>
+              </View>
+              <Text style={styles.aprDesc}>Todavía NO están en Camila. Para aplicarlas tocá "Aprobar y enseñar".</Text>
               <TouchableOpacity onPress={() => setVerBloque((v) => !v)}>
-                <Text style={styles.linkText}>{verBloque ? "Ocultar" : "Ver"} bloque propuesto</Text>
+                <Text style={styles.linkText}>{verBloque ? "Ocultar" : "Ver"} qué se le va a enseñar</Text>
               </TouchableOpacity>
               {verBloque ? <Text style={styles.aprBloque}>{apr.propuesta.bloque_propuesto}</Text> : null}
               <View style={styles.aprActions}>
                 <TouchableOpacity disabled={aprBusy} style={[styles.actionBtn, { borderColor: colors.green, flex: 1 }]} onPress={() => aprobarApr(apr.propuesta!.id)}>
-                  <Text style={[styles.actionLabel, { color: colors.green }]}>Aprobar y enseñar</Text>
+                  <Text style={[styles.actionLabel, { color: colors.green }]}>{aprBusy ? "Aplicando…" : "Aprobar y enseñar"}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity disabled={aprBusy} style={[styles.actionBtn, { borderColor: colors.border }]} onPress={() => descartarApr(apr.propuesta!.id)}>
                   <Text style={[styles.actionLabel, { color: colors.textDim }]}>Descartar</Text>
@@ -377,17 +387,49 @@ export default function CalidadScreen(_props: CalidadProps) {
               </View>
             </>
           ) : (
-            <View style={styles.aprRow}>
-              <Text style={styles.aprDesc}>
-                {apr.pendientes === 0
-                  ? "Cuando confirmes errores, se juntan acá para enseñárselos."
-                  : `Al llegar a ${apr.umbral} (o cuando quieras) te propongo un bloque.`}
-              </Text>
-              <TouchableOpacity disabled={aprBusy || apr.pendientes === 0} style={[styles.actionBtn, { borderColor: colors.primary, opacity: apr.pendientes === 0 ? 0.4 : 1 }]} onPress={consolidar}>
-                <Text style={[styles.actionLabel, { color: colors.primary }]}>Consolidar</Text>
-              </TouchableOpacity>
-            </View>
+            /* Paso 1: juntando lecciones */
+            <>
+              <View style={styles.progRow}>
+                <View style={styles.progSegs}>
+                  {Array.from({ length: apr.umbral }).map((_, i) => (
+                    <View key={i} style={[styles.progSeg, i < Math.min(apr.pendientes, apr.umbral) ? styles.progSegOn : null]} />
+                  ))}
+                </View>
+                <Text style={styles.progText}><Text style={{ fontWeight: "700", color: colors.text }}>{apr.pendientes} de {apr.umbral}</Text> para la próxima tanda</Text>
+              </View>
+              <View style={styles.aprRow}>
+                <Text style={styles.aprDesc}>
+                  {apr.pendientes === 0
+                    ? "Cuando confirmes errores se juntan acá. Al llegar a 5 te armo la propuesta sola."
+                    : `Al llegar a ${apr.umbral} te armo la propuesta sola. También podés consolidar ahora.`}
+                </Text>
+                <TouchableOpacity disabled={aprBusy || apr.pendientes === 0} style={[styles.actionBtn, { borderColor: colors.primary, opacity: apr.pendientes === 0 ? 0.4 : 1 }]} onPress={consolidar}>
+                  <Text style={[styles.actionLabel, { color: colors.primary }]}>Consolidar</Text>
+                </TouchableOpacity>
+              </View>
+            </>
           )}
+
+          {apr.ultima_aplicada?.aplicada_at ? (
+            <Text style={styles.aprUltima}>✓ Última vez aplicado: {fmtFechaHora(apr.ultima_aplicada.aplicada_at)} · {apr.ultima_aplicada.n_lecciones} mejora(s)</Text>
+          ) : null}
+
+          {verHistorial ? (
+            <View style={styles.histWrap}>
+              {historial.length === 0 ? (
+                <Text style={styles.aprDesc}>Todavía no se le enseñó nada a Camila.</Text>
+              ) : historial.map((h) => (
+                <View key={h.id} style={styles.histItem}>
+                  <TouchableOpacity onPress={() => setHistExpandida((v) => v === h.id ? null : h.id)} style={styles.histHead}>
+                    <Text style={styles.histFecha}>{h.aplicada_at ? fmtFechaHora(h.aplicada_at) : "—"}</Text>
+                    <Text style={styles.meta}> · {h.n_lecciones} mejora(s)</Text>
+                    <Text style={[styles.linkText, { marginLeft: "auto" }]}>{histExpandida === h.id ? "ocultar" : "ver reglas"}</Text>
+                  </TouchableOpacity>
+                  {histExpandida === h.id ? <Text style={styles.aprBloque}>{h.bloque}</Text> : null}
+                </View>
+              ))}
+            </View>
+          ) : null}
         </View>
       ) : null}
 
@@ -579,6 +621,11 @@ const styles = StyleSheet.create({
   hallSug: { color: colors.blue, fontSize: 12, marginTop: 6 },
   aprActions: { flexDirection: "row", gap: 8, marginTop: 10 },
   aprRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4 },
+  aprUltima: { color: colors.green, fontSize: 11, marginTop: 10, paddingTop: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  histWrap: { marginTop: 10, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, gap: 8 },
+  histItem: { borderWidth: 1, borderColor: colors.border, borderRadius: 9, padding: 10, backgroundColor: colors.bg },
+  histHead: { flexDirection: "row", alignItems: "center" },
+  histFecha: { color: colors.text, fontSize: 12, fontWeight: "700" },
 
   tabs: { flexDirection: "row", paddingHorizontal: 12, paddingVertical: 8, gap: 8, marginTop: 4 },
   tab: { flex: 1, paddingVertical: 9, borderRadius: 9, borderWidth: 1, borderColor: colors.border, alignItems: "center" },

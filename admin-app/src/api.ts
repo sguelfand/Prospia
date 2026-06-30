@@ -706,6 +706,10 @@ export interface AprendizajeEstado {
 export const getAprendizajes = (token: string, source = "etiguel") =>
   request<AprendizajeEstado>(`/admin/calidad/aprendizajes?source=${encodeURIComponent(source)}`, {}, token);
 
+export interface AprendizajeHist { id: number; n_lecciones: number; aplicada_at: string | null; bloque: string }
+export const getAprendizajesHistorial = (token: string, source = "etiguel") =>
+  request<AprendizajeHist[]>(`/admin/calidad/aprendizajes/historial?source=${encodeURIComponent(source)}`, {}, token);
+
 export const consolidarAprendizajes = (token: string, source = "etiguel") =>
   request<unknown>(`/admin/calidad/aprendizajes/proponer?source=${encodeURIComponent(source)}`, { method: "POST" }, token);
 

@@ -149,6 +149,9 @@ export default function Calidad() {
   const [nuevoTexto, setNuevoTexto] = useState('')
   const [nuevoBusy, setNuevoBusy] = useState(false)
   const [nuevoImg, setNuevoImg] = useState<{ b64: string; mime: string; nombre: string } | null>(null)
+  const [historial, setHistorial] = useState<{ id: number; n_lecciones: number; aplicada_at: string | null; bloque: string }[]>([])
+  const [verHistorial, setVerHistorial] = useState(false)
+  const [histExpandida, setHistExpandida] = useState<number | null>(null)
   const [audit, setAudit] = useState<AuditEstado | null>(null)
   const [auditBusy, setAuditBusy] = useState(false)
 
@@ -199,14 +202,33 @@ export default function Calidad() {
     e.target.value = ''  // permite re-elegir el mismo archivo
     if (!file) return
     if (!file.type.startsWith('image/')) { alert('Tiene que ser una imagen.'); return }
+    leerArchivoImagen(file)
+  }
+
+  function leerArchivoImagen(file: File) {
     if (file.size > 8 * 1024 * 1024) { alert('La imagen es muy grande (máx 8MB).'); return }
     const reader = new FileReader()
     reader.onload = () => {
       const dataUrl = String(reader.result || '')
-      const b64 = dataUrl.split(',')[1] || ''
-      setNuevoImg({ b64, mime: file.type || 'image/jpeg', nombre: file.name })
+      setNuevoImg({ b64: dataUrl.split(',')[1] || '', mime: file.type || 'image/png', nombre: file.name || 'pegada.png' })
     }
     reader.readAsDataURL(file)
+  }
+
+  // Pegar imagen del portapapeles (Ctrl/Cmd+V) directo en el modal.
+  function onPasteImagen(e: React.ClipboardEvent) {
+    const item = Array.from(e.clipboardData?.items || []).find((it) => it.type.startsWith('image/'))
+    if (!item) return
+    const file = item.getAsFile()
+    if (file) { e.preventDefault(); leerArchivoImagen(file) }
+  }
+
+  async function toggleHistorial() {
+    const nuevo = !verHistorial
+    setVerHistorial(nuevo)
+    if (nuevo) {
+      try { setHistorial(await api.get(`/admin/calidad/aprendizajes/historial?source=${encodeURIComponent(source)}`)) } catch { /* noop */ }
+    }
   }
 
   async function crearRegistro() {
@@ -247,7 +269,13 @@ export default function Calidad() {
   async function aprobarApr(id: number) {
     if (!confirm('¿Aplicar estos aprendizajes al prompt de Camila? Se hace backup automático y es reversible.')) return
     setAprBusy(true)
-    try { await api.post(`/admin/calidad/aprendizajes/${id}/aprobar`); setVerBloque(false); await load(source) }
+    try {
+      await api.post(`/admin/calidad/aprendizajes/${id}/aprobar`)
+      setVerBloque(false)
+      await load(source)
+      if (verHistorial) { try { setHistorial(await api.get(`/admin/calidad/aprendizajes/historial?source=${encodeURIComponent(source)}`)) } catch { /* noop */ } }
+      alert('✓ Listo: le enseñé las mejoras a Camila. Quedó aplicado en su prompt.')
+    }
     catch (e) { alert(e instanceof Error ? e.message : 'No se pudo aplicar') }
     finally { setAprBusy(false) }
   }
@@ -328,7 +356,7 @@ export default function Calidad() {
       {/* Modal: nuevo registro manual (teléfono + descripción) */}
       {nuevoOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setNuevoOpen(false)}>
-          <div className="bg-card border border-line rounded-2xl p-5 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-card border border-line rounded-2xl p-5 w-full max-w-md" onClick={(e) => e.stopPropagation()} onPaste={onPasteImagen}>
             <h2 className="text-base font-semibold text-ink mb-1">Nuevo registro de calidad</h2>
             <p className="text-xs text-muted mb-3">
               Para <span className="font-semibold text-ink">{sources.find((s) => s.source === source)?.nombre ?? source}</span>.
@@ -350,11 +378,11 @@ export default function Calidad() {
               </div>
             ) : (
               <label className="flex items-center gap-1.5 mb-4 text-xs font-semibold text-primary border border-primary/50 rounded-lg px-3 py-1.5 hover:bg-primary/10 cursor-pointer w-fit">
-                <Plus size={14} /> Adjuntar imagen
+                <Plus size={14} /> Adjuntar imagen o pegá (Ctrl+V)
                 <input type="file" accept="image/*" className="hidden" onChange={onElegirImagen} />
               </label>
             )}
-            <p className="text-[11px] text-muted -mt-3 mb-4">Si adjuntás una captura, la IA la lee y suma la conversación a la lección (cuesta centavos).</p>
+            <p className="text-[11px] text-muted -mt-3 mb-4">Podés elegir un archivo o <span className="text-ink">pegar una captura del portapapeles (Ctrl/Cmd+V)</span>. La IA la lee y suma la conversación a la lección (cuesta centavos).</p>
 
             <div className="flex justify-end gap-2">
               <button onClick={() => setNuevoOpen(false)} disabled={nuevoBusy}
@@ -373,40 +401,31 @@ export default function Calidad() {
         <div className={`rounded-xl border p-4 mb-5 ${apr.propuesta ? 'border-primary bg-primary/5' : 'border-line bg-card'}`}>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold text-ink">🎓 Aprendizajes de Camila</span>
-            {apr.propuesta ? (
-              <span className="text-[11px] font-bold text-primary border border-primary/50 rounded px-1.5 py-0.5">Propuesta lista</span>
-            ) : (
-              <span className="text-xs text-muted">{apr.pendientes}/{apr.umbral} lecciones confirmadas</span>
-            )}
-            {apr.ultima_aplicada?.aplicada_at && (
-              <span className="text-[11px] text-muted ml-auto">última: {fmtFecha(apr.ultima_aplicada.aplicada_at)}</span>
-            )}
-          </div>
-
-          {/* Progreso: cuántas modificaciones ya están cargadas de las {umbral} antes de pasarlas al código de Camila */}
-          <div className="flex items-center gap-2 mt-2">
-            <div className="flex gap-1">
-              {Array.from({ length: apr.umbral }).map((_, i) => (
-                <span key={i} className={`h-2 w-6 rounded-full ${i < apr.pendientes ? 'bg-primary' : 'bg-line'}`} />
-              ))}
-            </div>
-            <span className="text-xs text-muted">
-              <span className="font-semibold text-ink">{apr.pendientes} de {apr.umbral}</span> modificaciones cargadas
-            </span>
+            <button onClick={toggleHistorial} className="text-[11px] text-primary hover:underline ml-auto">
+              {verHistorial ? 'Ocultar historial' : 'Ver historial'}
+            </button>
           </div>
 
           {apr.propuesta ? (
-            <div className="mt-2">
-              <p className="text-xs text-muted mb-2">Consolidé {apr.propuesta.n_lecciones} lección(es) en un bloque para el prompt de Camila. Revisalo y aprobalo.</p>
-              <button onClick={() => setVerBloque((v) => !v)} className="text-xs text-primary hover:underline mb-2">
-                {verBloque ? 'Ocultar' : 'Ver'} bloque propuesto
+            /* ── PASO 2: hay una propuesta esperando que la apruebes ── */
+            <div className="mt-3">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-[11px] font-bold text-primary border border-primary/50 rounded px-1.5 py-0.5">Falta aprobar</span>
+                <span className="text-sm font-semibold text-ink">Propuesta lista: {apr.propuesta.n_lecciones} mejora(s)</span>
+              </div>
+              <p className="text-xs text-muted mb-2">
+                Junté estas mejoras en un bloque. <span className="text-ink font-semibold">Todavía NO están en Camila</span> —
+                para aplicarlas tocá <span className="text-emerald-500 font-semibold">"Aprobar y enseñar"</span>.
+              </p>
+              <button onClick={() => setVerBloque((v) => !v)} className="text-xs text-primary hover:underline mb-2 block">
+                {verBloque ? 'Ocultar' : 'Ver'} qué se le va a enseñar
               </button>
               {verBloque && (
                 <pre className="text-xs text-ink whitespace-pre-wrap break-words bg-black/20 rounded-lg p-3 mb-2 max-h-80 overflow-y-auto font-mono">{apr.propuesta.bloque_propuesto}</pre>
               )}
               <div className="flex gap-2">
-                <button disabled={aprBusy} onClick={() => aprobarApr(apr.propuesta!.id)} className="text-xs font-semibold border border-emerald-500/50 text-emerald-500 rounded-lg px-3 py-1.5 hover:bg-emerald-500/10 disabled:opacity-50">
-                  Aprobar y enseñar a Camila
+                <button disabled={aprBusy} onClick={() => aprobarApr(apr.propuesta!.id)} className="text-xs font-semibold bg-emerald-500 text-white rounded-lg px-3 py-1.5 hover:bg-emerald-600 disabled:opacity-50">
+                  {aprBusy ? 'Aplicando…' : 'Aprobar y enseñar a Camila'}
                 </button>
                 <button disabled={aprBusy} onClick={() => descartarApr(apr.propuesta!.id)} className="text-xs font-semibold border border-line text-muted rounded-lg px-3 py-1.5 hover:text-ink disabled:opacity-50">
                   Descartar
@@ -414,15 +433,55 @@ export default function Calidad() {
               </div>
             </div>
           ) : (
-            <div className="mt-2 flex items-center gap-3">
-              <p className="text-xs text-muted flex-1">
-                {apr.pendientes === 0
-                  ? 'Cuando confirmes errores de Camila, se juntan acá para enseñárselos.'
-                  : `Al llegar a ${apr.umbral} (o cuando quieras) consolido y te propongo un bloque para Camila.`}
-              </p>
-              <button disabled={aprBusy || apr.pendientes === 0} onClick={consolidar} className="text-xs font-semibold border border-primary/50 text-primary rounded-lg px-3 py-1.5 hover:bg-primary/10 disabled:opacity-40">
-                Consolidar ahora
-              </button>
+            /* ── PASO 1: juntando lecciones hasta el umbral ── */
+            <div className="mt-3">
+              <div className="flex items-center gap-2">
+                <div className="flex gap-1">
+                  {Array.from({ length: apr.umbral }).map((_, i) => (
+                    <span key={i} className={`h-2 w-6 rounded-full ${i < Math.min(apr.pendientes, apr.umbral) ? 'bg-primary' : 'bg-line'}`} />
+                  ))}
+                </div>
+                <span className="text-xs text-muted">
+                  <span className="font-semibold text-ink">{apr.pendientes} de {apr.umbral}</span> lecciones para la próxima tanda
+                </span>
+              </div>
+              <div className="mt-2 flex items-center gap-3">
+                <p className="text-xs text-muted flex-1">
+                  {apr.pendientes === 0
+                    ? 'Cuando confirmes errores de Camila se juntan acá. Al llegar a 5 te armo la propuesta sola.'
+                    : `Al llegar a ${apr.umbral} te armo la propuesta sola. También podés consolidar ahora y después aprobarla.`}
+                </p>
+                <button disabled={aprBusy || apr.pendientes === 0} onClick={consolidar} className="text-xs font-semibold border border-primary/50 text-primary rounded-lg px-3 py-1.5 hover:bg-primary/10 disabled:opacity-40">
+                  {aprBusy ? '…' : 'Consolidar ahora'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Estado: última vez que se le enseñó algo */}
+          {apr.ultima_aplicada?.aplicada_at && (
+            <p className="text-[11px] text-emerald-500/90 mt-3 pt-2 border-t border-line">
+              ✓ Última vez aplicado: {fmtFechaHora(apr.ultima_aplicada.aplicada_at)} · {apr.ultima_aplicada.n_lecciones} mejora(s)
+            </p>
+          )}
+
+          {/* Historial de lo enseñado */}
+          {verHistorial && (
+            <div className="mt-3 pt-3 border-t border-line space-y-2">
+              {historial.length === 0 ? (
+                <p className="text-xs text-muted">Todavía no se le enseñó nada a Camila.</p>
+              ) : historial.map((h) => (
+                <div key={h.id} className="border border-line rounded-lg p-2.5 bg-card">
+                  <button onClick={() => setHistExpandida((v) => v === h.id ? null : h.id)} className="w-full flex items-center gap-2 text-left">
+                    <span className="text-xs font-semibold text-ink">{h.aplicada_at ? fmtFechaHora(h.aplicada_at) : '—'}</span>
+                    <span className="text-[11px] text-muted">· {h.n_lecciones} mejora(s)</span>
+                    <span className="text-[11px] text-primary ml-auto">{histExpandida === h.id ? 'ocultar' : 'ver reglas'}</span>
+                  </button>
+                  {histExpandida === h.id && (
+                    <pre className="text-xs text-ink whitespace-pre-wrap break-words bg-black/20 rounded-lg p-3 mt-2 max-h-80 overflow-y-auto font-mono">{h.bloque}</pre>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>

@@ -96,6 +96,12 @@ def aprendizajes(source: str = Query("etiguel")):
     return camila_aprendizaje.estado(source)
 
 
+@router.get("/aprendizajes/historial")
+def aprendizajes_historial(source: str = Query("etiguel")):
+    """Historial de lo que se le enseñó a Camila (consolidaciones aplicadas)."""
+    return camila_aprendizaje.historial(source)
+
+
 @router.post("/aprendizajes/proponer")
 def proponer(source: str = Query("etiguel")):
     """Consolida ahora las lecciones pendientes y deja una propuesta para aprobar."""
