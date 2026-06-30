@@ -11,9 +11,10 @@ import { test, expect } from "@playwright/test";
 // El /dashboard y /monitoreo/tokens usan el tablero movible (react-grid-layout),
 // que asienta su layout con un offset de pocos píxeles entre corridas → la foto
 // es inestable. Esas pantallas se cubren funcionalmente (KPIs), no por pixel.
+// /terminos se omite del visual: su lista de términos cambia (el test de CRUD
+// agrega/borra) → la foto sería inestable. Queda cubierto funcionalmente.
 const PANTALLAS = [
   { ruta: "/prospects", nombre: "prospects.png" },
-  { ruta: "/terminos", nombre: "terminos.png" },
   { ruta: "/configuracion", nombre: "configuracion.png" },
 ];
 

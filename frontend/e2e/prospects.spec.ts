@@ -20,7 +20,7 @@ test.describe("Prospects · acciones", () => {
 
     await buscar.fill("Alfa");
     await expect(page.getByRole("cell", { name: "Distribuidora Alfa SRL" })).toBeVisible();
-    await expect(page.getByText("Comercial Beta SA")).toHaveCount(0);
+    await expect(page.getByRole("cell", { name: "Comercial Beta SA" })).toHaveCount(0, { timeout: 15_000 });
   });
 
   test("filtrar por estado muestra solo ese estado", async ({ page }) => {
@@ -32,8 +32,10 @@ test.describe("Prospects · acciones", () => {
 
     // "Construcciones Epsilon" = interesado (sembrado); "Distribuidora Alfa" =
     // sin_contactar → no debe aparecer con el filtro Interesado.
+    // Se usa getByRole("cell") (tabla desktop) en vez de getByText: este último
+    // también contaría la card mobile oculta, que se filtra con otro timing.
+    await expect(page.getByRole("cell", { name: "Distribuidora Alfa SRL" })).toHaveCount(0, { timeout: 15_000 });
     await expect(page.getByRole("cell", { name: "Construcciones Epsilon" })).toBeVisible();
-    await expect(page.getByText("Distribuidora Alfa SRL")).toHaveCount(0);
   });
 
   test("abrir el panel de Historial de un prospect", async ({ page }) => {
@@ -63,10 +65,16 @@ test.describe("Prospects · acciones", () => {
 
   test("selector de columnas oculta una columna", async ({ page }) => {
     await page.goto("/prospects");
-    await expect(page.getByRole("columnheader", { name: "Web" })).toBeVisible();
+    // La visibilidad de columnas se guarda en las preferencias del usuario, así que
+    // el test deja todo como estaba: garantiza Web visible → la oculta → la restaura.
+    // El menú queda abierto mientras se togglean los checkboxes (sin cerrarlo).
     await page.getByRole("button", { name: "Columnas" }).click();
-    // Destildar "Web" en el menú de columnas.
-    await page.getByRole("checkbox", { name: "Web" }).uncheck();
+    const web = page.getByRole("checkbox", { name: "Web" });
+    await web.check();
+    await expect(page.getByRole("columnheader", { name: "Web" })).toBeVisible();
+    await web.uncheck();
     await expect(page.getByRole("columnheader", { name: "Web" })).toHaveCount(0);
+    await web.check(); // restaurar
+    await expect(page.getByRole("columnheader", { name: "Web" })).toBeVisible();
   });
 });

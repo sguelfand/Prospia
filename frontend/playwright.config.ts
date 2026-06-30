@@ -16,11 +16,14 @@ export default defineConfig({
   /* Tiempo máx por test */
   timeout: 30_000,
   expect: { timeout: 10_000 },
-  /* No correr en paralelo flujos que comparten la sesión guardada al inicio */
-  fullyParallel: true,
+  /* Los tests comparten el mismo tenant de prueba (qa-test) en un backend de prod
+   * real: corren EN SERIE para no pisarse (un test que muta la lista de términos o
+   * las preferencias de columnas interfería con otro corriendo en paralelo) ni
+   * saturar el server. 1 reintento absorbe flakes puntuales de red. */
+  fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 2 : undefined,
+  retries: 1,
+  workers: 1,
   reporter: [["html", { open: "never" }], ["list"]],
   use: {
     baseURL: BASE_URL,
