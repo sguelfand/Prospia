@@ -41,6 +41,11 @@ class CamilaRevision(Base):
     # Sugerencia concreta de mejora (de prompt/config de Camila).
     sugerencia: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
+    # Quién originó la revisión: 'especialista' (el agente la detectó) o 'sebi' (la
+    # reportó Sebi a mano desde un lead). Las de Sebi entran ya confirmadas como
+    # 'acierto' (él es la verdad, no se re-confirman).
+    origen: Mapped[str] = mapped_column(String(16), nullable=False, default="especialista", server_default="especialista")
+
     # Cola: 'nuevo' (recién detectado) → 'revisado' (Sebi confirmó con veredicto).
     estado: Mapped[str] = mapped_column(String(12), nullable=False, default="nuevo", server_default="nuevo", index=True)
     # Confirmación de Sebi (el feedback que alimenta el aprendizaje):

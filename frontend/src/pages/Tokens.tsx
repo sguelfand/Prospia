@@ -2,21 +2,33 @@ import { RefreshCw, Phone } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { AnthUsage, CostosResumenMes, CostosPorFuncion, CostosParticipacion, CostosHistorico } from '../components/CostosInternos'
+import { ClienteSelector, type SourceOpt } from '../components/ClienteSelector'
 import { DashboardGrid, Widget, buildLayouts } from '../components/DashboardGrid'
 
-const TOKENS_LAYOUT = buildLayouts([
+const PANTALLA = 'tokens'
+const GENERAL = '__general__'
+
+// Vista de UN cliente: solo Camila (los costos internos de API son globales → van en General).
+const CLIENTE_LAYOUT = buildLayouts([
   { i: 'oportunidades', x: 0, y: 0, w: 12, h: 4 },
-  // Costos internos (API Anthropic) — cada gráfico/tarjeta su propio widget
-  { i: 'cMes', x: 0, y: 4, w: 4, h: 4 },
-  { i: 'cFuncion', x: 4, y: 4, w: 4, h: 8 },
-  { i: 'cParticipacion', x: 8, y: 4, w: 4, h: 8 },
-  { i: 'cHistorico', x: 0, y: 12, w: 12, h: 8 },
-  // Camila (OpenClaw)
-  { i: 'kpis', x: 0, y: 20, w: 12, h: 3 },
-  { i: 'costoDia', x: 0, y: 23, w: 7, h: 9 },
-  { i: 'historico', x: 7, y: 23, w: 5, h: 9 },
-  { i: 'convs', x: 0, y: 32, w: 7, h: 13 },
-  { i: 'porModelo', x: 7, y: 32, w: 5, h: 7 },
+  { i: 'kpis', x: 0, y: 4, w: 12, h: 3 },
+  { i: 'costoDia', x: 0, y: 7, w: 7, h: 9 },
+  { i: 'historico', x: 7, y: 7, w: 5, h: 9 },
+  { i: 'convs', x: 0, y: 16, w: 7, h: 13 },
+  { i: 'porModelo', x: 7, y: 16, w: 5, h: 7 },
+])
+
+// Vista General: comparativa entre clientes + costos internos (API Anthropic, globales).
+const GENERAL_LAYOUT = buildLayouts([
+  { i: 'gKpis', x: 0, y: 0, w: 12, h: 3 },
+  { i: 'gGastoCliente', x: 0, y: 3, w: 6, h: 8 },
+  { i: 'gCostoConv', x: 6, y: 3, w: 6, h: 8 },
+  { i: 'gTendencia', x: 0, y: 11, w: 12, h: 8 },
+  { i: 'gTabla', x: 0, y: 19, w: 12, h: 6 },
+  { i: 'cMes', x: 0, y: 25, w: 4, h: 4 },
+  { i: 'cFuncion', x: 4, y: 25, w: 4, h: 8 },
+  { i: 'cParticipacion', x: 8, y: 25, w: 4, h: 8 },
+  { i: 'cHistorico', x: 0, y: 33, w: 12, h: 8 },
 ])
 
 type Totales = {
@@ -40,6 +52,16 @@ type DiaTrend = { fecha: string; costo_usd: number; costo_mensajes: number; cost
 type MesTrend = { mes: string; costo_usd: number; conversaciones: number; llamadas: number; costo_por_conversacion: number }
 type Oportunidad = { id: number; tipo: string; clave: string; severidad: 'alta' | 'media' | 'baja'; titulo: string; detalle: string; estado: string; primera_vez: string | null; ultima_vez: string | null }
 type Source = { id: string; nombre: string }
+type GenCliente = {
+  id: string; nombre: string; gasto_mes_actual: number; gasto_mes_anterior: number
+  llamadas_mes: number; conversaciones_mes: number; costo_por_conversacion: number
+  oportunidades_abiertas: number; serie_mensual: MesTrend[]
+}
+type GeneralData = {
+  mes_actual: string; mes_anterior: string
+  clientes: GenCliente[]
+  totales: { gasto_mes_actual: number; gasto_mes_anterior: number; conversaciones_mes: number; oportunidades_abiertas: number; n_clientes: number }
+}
 type Audit = {
   source: string; ultimo: Ultimo | null; tendencia: DiaTrend[]
   serie_mensual: MesTrend[]; por_modelo_mes: Record<string, { tokens: number; costo_usd: number; llamadas: number }>
@@ -63,7 +85,9 @@ const fechaHora = (iso?: string | null) => iso ? new Date(iso).toLocaleString('e
 
 export default function Tokens() {
   const [sources, setSources] = useState<Source[]>([])
-  const [source, setSource] = useState('etiguel')
+  const [source, setSource] = useState(GENERAL)
+  const [savedDefault, setSavedDefault] = useState(GENERAL)
+  const [general, setGeneral] = useState<GeneralData | null>(null)
   const [data, setData] = useState<Audit | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [recomputando, setRecomputando] = useState(false)
@@ -89,14 +113,43 @@ export default function Tokens() {
   }, [convAbierta, convMsgs])
 
   const [apiUsage, setApiUsage] = useState<AnthUsage | null>(null)
-  useEffect(() => { api.get<Source[]>('/admin/tokens/sources').then(setSources).catch(() => {}) }, [])
+  // Sources + default guardado por el usuario (tilde). Default de fábrica: General.
+  useEffect(() => {
+    (async () => {
+      try {
+        const [srcs, prefs] = await Promise.all([
+          api.get<Source[]>('/admin/tokens/sources'),
+          api.get<{ prefs: { default_source?: string } }>(`/me/preferences?pantalla=${PANTALLA}`),
+        ])
+        setSources(srcs)
+        const def = prefs.prefs?.default_source
+        if (def && (def === GENERAL || srcs.some((s) => s.id === def))) { setSavedDefault(def); setSource(def) }
+      } catch { /* usa el fallback General */ }
+    })()
+  }, [])
   useEffect(() => { api.get<AnthUsage>('/admin/tokens/anthropic?meses=12').then(setApiUsage).catch(() => {}) }, [])
+  useEffect(() => { api.get<GeneralData>('/admin/tokens/general').then(setGeneral).catch(() => {}) }, [])
   const cargar = useCallback(async () => {
+    if (source === GENERAL) {
+      try { setGeneral(await api.get<GeneralData>('/admin/tokens/general')); setError(null) }
+      catch (e) { setError(e instanceof Error ? e.message : 'Error al cargar') }
+      return
+    }
     try { setData(await api.get<Audit>(`/admin/tokens/audit?source=${source}&days=14`)); setError(null) }
     catch (e) { setError(e instanceof Error ? e.message : 'Error al cargar') }
   }, [source])
   useEffect(() => { cargar() }, [cargar])
   useEffect(() => { setDiaSel(null); setDiaData(null); setConvAbierta(null) }, [source])
+
+  const setDefault = async (checked: boolean) => {
+    const nuevo = checked ? source : GENERAL
+    setSavedDefault(nuevo)
+    try { await api.put('/me/preferences', { pantalla: PANTALLA, prefs: { default_source: nuevo } }) } catch { /* noop */ }
+  }
+  const selectorOpts: SourceOpt[] = [
+    { source: GENERAL, nombre: 'General (todos)' },
+    ...sources.map((s) => ({ source: s.id, nombre: s.nombre })),
+  ]
 
   // Al abrir un día distinto del último, traer su detalle completo
   useEffect(() => {
@@ -131,22 +184,98 @@ export default function Tokens() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold text-ink">Monitoreo · Tokens</h1>
-        <div className="flex items-center gap-2">
-          <select value={source} onChange={(e) => setSource(e.target.value)}
-            className="bg-card border border-line text-ink rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
-            {sources.length === 0 && <option value="etiguel">Etiguel (Camila)</option>}
-            {sources.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-          </select>
-          <button onClick={recomputar} disabled={recomputando}
-            className="flex items-center gap-1.5 bg-primary text-on-primary rounded-lg px-3 py-2 text-sm font-medium hover:bg-primary-dark disabled:opacity-50">
-            <RefreshCw size={14} className={recomputando ? 'animate-spin' : ''} />{recomputando ? 'Recalculando…' : 'Recalcular hoy'}
-          </button>
+        <div className="flex items-center gap-3">
+          <ClienteSelector
+            sources={selectorOpts}
+            value={source}
+            onChange={setSource}
+            isDefault={source === savedDefault}
+            onSetDefault={setDefault}
+          />
+          {source !== GENERAL && (
+            <button onClick={recomputar} disabled={recomputando}
+              className="flex items-center gap-1.5 bg-primary text-on-primary rounded-lg px-3 py-2 text-sm font-medium hover:bg-primary-dark disabled:opacity-50">
+              <RefreshCw size={14} className={recomputando ? 'animate-spin' : ''} />{recomputando ? 'Recalculando…' : 'Recalcular hoy'}
+            </button>
+          )}
         </div>
       </div>
       {error && <p className="text-sm text-red-500">{error}</p>}
       <p className="text-xs text-muted -mt-2">Costo real estimado a tarifa MyClaw (10% off el precio oficial). Tocá un día del gráfico para ver sus conversaciones.</p>
 
-      <DashboardGrid pantalla="tokens-v2" defaultLayout={TOKENS_LAYOUT}>
+      {source === GENERAL ? (
+      <DashboardGrid pantalla="tokens-general" defaultLayout={GENERAL_LAYOUT}>
+        {/* KPIs agregados de todos los clientes */}
+        <div key="gKpis">
+          <Widget id="gKpis" title={`Resumen de todos los clientes · ${general?.mes_actual ?? ''}`} fuente="openclaw">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {[
+                { l: 'Gasto del mes', v: usd(general?.totales.gasto_mes_actual ?? 0), sub: `mes ant.: ${usd(general?.totales.gasto_mes_anterior ?? 0)}` },
+                { l: 'Conversaciones', v: fmt(general?.totales.conversaciones_mes ?? 0), sub: '' },
+                { l: 'Oportunidades', v: fmt(general?.totales.oportunidades_abiertas ?? 0), sub: 'abiertas', alert: (general?.totales.oportunidades_abiertas ?? 0) > 0 },
+                { l: 'Clientes', v: fmt(general?.totales.n_clientes ?? 0), sub: '' },
+              ].map((k) => (
+                <div key={k.l} className="bg-app border border-line rounded-xl p-3">
+                  <div className={`text-2xl font-semibold ${k.alert ? 'text-red-500' : 'text-ink'}`}>{k.v}</div>
+                  <div className="text-xs text-muted mt-1">{k.l}{k.sub ? <span className="text-muted/70"> · {k.sub}</span> : null}</div>
+                </div>
+              ))}
+            </div>
+          </Widget>
+        </div>
+
+        {/* Gasto por cliente (mes) */}
+        <div key="gGastoCliente">
+          <Widget id="gGastoCliente" title="Gasto por cliente · este mes" fuente="openclaw">
+            <HBars items={(general?.clientes ?? []).map((c) => ({ label: c.nombre, value: c.gasto_mes_actual, delta: c.gasto_mes_actual - c.gasto_mes_anterior }))} fmt={usd} />
+          </Widget>
+        </div>
+
+        {/* $/conversación por cliente */}
+        <div key="gCostoConv">
+          <Widget id="gCostoConv" title="Costo por conversación · este mes" fuente="openclaw" right={<span className="text-[11px] text-muted">eficiencia</span>}>
+            <HBars items={(general?.clientes ?? []).map((c) => ({ label: c.nombre, value: c.costo_por_conversacion }))} fmt={usd3} />
+          </Widget>
+        </div>
+
+        {/* Tendencia mensual por cliente */}
+        <div key="gTendencia">
+          <Widget id="gTendencia" title="Tendencia mensual por cliente" fuente="openclaw" right={<span className="text-[11px] text-muted">costo / mes</span>}>
+            <MultiLineaClientes clientes={general?.clientes ?? []} />
+          </Widget>
+        </div>
+
+        {/* Tabla comparativa */}
+        <div key="gTabla">
+          <Widget id="gTabla" title="Comparativa de clientes" fuente="openclaw">
+            <TablaComparativa clientes={general?.clientes ?? []} />
+          </Widget>
+        </div>
+
+        {/* Costos internos (API Anthropic) — globales */}
+        <div key="cMes">
+          <Widget id="cMes" title="Resumen del mes — funciones internas" fuente="anthropic">
+            {apiUsage ? <CostosResumenMes data={apiUsage} /> : <p className="text-sm text-muted">Cargando…</p>}
+          </Widget>
+        </div>
+        <div key="cFuncion">
+          <Widget id="cFuncion" title="Costo por función (mes actual)" fuente="anthropic">
+            {apiUsage ? <CostosPorFuncion data={apiUsage} /> : <p className="text-sm text-muted">Cargando…</p>}
+          </Widget>
+        </div>
+        <div key="cParticipacion">
+          <Widget id="cParticipacion" title="Participación por función (mes)" fuente="anthropic">
+            {apiUsage ? <CostosParticipacion data={apiUsage} /> : <p className="text-sm text-muted">Cargando…</p>}
+          </Widget>
+        </div>
+        <div key="cHistorico">
+          <Widget id="cHistorico" title="Histórico mensual — funciones internas" fuente="anthropic" right={<span className="text-[11px] text-muted">apilado por función</span>}>
+            {apiUsage ? <CostosHistorico data={apiUsage} /> : <p className="text-sm text-muted">Cargando…</p>}
+          </Widget>
+        </div>
+      </DashboardGrid>
+      ) : (
+      <DashboardGrid pantalla="tokens-cliente" defaultLayout={CLIENTE_LAYOUT}>
         {/* Oportunidades */}
         <div key="oportunidades">
           <Widget id="oportunidades" title="Oportunidades de ahorro de Camila" fuente="openclaw" right={<span className="text-[11px] text-muted">fijas hasta resolver</span>}>
@@ -172,28 +301,6 @@ export default function Tokens() {
                 })}
               </div>
             )}
-          </Widget>
-        </div>
-
-        {/* Costos internos — cada uno su propio widget (API Anthropic) */}
-        <div key="cMes">
-          <Widget id="cMes" title="Resumen del mes — funciones internas" fuente="anthropic">
-            {apiUsage ? <CostosResumenMes data={apiUsage} /> : <p className="text-sm text-muted">Cargando…</p>}
-          </Widget>
-        </div>
-        <div key="cFuncion">
-          <Widget id="cFuncion" title="Costo por función (mes actual)" fuente="anthropic">
-            {apiUsage ? <CostosPorFuncion data={apiUsage} /> : <p className="text-sm text-muted">Cargando…</p>}
-          </Widget>
-        </div>
-        <div key="cParticipacion">
-          <Widget id="cParticipacion" title="Participación por función (mes)" fuente="anthropic">
-            {apiUsage ? <CostosParticipacion data={apiUsage} /> : <p className="text-sm text-muted">Cargando…</p>}
-          </Widget>
-        </div>
-        <div key="cHistorico">
-          <Widget id="cHistorico" title="Histórico mensual — funciones internas" fuente="anthropic" right={<span className="text-[11px] text-muted">apilado por función</span>}>
-            {apiUsage ? <CostosHistorico data={apiUsage} /> : <p className="text-sm text-muted">Cargando…</p>}
           </Widget>
         </div>
 
@@ -322,6 +429,7 @@ export default function Tokens() {
           </Widget>
         </div>
       </DashboardGrid>
+      )}
     </div>
   )
 }
@@ -438,6 +546,106 @@ function LineaMensual({ meses, hover, setHover }: { meses: MesTrend[]; hover: nu
           </g>
         ))}
       </svg>
+    </div>
+  )
+}
+
+const PALETA = ['#F5B23D', '#38bdf8', '#a78bfa', '#34d399', '#fb7185', '#fbbf24', '#22d3ee', '#f472b6']
+
+function HBars({ items, fmt }: { items: { label: string; value: number; delta?: number }[]; fmt: (n: number) => string }) {
+  if (!items.length) return <p className="text-sm text-muted">Sin datos.</p>
+  const max = Math.max(0.0001, ...items.map((i) => i.value))
+  return (
+    <div className="space-y-2.5">
+      {items.map((it) => (
+        <div key={it.label}>
+          <div className="flex items-center justify-between text-xs mb-1">
+            <span className="text-ink-soft truncate">{it.label}</span>
+            <span className="text-muted">
+              {fmt(it.value)}
+              {it.delta != null && it.delta !== 0 && (
+                <span className={it.delta > 0 ? 'text-red-400' : 'text-emerald-400'}> {it.delta > 0 ? '▲' : '▼'}{fmt(Math.abs(it.delta))}</span>
+              )}
+            </span>
+          </div>
+          <div className="h-2.5 rounded-full bg-app overflow-hidden">
+            <div className="h-full rounded-full" style={{ width: `${(it.value / max) * 100}%`, background: '#F5B23D' }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function MultiLineaClientes({ clientes }: { clientes: GenCliente[] }) {
+  const conSerie = clientes.filter((c) => c.serie_mensual.length)
+  if (!conSerie.length) return <p className="text-sm text-muted">Sin histórico todavía.</p>
+  const mesesSet = Array.from(new Set(conSerie.flatMap((c) => c.serie_mensual.map((m) => m.mes)))).sort()
+  const W = 900, H = 260, padL = 56, padR = 16, padT = 20, padB = 30
+  const top = niceMax(Math.max(0.001, ...conSerie.flatMap((c) => c.serie_mensual.map((m) => m.costo_usd))))
+  const x = (i: number) => mesesSet.length <= 1 ? (padL + W - padR) / 2 : padL + (i * (W - padL - padR)) / (mesesSet.length - 1)
+  const y = (c: number) => (H - padB) - (c / top) * (H - padT - padB)
+  const ticks = [0, 0.5, 1].map((f) => f * top)
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 300 }}>
+        {ticks.map((tk, i) => (
+          <g key={i}>
+            <line x1={padL} y1={y(tk)} x2={W - padR} y2={y(tk)} stroke="#243454" strokeWidth={1} />
+            <text x={padL - 8} y={y(tk) + 3} textAnchor="end" fontSize={9.5} fill="#5C6E90" fontFamily="JetBrains Mono">{usd(tk)}</text>
+          </g>
+        ))}
+        <line x1={padL} y1={H - padB} x2={W - padR} y2={H - padB} stroke="#243454" strokeWidth={1} />
+        {mesesSet.map((m, i) => (
+          <text key={m} x={x(i)} y={H - 9} textAnchor="middle" fontSize={9.5} fill="#8294B4">{m}</text>
+        ))}
+        {conSerie.map((c, ci) => {
+          const pts = c.serie_mensual.map((m) => [x(mesesSet.indexOf(m.mes)), y(m.costo_usd)] as const)
+          return <polyline key={c.id} points={pts.map((p) => p.join(',')).join(' ')} fill="none" stroke={PALETA[ci % PALETA.length]} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+        })}
+      </svg>
+      <div className="flex flex-wrap gap-3 mt-2">
+        {conSerie.map((c, ci) => (
+          <span key={c.id} className="flex items-center gap-1.5 text-xs text-muted">
+            <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: PALETA[ci % PALETA.length] }} />{c.nombre}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function TablaComparativa({ clientes }: { clientes: GenCliente[] }) {
+  if (!clientes.length) return <p className="text-sm text-muted">Sin datos.</p>
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-muted text-xs border-b border-line">
+            <th className="text-left font-medium py-2 pr-3">Cliente</th>
+            <th className="text-right font-medium py-2 px-3">Gasto mes</th>
+            <th className="text-right font-medium py-2 px-3">Conv.</th>
+            <th className="text-right font-medium py-2 px-3">$/conv</th>
+            <th className="text-right font-medium py-2 px-3">Δ mes ant.</th>
+            <th className="text-right font-medium py-2 pl-3">Oport.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {clientes.map((c) => {
+            const delta = c.gasto_mes_actual - c.gasto_mes_anterior
+            return (
+              <tr key={c.id} className="border-b border-line/50">
+                <td className="py-2 pr-3 text-ink font-medium">{c.nombre}</td>
+                <td className="py-2 px-3 text-right text-ink-soft">{usd(c.gasto_mes_actual)}</td>
+                <td className="py-2 px-3 text-right text-muted">{fmt(c.conversaciones_mes)}</td>
+                <td className="py-2 px-3 text-right text-muted">{usd3(c.costo_por_conversacion)}</td>
+                <td className={`py-2 px-3 text-right ${delta > 0 ? 'text-red-400' : delta < 0 ? 'text-emerald-400' : 'text-muted'}`}>{delta === 0 ? '—' : (delta > 0 ? '+' : '') + usd(delta)}</td>
+                <td className={`py-2 pl-3 text-right ${c.oportunidades_abiertas > 0 ? 'text-amber-400' : 'text-muted'}`}>{c.oportunidades_abiertas}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }

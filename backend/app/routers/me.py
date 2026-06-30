@@ -45,6 +45,11 @@ class LayoutUpdate(BaseModel):
     titulos: dict | None = None
 
 
+class PrefsUpdate(BaseModel):
+    pantalla: str
+    prefs: dict = {}
+
+
 def _parse(s: str) -> dict:
     import json
     try:
@@ -83,6 +88,37 @@ def put_layout(body: LayoutUpdate, current: User = Depends(get_current_user), db
     row.updated_at = datetime.now(timezone.utc)
     db.commit()
     return {"ok": True}
+
+
+# ── Preferencias de UI por usuario/pantalla (default del selector, etc.) ──────
+
+@router.get("/preferences")
+def get_preferences(pantalla: str, current: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Preferencias de UI del usuario para una pantalla (ej. default del selector
+    por cliente). Devuelve {} si todavía no guardó nada."""
+    from app.models.user_preference import UserPreference
+    row = (db.query(UserPreference)
+           .filter(UserPreference.user_id == current.id, UserPreference.pantalla == pantalla).first())
+    return {"pantalla": pantalla, "prefs": _parse(row.prefs) if row else {}}
+
+
+@router.put("/preferences")
+def put_preferences(body: PrefsUpdate, current: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Merge de preferencias de UI del usuario para una pantalla. Las claves nuevas
+    pisan las existentes; las no enviadas quedan como estaban."""
+    import json
+    from app.models.user_preference import UserPreference
+    row = (db.query(UserPreference)
+           .filter(UserPreference.user_id == current.id, UserPreference.pantalla == body.pantalla).first())
+    if not row:
+        row = UserPreference(user_id=current.id, pantalla=body.pantalla)
+        db.add(row)
+    actuales = _parse(row.prefs)
+    actuales.update(body.prefs or {})
+    row.prefs = json.dumps(actuales, ensure_ascii=False)
+    row.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"ok": True, "prefs": actuales}
 
 
 class AsistirBody(BaseModel):

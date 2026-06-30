@@ -726,6 +726,58 @@ def get_clientes_resumen() -> list[dict]:
     return out
 
 
+def _mes_anterior(mes: str) -> str:
+    """'YYYY-MM' → mes anterior 'YYYY-MM'."""
+    y, m = int(mes[:4]), int(mes[5:7])
+    m -= 1
+    if m == 0:
+        m = 12
+        y -= 1
+    return f"{y:04d}-{m:02d}"
+
+
+def get_general() -> dict:
+    """Vista 'General' del monitor de tokens: comparativa entre clientes (gasto del
+    mes, $/conversación, tendencia, oportunidades abiertas) + totales agregados.
+    Hoy SOURCES tiene solo Etiguel; cada cliente nuevo se suma al cablear su auditoría."""
+    from app.models.camila_audit import CamilaOportunidad
+    from app.database import SessionLocal
+    mes_actual = _mes_actual()
+    mes_prev = _mes_anterior(mes_actual)
+    clientes_base = get_clientes_resumen()
+    clientes = []
+    db = SessionLocal()
+    try:
+        for c in clientes_base:
+            serie = c.get("serie_mensual", [])
+            row_act = next((s for s in serie if s["mes"] == mes_actual), None)
+            row_prev = next((s for s in serie if s["mes"] == mes_prev), None)
+            conv_mes = (row_act or {}).get("conversaciones", 0)
+            gasto_prev = (row_prev or {}).get("costo_usd", 0.0)
+            gasto_act = c.get("gasto_mes_actual", 0.0)
+            ops = (db.query(CamilaOportunidad)
+                   .filter(CamilaOportunidad.source == c["id"],
+                           CamilaOportunidad.estado == "abierta").count())
+            clientes.append({
+                **c,
+                "conversaciones_mes": conv_mes,
+                "costo_por_conversacion": round(gasto_act / conv_mes, 4) if conv_mes else 0.0,
+                "gasto_mes_anterior": round(gasto_prev, 4),
+                "oportunidades_abiertas": ops,
+            })
+    finally:
+        db.close()
+    totales = {
+        "gasto_mes_actual": round(sum(c["gasto_mes_actual"] for c in clientes), 4),
+        "gasto_mes_anterior": round(sum(c["gasto_mes_anterior"] for c in clientes), 4),
+        "conversaciones_mes": sum(c["conversaciones_mes"] for c in clientes),
+        "oportunidades_abiertas": sum(c["oportunidades_abiertas"] for c in clientes),
+        "n_clientes": len(clientes),
+    }
+    return {"mes_actual": mes_actual, "mes_anterior": mes_prev,
+            "clientes": clientes, "totales": totales}
+
+
 # ── loops ─────────────────────────────────────────────────────────────────────
 
 def _hoy_ba() -> str:

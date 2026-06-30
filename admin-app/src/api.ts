@@ -522,6 +522,20 @@ export interface TokenClienteCosto {
 export const getTokenClientes = (token: string) =>
   request<TokenClienteCosto[]>("/admin/tokens/clientes", {}, token);
 
+// Vista General: comparativa entre clientes + totales agregados.
+export interface TokenGenCliente {
+  id: string; nombre: string; gasto_mes_actual: number; gasto_mes_anterior: number;
+  llamadas_mes: number; conversaciones_mes: number; costo_por_conversacion: number;
+  oportunidades_abiertas: number; serie_mensual: TokenMesTrend[];
+}
+export interface TokenGeneral {
+  mes_actual: string; mes_anterior: string;
+  clientes: TokenGenCliente[];
+  totales: { gasto_mes_actual: number; gasto_mes_anterior: number; conversaciones_mes: number; oportunidades_abiertas: number; n_clientes: number };
+}
+export const getTokenGeneral = (token: string) =>
+  request<TokenGeneral>("/admin/tokens/general", {}, token);
+
 // Costo EN VIVO de una conversación (por teléfono) — pantalla de chat.
 export interface TokenConvTurno { ts: string; model: string; input: number; output: number; cacheRead: number; cacheWrite: number; costo: number }
 export interface TokenConvCosto {
@@ -588,6 +602,13 @@ export const bloquearProspectCliente = (token: string, tenantId: number, prospec
 export const desbloquearProspectCliente = (token: string, tenantId: number, prospectId: number) =>
   request<BloquearProspectResult>(`/admin/clientes/${tenantId}/prospects/${prospectId}/desbloquear`, { method: "POST" }, token);
 
+// Reportar calidad: Sebi reporta que Camila estuvo mal en este lead. Entra a la
+// lista de Calidad ya confirmado como 'acierto' y suma para las 5 lecciones.
+export const reportarCalidadProspect = (token: string, tenantId: number, prospectId: number, texto: string) =>
+  request<{ ok: boolean; revision: RevisionCalidad }>(
+    `/admin/clientes/${tenantId}/prospects/${prospectId}/reportar-calidad`,
+    { method: "POST", body: JSON.stringify({ texto }) }, token);
+
 export const getProspect = (token: string, tenantId: number, prospectId: number) =>
   request<ProspectRow>(`/admin/clientes/${tenantId}/prospects/${prospectId}`, {}, token);
 
@@ -620,9 +641,23 @@ export interface RevisionCalidad {
   telefono: string | null; nombre: string | null; fecha: string;
   categoria: string; severidad: "alta" | "media" | "baja";
   titulo: string; detalle: string; fragmento: string; sugerencia: string;
+  origen?: "especialista" | "sebi";
   estado: EstadoRevision; veredicto: VeredictoRevision; nota_sebi: string | null;
   created_at: string | null; revisado_at: string | null;
 }
+
+export interface CalidadSource { source: string; nombre: string; }
+export const getCalidadSources = (token: string) =>
+  request<CalidadSource[]>(`/admin/calidad/sources`, {}, token);
+
+// ── Preferencias de UI por usuario/pantalla (default del selector, etc.) ───────
+export const getPreferences = (token: string, pantalla: string) =>
+  request<{ pantalla: string; prefs: Record<string, unknown> }>(
+    `/me/preferences?pantalla=${encodeURIComponent(pantalla)}`, {}, token);
+
+export const putPreferences = (token: string, pantalla: string, prefs: Record<string, unknown>) =>
+  request<{ ok: boolean; prefs: Record<string, unknown> }>(
+    `/me/preferences`, { method: "PUT", body: JSON.stringify({ pantalla, prefs }) }, token);
 
 export const getRevisiones = (token: string, source = "etiguel") =>
   request<RevisionCalidad[]>(`/admin/calidad/revisiones?source=${encodeURIComponent(source)}`, {}, token);

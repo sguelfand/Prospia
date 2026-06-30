@@ -1,6 +1,10 @@
 import { MessageSquare, Phone, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
+import { ClienteSelector, type SourceOpt } from '../components/ClienteSelector'
+
+const PANTALLA = 'calidad'
+const FALLBACK_SOURCE = 'etiguel'
 
 type Estado = 'nuevo' | 'revisado'
 type Veredicto = 'acierto' | 'falso_positivo' | null
@@ -18,6 +22,7 @@ type Revision = {
   detalle: string
   fragmento: string
   sugerencia: string
+  origen?: 'especialista' | 'sebi'
   estado: Estado
   veredicto: Veredicto
   nota_sebi: string | null
@@ -69,13 +74,32 @@ export default function Calidad() {
   const [apr, setApr] = useState<AprEstado | null>(null)
   const [verBloque, setVerBloque] = useState(false)
   const [aprBusy, setAprBusy] = useState(false)
+  const [source, setSource] = useState(FALLBACK_SOURCE)
+  const [sources, setSources] = useState<SourceOpt[]>([{ source: 'etiguel', nombre: 'Etiguel' }])
+  const [savedDefault, setSavedDefault] = useState(FALLBACK_SOURCE)
 
-  async function load() {
+  // Cliente inicial: el default guardado por el usuario (tilde) o Etiguel.
+  useEffect(() => {
+    (async () => {
+      try {
+        const [srcs, prefs] = await Promise.all([
+          api.get<SourceOpt[]>('/admin/calidad/sources'),
+          api.get<{ prefs: { default_source?: string } }>(`/me/preferences?pantalla=${PANTALLA}`),
+        ])
+        if (srcs.length) setSources(srcs)
+        const def = prefs.prefs?.default_source
+        if (def && srcs.some((s) => s.source === def)) { setSavedDefault(def); setSource(def) }
+      } catch { /* usa el fallback */ }
+    })()
+  }, [])
+
+  async function load(src: string) {
     setError(null)
     try {
+      const q = `?source=${encodeURIComponent(src)}`
       const [revs, aprE] = await Promise.all([
-        api.get<Revision[]>('/admin/calidad/revisiones'),
-        api.get<AprEstado>('/admin/calidad/aprendizajes'),
+        api.get<Revision[]>(`/admin/calidad/revisiones${q}`),
+        api.get<AprEstado>(`/admin/calidad/aprendizajes${q}`),
       ])
       setRevisiones(revs)
       setApr(aprE)
@@ -86,23 +110,29 @@ export default function Calidad() {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load(source) }, [source])
+
+  async function setDefault(checked: boolean) {
+    const nuevo = checked ? source : FALLBACK_SOURCE
+    setSavedDefault(nuevo)
+    try { await api.put('/me/preferences', { pantalla: PANTALLA, prefs: { default_source: nuevo } }) } catch { /* noop */ }
+  }
 
   async function consolidar() {
     setAprBusy(true)
-    try { await api.post('/admin/calidad/aprendizajes/proponer'); await load() }
+    try { await api.post(`/admin/calidad/aprendizajes/proponer?source=${encodeURIComponent(source)}`); await load(source) }
     finally { setAprBusy(false) }
   }
   async function aprobarApr(id: number) {
     if (!confirm('¿Aplicar estos aprendizajes al prompt de Camila? Se hace backup automático y es reversible.')) return
     setAprBusy(true)
-    try { await api.post(`/admin/calidad/aprendizajes/${id}/aprobar`); setVerBloque(false); await load() }
+    try { await api.post(`/admin/calidad/aprendizajes/${id}/aprobar`); setVerBloque(false); await load(source) }
     catch (e) { alert(e instanceof Error ? e.message : 'No se pudo aplicar') }
     finally { setAprBusy(false) }
   }
   async function descartarApr(id: number) {
     setAprBusy(true)
-    try { await api.post(`/admin/calidad/aprendizajes/${id}/descartar`); setVerBloque(false); await load() }
+    try { await api.post(`/admin/calidad/aprendizajes/${id}/descartar`); setVerBloque(false); await load(source) }
     finally { setAprBusy(false) }
   }
 
@@ -152,7 +182,16 @@ export default function Calidad() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      <h1 className="text-xl font-semibold text-ink mb-1">Calidad de Camila</h1>
+      <div className="flex items-start justify-between gap-3 flex-wrap mb-1">
+        <h1 className="text-xl font-semibold text-ink">Calidad de Camila</h1>
+        <ClienteSelector
+          sources={sources}
+          value={source}
+          onChange={setSource}
+          isDefault={source === savedDefault}
+          onSetDefault={setDefault}
+        />
+      </div>
       <p className="text-xs text-muted mb-4">
         <span className="font-semibold text-ink">Especialista Negocio</span> revisó las conversaciones y marcó
         respuestas que conviene mirar. Confirmá si Camila estuvo bien o mal — con eso afina su criterio.
@@ -231,6 +270,9 @@ export default function Calidad() {
               <span className="text-[11px] font-bold text-amber uppercase tracking-wide">{CAT_LABEL[r.categoria] || r.categoria}</span>
               <span className="text-[11px] text-muted">· {r.severidad}</span>
               <span className="text-[11px] text-muted">· {r.fecha}</span>
+              {r.origen === 'sebi' && (
+                <span className="text-[11px] font-bold text-primary border border-primary/50 rounded px-1.5 py-0.5">Reportado por vos</span>
+              )}
               {r.estado === 'revisado' && r.veredicto === 'acierto' && (
                 <span className="ml-auto text-[11px] font-bold text-red-500 border border-red-500/50 rounded px-1.5 py-0.5">Camila estuvo mal</span>
               )}

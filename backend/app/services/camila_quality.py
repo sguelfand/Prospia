@@ -316,6 +316,7 @@ def _to_dict(r) -> dict:
         "telefono": r.telefono, "nombre": r.nombre, "fecha": r.fecha,
         "categoria": r.categoria, "severidad": r.severidad, "titulo": r.titulo,
         "detalle": r.detalle, "fragmento": r.fragmento, "sugerencia": r.sugerencia,
+        "origen": getattr(r, "origen", "especialista"),
         "estado": r.estado, "veredicto": r.veredicto, "nota_sebi": r.nota_sebi,
         "created_at": r.created_at.isoformat() if r.created_at else None,
         "revisado_at": r.revisado_at.isoformat() if r.revisado_at else None,
@@ -358,6 +359,73 @@ def borrar_revision(rev_id: int) -> bool:
         return True
     finally:
         db.close()
+
+
+# ── reporte manual de Sebi (desde un lead) ────────────────────────────────────
+
+def crear_reporte_manual(source: str, texto: str, telefono: str | None = None,
+                         nombre: str | None = None) -> dict:
+    """Sebi reporta a mano que Camila estuvo mal en un lead. Entra YA confirmado como
+    'acierto' (Sebi es la verdad → no se re-confirma) y suma directo a las lecciones
+    pendientes. Si es Etiguel, linkea la conversación espejada por teléfono (para
+    poder abrirla desde Calidad). Devuelve la revisión creada."""
+    texto = (texto or "").strip()
+    if not texto:
+        raise ValueError("el reporte está vacío")
+    from app.database import SessionLocal
+    from app.models.camila_revision import CamilaRevision
+    db = SessionLocal()
+    try:
+        mirror_id = None
+        if source == "etiguel" and telefono:
+            try:
+                from app.models.etiguel_mirror import EtiguelMirror
+                m = (db.query(EtiguelMirror)
+                     .filter(EtiguelMirror.telefono == telefono).first())
+                if m:
+                    mirror_id = m.id
+                    nombre = nombre or m.nombre
+            except Exception:
+                pass
+        ahora = datetime.now(timezone.utc)
+        titulo = texto.replace("\n", " ").strip()
+        titulo = (titulo[:107] + "…") if len(titulo) > 108 else titulo
+        r = CamilaRevision(
+            source=source, mirror_id=mirror_id, telefono=telefono, nombre=nombre,
+            fecha=_hoy_ba(), categoria="otro", severidad="media",
+            titulo=titulo or "Reporte de calidad",
+            detalle=texto[:4000], fragmento="", sugerencia="",
+            origen="sebi", estado="revisado", veredicto="acierto",
+            nota_sebi=texto[:4000], revisado_at=ahora,
+        )
+        db.add(r)
+        db.commit()
+        db.refresh(r)
+        out = _to_dict(r)
+    finally:
+        db.close()
+    # Suma para las 5: si llegó al umbral, dispara la consolidación (con su push).
+    try:
+        from app.services import camila_aprendizaje
+        camila_aprendizaje.maybe_proponer(source)
+    except Exception as e:
+        print(f"[CAMILA-QUALITY] maybe_proponer tras reporte: {type(e).__name__}: {e}")
+    return out
+
+
+def get_sources_calidad() -> list[dict]:
+    """Lista de clientes para el selector de Calidad: Etiguel + cada tenant.
+    `source` es el valor que se filtra ('etiguel' o el slug del tenant)."""
+    from app.database import SessionLocal
+    from app.models.tenant import Tenant
+    out = [{"source": "etiguel", "nombre": "Etiguel"}]
+    db = SessionLocal()
+    try:
+        for t in db.query(Tenant).order_by(Tenant.nombre.asc()).all():
+            out.append({"source": t.slug, "nombre": t.nombre})
+    finally:
+        db.close()
+    return out
 
 
 # ── loop diario ───────────────────────────────────────────────────────────────

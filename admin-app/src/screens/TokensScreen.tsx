@@ -16,13 +16,17 @@ import {
   TokenAudit,
   TokenConv,
   TokenDia,
+  TokenGeneral,
   TokenMesTrend,
   TokenSource,
   getAnthropicUsage,
   getEtiguelMirrorMensajes,
+  getPreferences,
   getTokenAudit,
   getTokenDia,
+  getTokenGeneral,
   getTokenSources,
+  putPreferences,
   recomputeTokens,
 } from "../api";
 import { useAuth } from "../auth";
@@ -30,6 +34,8 @@ import CostosInternos from "../components/CostosInternos";
 import { Icon } from "../components/Icon";
 import { ErrorBox, Loader } from "../components/ui";
 import { colors } from "../theme";
+
+const GENERAL = "__general__";
 
 const SEV: Record<string, { color: string; label: string }> = {
   alta: { color: colors.red, label: "Alta" },
@@ -50,7 +56,9 @@ export default function TokensScreen() {
   const { token } = useAuth();
   const insets = useSafeAreaInsets();
   const [sources, setSources] = useState<TokenSource[]>([]);
-  const [source, setSource] = useState("etiguel");
+  const [source, setSource] = useState(GENERAL);
+  const [savedDefault, setSavedDefault] = useState(GENERAL);
+  const [general, setGeneral] = useState<TokenGeneral | null>(null);
   const [data, setData] = useState<TokenAudit | null>(null);
   const [apiUsage, setApiUsage] = useState<AnthUsage | null>(null);
   const [loading, setLoading] = useState(true);
@@ -78,9 +86,27 @@ export default function TokensScreen() {
     }
   }, [convAbierta, token, convMsgs]);
 
-  useEffect(() => { if (token) getTokenSources(token).then(setSources).catch(() => {}); }, [token]);
+  // Sources + default guardado por el usuario (tilde). Default de fábrica: General.
+  useEffect(() => {
+    if (!token) return;
+    (async () => {
+      try {
+        const [srcs, prefs] = await Promise.all([getTokenSources(token), getPreferences(token, "tokens")]);
+        setSources(srcs);
+        const def = (prefs.prefs as { default_source?: string })?.default_source;
+        if (def && (def === GENERAL || srcs.some((s) => s.id === def))) { setSavedDefault(def); setSource(def); }
+      } catch { /* usa el fallback General */ }
+    })();
+  }, [token]);
   useEffect(() => { if (token) getAnthropicUsage(token, 30).then(setApiUsage).catch(() => {}); }, [token]);
   useEffect(() => { setDiaSel(null); setDiaData(null); setConvAbierta(null); }, [source]);
+
+  const setDefault = async () => {
+    if (!token) return;
+    const nuevo = savedDefault === source ? GENERAL : source;
+    setSavedDefault(nuevo);
+    try { await putPreferences(token, "tokens", { default_source: nuevo }); } catch { /* noop */ }
+  };
 
   // Al abrir un día distinto del último, traer su detalle completo.
   useEffect(() => {
@@ -97,7 +123,10 @@ export default function TokensScreen() {
   const load = useCallback(async () => {
     if (!token) { setLoading(false); return; }
     setError(null);
-    try { setData(await getTokenAudit(token, source, 14)); }
+    try {
+      if (source === GENERAL) setGeneral(await getTokenGeneral(token));
+      else setData(await getTokenAudit(token, source, 14));
+    }
     catch (e) { setError(e instanceof Error ? e.message : "Error al cargar."); }
     finally { setLoading(false); setRefreshing(false); }
   }, [token, source]);
@@ -135,18 +164,69 @@ export default function TokensScreen() {
 
       <View style={styles.headerRow}>
         <View style={styles.pills}>
-          {(sources.length ? sources : [{ id: "etiguel", nombre: "Etiguel (Camila)" }]).map((s) => {
+          {[{ id: GENERAL, nombre: "General (todos)" }, ...sources].map((s) => {
             const on = s.id === source;
             return <TouchableOpacity key={s.id} style={[styles.pill, on && styles.pillOn]} onPress={() => setSource(s.id)}>
               <Text style={[styles.pillText, on && styles.pillTextOn]}>{s.nombre}</Text></TouchableOpacity>;
           })}
         </View>
-        <TouchableOpacity style={styles.recalc} onPress={recomputar} disabled={recomputando}>
-          {recomputando ? <ActivityIndicator size="small" color={colors.onPrimary} /> : <Icon name="refresh" size={15} color={colors.onPrimary} />}
-        </TouchableOpacity>
+        {source !== GENERAL ? (
+          <TouchableOpacity style={styles.recalc} onPress={recomputar} disabled={recomputando}>
+            {recomputando ? <ActivityIndicator size="small" color={colors.onPrimary} /> : <Icon name="refresh" size={15} color={colors.onPrimary} />}
+          </TouchableOpacity>
+        ) : null}
       </View>
-      <Text style={styles.nota}>Costo real estimado a tarifa MyClaw (10% off oficial). Tocá un día del gráfico para ver sus conversaciones.</Text>
+      <TouchableOpacity style={styles.defaultToggle} onPress={setDefault} activeOpacity={0.7}>
+        <Icon name="check" size={13} color={savedDefault === source ? colors.primary : colors.textDim} strokeWidth={2.5} />
+        <Text style={[styles.defaultText, savedDefault === source ? { color: colors.primary } : null]}>Definir por defecto</Text>
+      </TouchableOpacity>
+      <Text style={styles.nota}>Costo real estimado a tarifa MyClaw (10% off oficial). {source === GENERAL ? "Vista de todos los clientes." : "Tocá un día del gráfico para ver sus conversaciones."}</Text>
 
+      {source === GENERAL ? (
+        <>
+          {/* Vista General: comparativa entre clientes */}
+          {!general ? <Text style={styles.empty}>Cargando…</Text> : (
+            <>
+              <View style={styles.kpis}>
+                <Kpi label="Gasto del mes" value={usd(general.totales.gasto_mes_actual)} />
+                <Kpi label="Conversac." value={fmt(general.totales.conversaciones_mes)} />
+                <Kpi label="Oportunid." value={fmt(general.totales.oportunidades_abiertas)} alert={general.totales.oportunidades_abiertas > 0} />
+                <Kpi label="Clientes" value={fmt(general.totales.n_clientes)} />
+              </View>
+
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Gasto por cliente <Text style={styles.sub}>· este mes</Text></Text>
+                {general.clientes.length === 0 ? <Text style={styles.empty}>Sin datos.</Text> : (
+                  <View style={{ marginTop: 8, gap: 10 }}>
+                    {general.clientes.map((c) => {
+                      const max = Math.max(0.0001, ...general.clientes.map((x) => x.gasto_mes_actual));
+                      const delta = c.gasto_mes_actual - c.gasto_mes_anterior;
+                      return (
+                        <View key={c.id}>
+                          <View style={styles.hbarTop}>
+                            <Text style={styles.hbarLabel} numberOfLines={1}>{c.nombre}</Text>
+                            <Text style={styles.hbarVal}>
+                              {usd(c.gasto_mes_actual)}
+                              {delta !== 0 ? <Text style={{ color: delta > 0 ? colors.red : colors.green }}>{delta > 0 ? " ▲" : " ▼"}{usd(Math.abs(delta))}</Text> : null}
+                            </Text>
+                          </View>
+                          <View style={styles.hbarTrack}>
+                            <View style={[styles.hbarFill, { width: `${(c.gasto_mes_actual / max) * 100}%` }]} />
+                          </View>
+                          <Text style={styles.hbarSub}>{fmt(c.conversaciones_mes)} conv · {usd3(c.costo_por_conversacion)}/conv · {c.oportunidades_abiertas} oport.</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+
+              {apiUsage ? <CostosInternos data={apiUsage} /> : null}
+            </>
+          )}
+        </>
+      ) : (
+      <>
       {/* Oportunidades FIJAS */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Oportunidades de mejora <Text style={styles.sub}>(fijas hasta resolver)</Text></Text>
@@ -166,9 +246,6 @@ export default function TokensScreen() {
           })
         )}
       </View>
-
-      {/* Costos internos: API de Anthropic (mes actual + histórico) */}
-      {apiUsage ? <CostosInternos data={apiUsage} /> : null}
 
       {!u ? <Text style={styles.empty}>Sin datos del día. Tocá recalcular.</Text> : (
         <>
@@ -300,6 +377,8 @@ export default function TokensScreen() {
           </View>
         </>
       )}
+      </>
+      )}
     </ScrollView>
   );
 }
@@ -329,6 +408,14 @@ const styles = StyleSheet.create({
   pillText: { color: colors.textDim, fontSize: 13, fontWeight: "600" },
   pillTextOn: { color: colors.onPrimary },
   recalc: { backgroundColor: colors.primary, borderRadius: 10, padding: 9 },
+  defaultToggle: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 8, alignSelf: "flex-start" },
+  defaultText: { color: colors.textDim, fontSize: 11, fontWeight: "700" },
+  hbarTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
+  hbarLabel: { color: colors.text, fontSize: 13, fontWeight: "600", flex: 1, marginRight: 8 },
+  hbarVal: { color: colors.textDim, fontSize: 12, fontWeight: "600" },
+  hbarTrack: { height: 9, borderRadius: 999, backgroundColor: colors.bg, overflow: "hidden" },
+  hbarFill: { height: "100%", borderRadius: 999, backgroundColor: colors.primary },
+  hbarSub: { color: colors.textDim, fontSize: 10, marginTop: 3 },
   nota: { color: colors.textDim, fontSize: 11, marginTop: 8 },
   empty: { color: colors.textDim, fontSize: 13, marginTop: 6 },
   diaRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 14 },

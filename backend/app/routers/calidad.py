@@ -19,6 +19,12 @@ class ConfirmarIn(BaseModel):
     nota: str | None = None
 
 
+@router.get("/sources")
+def sources():
+    """Clientes disponibles para el selector de Calidad: Etiguel + cada tenant."""
+    return camila_quality.get_sources_calidad()
+
+
 @router.get("/revisiones")
 def revisiones(source: str = Query("etiguel"), estado: str | None = Query(None)):
     """Revisiones del agente de calidad. `estado`: nuevo | revisado (default: todas)."""

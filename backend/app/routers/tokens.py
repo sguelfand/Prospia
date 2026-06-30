@@ -60,6 +60,13 @@ def clientes():
     return camila_audit.get_clientes_resumen()
 
 
+@router.get("/general")
+def general():
+    """Vista 'General' del monitor: comparativa entre clientes (gasto, $/conv,
+    tendencia, oportunidades) + totales agregados."""
+    return camila_audit.get_general()
+
+
 @router.post("/recompute")
 def recompute(source: str = Query("etiguel"), fecha: str | None = Query(None)):
     """Recalcula la auditoría de un día (default: hoy). Sin push."""
