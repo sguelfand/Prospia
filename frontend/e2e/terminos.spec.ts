@@ -19,3 +19,10 @@ test("agregar y borrar un término", async ({ page }) => {
   await page.getByRole("button", { name: `Eliminar término ${nombre}` }).click();
   await expect(page.getByText(nombre)).toHaveCount(0);
 });
+
+test("ir a Prospects desde un término", async ({ page }) => {
+  await page.goto("/terminos");
+  // Cada término tiene un botón "N encontrados" que filtra Prospects por ese término.
+  await page.getByRole("button", { name: /encontrados/ }).first().click();
+  await expect(page).toHaveURL(/\/prospects\?.*termino_id=/);
+});
