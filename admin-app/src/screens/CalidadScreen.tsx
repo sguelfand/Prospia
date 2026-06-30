@@ -39,6 +39,13 @@ const SEV_COLOR: Record<string, string> = {
   baja: colors.primary,
 };
 
+const HALLAZGO_META: Record<string, { emoji: string; label: string; color: string }> = {
+  duplicacion: { emoji: "🔁", label: "Duplicación", color: colors.amber },
+  contradiccion: { emoji: "⚠️", label: "Contradicción", color: colors.red },
+  obsoleto: { emoji: "🗑️", label: "Obsoleto", color: colors.textDim },
+  estructura: { emoji: "🧱", label: "Estructura", color: colors.blue },
+};
+
 export default function CalidadScreen(_props: CalidadProps) {
   const { token } = useAuth();
   const insets = useSafeAreaInsets();
@@ -366,13 +373,30 @@ export default function CalidadScreen(_props: CalidadProps) {
             <TouchableOpacity disabled={auditBusy} style={[styles.actionBtn, { borderColor: colors.primary, flex: 1 }]} onPress={auditarPrompt}>
               <Text style={[styles.actionLabel, { color: colors.primary }]}>{auditBusy ? "Auditando…" : "Auditar ahora"}</Text>
             </TouchableOpacity>
-            {audit.reporte ? (
+            {(audit.hallazgos?.length || audit.reporte) ? (
               <TouchableOpacity style={[styles.actionBtn, { borderColor: colors.border }]} onPress={() => setVerReporte((v) => !v)}>
-                <Text style={[styles.actionLabel, { color: colors.textDim }]}>{verReporte ? "Ocultar" : "Ver"}</Text>
+                <Text style={[styles.actionLabel, { color: colors.textDim }]}>{verReporte ? "Ocultar" : "Ver reporte"}</Text>
               </TouchableOpacity>
             ) : null}
           </View>
-          {verReporte && audit.reporte ? <Text style={styles.aprBloque}>{audit.reporte}</Text> : null}
+          {verReporte ? (
+            audit.hallazgos?.length ? (
+              <View style={{ marginTop: 8, gap: 8 }}>
+                {audit.hallazgos.map((h, i) => {
+                  const m = HALLAZGO_META[h.tipo] || { emoji: "•", label: h.tipo || "Hallazgo", color: colors.textDim };
+                  return (
+                    <View key={i} style={[styles.hallCard, { borderLeftColor: m.color }]}>
+                      <Text style={[styles.hallTag, { color: m.color }]}>{m.emoji} {m.label.toUpperCase()}</Text>
+                      <Text style={styles.hallDet}>{h.detalle}</Text>
+                      {h.sugerencia ? <Text style={styles.hallSug}><Text style={{ fontWeight: "700" }}>Sugerencia: </Text>{h.sugerencia}</Text> : null}
+                    </View>
+                  );
+                })}
+              </View>
+            ) : audit.reporte ? <Text style={styles.aprBloque}>{audit.reporte}</Text> : (
+              <Text style={[styles.aprDesc, { color: colors.green }]}>✅ Sin problemas detectados.</Text>
+            )
+          ) : null}
         </View>
       ) : null}
 
@@ -391,18 +415,14 @@ export default function CalidadScreen(_props: CalidadProps) {
         ListHeaderComponent={error ? <ErrorBox message={error} onRetry={load} /> : null}
         ListEmptyComponent={<Text style={styles.empty}>{filtro === "nuevo" ? "Nada para revisar 🎉" : "Todavía no confirmaste ninguna."}</Text>}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />}
-        renderItem={({ item }) =>
-          item.estado === "revisado" ? (
-            <SwipeRow
-              left={{ icon: "x", color: colors.red, onTrigger: () => confirmarBorrar(item) }}
-              right={{ icon: "x", color: colors.red, onTrigger: () => confirmarBorrar(item) }}
-            >
-              {renderCard(item)}
-            </SwipeRow>
-          ) : (
-            renderCard(item)
-          )
-        }
+        renderItem={({ item }) => (
+          <SwipeRow
+            left={{ icon: "x", color: colors.red, onTrigger: () => confirmarBorrar(item) }}
+            right={{ icon: "x", color: colors.red, onTrigger: () => confirmarBorrar(item) }}
+          >
+            {renderCard(item)}
+          </SwipeRow>
+        )}
       />
 
       {/* Modal: nuevo registro manual (teléfono + descripción) */}
@@ -506,6 +526,10 @@ const styles = StyleSheet.create({
   aprBloque: { color: colors.text, fontSize: 11, fontFamily: "monospace", backgroundColor: colors.bg, borderRadius: 8, padding: 10, marginTop: 8 },
   auditCardRec: { borderColor: colors.amber },
   auditRec: { color: colors.amber, fontSize: 12, fontWeight: "700", marginTop: 4 },
+  hallCard: { backgroundColor: colors.bg, borderRadius: 10, borderLeftWidth: 4, borderLeftColor: colors.border, padding: 12 },
+  hallTag: { fontSize: 11, fontWeight: "800", letterSpacing: 0.4, marginBottom: 4 },
+  hallDet: { color: colors.text, fontSize: 13, lineHeight: 18 },
+  hallSug: { color: colors.blue, fontSize: 12, marginTop: 6 },
   aprActions: { flexDirection: "row", gap: 8, marginTop: 10 },
   aprRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4 },
 

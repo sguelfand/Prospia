@@ -41,9 +41,63 @@ type AprEstado = {
   propuesta: Consolidacion | null; ultima_aplicada: Consolidacion | null
   lecciones_pendientes: { id: number; titulo: string; categoria: string }[]
 }
+type Hallazgo = { tipo: string; detalle: string; sugerencia?: string }
 type AuditEstado = {
   ultima_at: string | null; dias_desde: number | null; recomendar: boolean
-  dias_recomendado: number; resumen: string | null; reporte: string | null; n_hallazgos: number
+  dias_recomendado: number; resumen: string | null; reporte: string | null
+  hallazgos?: Hallazgo[]; n_hallazgos: number
+}
+
+const HALLAZGO_META: Record<string, { emoji: string; label: string; color: string }> = {
+  duplicacion: { emoji: '🔁', label: 'Duplicación', color: '#f5b23d' },
+  contradiccion: { emoji: '⚠️', label: 'Contradicción', color: '#ef4444' },
+  obsoleto: { emoji: '🗑️', label: 'Obsoleto', color: '#64748b' },
+  estructura: { emoji: '🧱', label: 'Estructura', color: '#38bdf8' },
+}
+
+function reporteHtml(audit: AuditEstado, cliente: string): string {
+  const esc = (s: string) => (s || '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] as string))
+  const fecha = audit.ultima_at ? new Date(audit.ultima_at).toLocaleString('es-AR') : '—'
+  const cards = (audit.hallazgos || []).map((h) => {
+    const m = HALLAZGO_META[h.tipo] || { emoji: '•', label: h.tipo || 'Hallazgo', color: '#8294b4' }
+    return `<div class="card" style="border-left-color:${m.color}">
+      <div class="tag" style="color:${m.color}">${m.emoji} ${esc(m.label)}</div>
+      <p class="det">${esc(h.detalle)}</p>
+      ${h.sugerencia ? `<p class="sug"><b>Sugerencia:</b> ${esc(h.sugerencia)}</p>` : ''}
+    </div>`
+  }).join('')
+  const cuerpo = (audit.hallazgos && audit.hallazgos.length)
+    ? cards : `<p class="ok">✅ Sin problemas de mantenimiento detectados.</p>`
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Auditoría del prompt — ${esc(cliente)}</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; background:#0C1730; color:#EEF3FB; font-family:'Segoe UI',system-ui,sans-serif; padding:28px; line-height:1.5; }
+  .wrap { max-width:780px; margin:0 auto; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .meta { color:#8294B4; font-size:13px; margin-bottom:6px; }
+  .resumen { background:#13213C; border:1px solid #243454; border-radius:12px; padding:14px 16px; margin:14px 0 20px; }
+  .card { background:#13213C; border:1px solid #243454; border-left-width:4px; border-radius:10px; padding:14px 16px; margin-bottom:12px; }
+  .tag { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px; }
+  .det { margin:0; }
+  .sug { margin:8px 0 0; color:#9fb3d1; font-size:14px; }
+  .ok { color:#34d399; font-size:16px; }
+  .foot { color:#5C6E90; font-size:12px; margin-top:24px; }
+</style></head><body><div class="wrap">
+  <h1>🧱 Auditoría del prompt de Camila</h1>
+  <div class="meta">Cliente: ${esc(cliente)} · ${fecha} · ${(audit.hallazgos || []).length} hallazgo(s)</div>
+  ${audit.resumen ? `<div class="resumen">${esc(audit.resumen)}</div>` : ''}
+  ${cuerpo}
+  <div class="foot">Generado por Prospia — auditoría del prompt completo de Camila.</div>
+</div></body></html>`
+}
+
+function abrirReporteHtml(audit: AuditEstado, cliente: string) {
+  const blob = new Blob([reporteHtml(audit, cliente)], { type: 'text/html' })
+  const url = URL.createObjectURL(blob)
+  window.open(url, '_blank')
+  setTimeout(() => URL.revokeObjectURL(url), 60000)
 }
 
 const CAT_LABEL: Record<string, string> = {
@@ -350,18 +404,38 @@ export default function Calidad() {
             te avisa solo si encuentra algo; también podés correrla ahora.
           </p>
           {audit.resumen && <p className="text-xs text-ink mt-2">{audit.resumen}{audit.n_hallazgos ? ` · ${audit.n_hallazgos} hallazgo(s)` : ''}</p>}
-          <div className="flex gap-2 mt-2 items-center">
+          <div className="flex gap-2 mt-2 items-center flex-wrap">
             <button disabled={auditBusy} onClick={auditarPrompt} className="text-xs font-semibold border border-primary/50 text-primary rounded-lg px-3 py-1.5 hover:bg-primary/10 disabled:opacity-50">
               {auditBusy ? 'Auditando…' : 'Auditar ahora'}
             </button>
-            {audit.reporte && (
+            {(audit.hallazgos?.length || audit.reporte) && (
               <button onClick={() => setVerReporte((v) => !v)} className="text-xs text-primary hover:underline">
                 {verReporte ? 'Ocultar' : 'Ver'} reporte
               </button>
             )}
+            {(audit.hallazgos?.length || audit.reporte) && (
+              <button onClick={() => abrirReporteHtml(audit, sources.find((s) => s.source === source)?.nombre ?? source)} className="text-xs text-primary hover:underline">
+                Abrir en pestaña ↗
+              </button>
+            )}
           </div>
-          {verReporte && audit.reporte && (
-            <pre className="text-xs text-ink whitespace-pre-wrap break-words bg-black/20 rounded-lg p-3 mt-2 max-h-96 overflow-y-auto font-mono">{audit.reporte}</pre>
+          {verReporte && (
+            <div className="mt-3 space-y-2">
+              {audit.hallazgos?.length ? audit.hallazgos.map((h, i) => {
+                const m = HALLAZGO_META[h.tipo] || { emoji: '•', label: h.tipo || 'Hallazgo', color: '#8294b4' }
+                return (
+                  <div key={i} className="rounded-lg border border-line bg-app/40 p-3 border-l-4" style={{ borderLeftColor: m.color }}>
+                    <div className="text-[11px] font-bold uppercase tracking-wide mb-1" style={{ color: m.color }}>{m.emoji} {m.label}</div>
+                    <p className="text-sm text-ink">{h.detalle}</p>
+                    {h.sugerencia && <p className="text-xs text-sky-400 mt-1.5"><span className="font-semibold">Sugerencia:</span> {h.sugerencia}</p>}
+                  </div>
+                )
+              }) : audit.reporte ? (
+                <pre className="text-xs text-ink whitespace-pre-wrap break-words bg-black/20 rounded-lg p-3 max-h-96 overflow-y-auto font-mono">{audit.reporte}</pre>
+              ) : (
+                <p className="text-sm text-emerald-500">✅ Sin problemas detectados.</p>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -447,12 +521,15 @@ export default function Calidad() {
                   placeholder="Nota opcional (por qué) — ayuda a que el agente aprenda"
                   className="w-full text-xs bg-transparent border border-line rounded-lg px-2.5 py-1.5 mb-2 text-ink placeholder:text-muted"
                 />
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap items-center">
                   <button onClick={() => confirmar(r, 'acierto')} className="flex items-center gap-1 text-xs font-semibold border border-red-500/50 text-red-500 rounded-lg px-2.5 py-1.5 hover:bg-red-500/10">
                     <ThumbsUp size={12} /> Camila estuvo mal (acertaste)
                   </button>
                   <button onClick={() => confirmar(r, 'falso_positivo')} className="flex items-center gap-1 text-xs font-semibold border border-emerald-500/50 text-emerald-500 rounded-lg px-2.5 py-1.5 hover:bg-emerald-500/10">
                     <ThumbsDown size={12} /> Camila estuvo bien (te equivocaste)
+                  </button>
+                  <button onClick={() => borrar(r)} title="Borrar registro" className="flex items-center gap-1 text-xs font-semibold border border-line text-muted rounded-lg px-2.5 py-1.5 hover:border-red-500 hover:text-red-500 ml-auto">
+                    <Trash2 size={12} /> Borrar
                   </button>
                 </div>
               </div>

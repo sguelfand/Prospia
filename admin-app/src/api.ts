@@ -660,9 +660,11 @@ export const reportarCalidadManual = (token: string, source: string, texto: stri
   }, token);
 
 // Auditoría del prompt completo de Camila (nivel 2): revisa duplicados/contradicciones.
+export interface Hallazgo { tipo: string; detalle: string; sugerencia?: string }
 export interface AuditEstado {
   ultima_at: string | null; dias_desde: number | null; recomendar: boolean;
-  dias_recomendado: number; resumen: string | null; reporte: string | null; n_hallazgos: number;
+  dias_recomendado: number; resumen: string | null; reporte: string | null;
+  hallazgos?: Hallazgo[]; n_hallazgos: number;
 }
 export const getAuditoriaPrompt = (token: string, source: string) =>
   request<AuditEstado>(`/admin/calidad/auditoria-prompt?source=${encodeURIComponent(source)}`, {}, token);

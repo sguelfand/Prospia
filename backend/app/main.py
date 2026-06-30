@@ -169,6 +169,10 @@ def run_migrations():
         conn.execute(text(
             "ALTER TABLE monitor_settings ADD COLUMN IF NOT EXISTS audit_recordatorio_at TIMESTAMPTZ"
         ))
+        # ── camila_prompt_audit: hallazgos estructurados (JSON) para render formateado ──
+        conn.execute(text(
+            "ALTER TABLE camila_prompt_audit ADD COLUMN IF NOT EXISTS hallazgos TEXT NOT NULL DEFAULT '[]'"
+        ))
         # ── dashboard_layout: títulos personalizados de los widgets ──
         conn.execute(text(
             "ALTER TABLE dashboard_layout ADD COLUMN IF NOT EXISTS titulos TEXT NOT NULL DEFAULT '{}'"

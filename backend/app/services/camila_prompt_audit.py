@@ -75,10 +75,13 @@ def auditar(source: str = "etiguel") -> dict:
         hallazgos = data.get("hallazgos") or []
         reporte = _md(resumen, hallazgos)
 
+    import json
     db = SessionLocal()
     try:
         row = CamilaPromptAudit(source=source, resumen=resumen[:1000],
-                                reporte=reporte[:20000], n_hallazgos=len(hallazgos))
+                                reporte=reporte[:20000],
+                                hallazgos=json.dumps(hallazgos, ensure_ascii=False)[:40000],
+                                n_hallazgos=len(hallazgos))
         db.add(row)
         db.commit()
         db.refresh(row)
@@ -88,9 +91,15 @@ def auditar(source: str = "etiguel") -> dict:
 
 
 def _estado_from(row) -> dict:
+    import json
+    try:
+        hallazgos = json.loads(getattr(row, "hallazgos", None) or "[]")
+    except Exception:
+        hallazgos = []
     return {
         "source": row.source, "ultima_at": row.created_at.isoformat() if row.created_at else None,
-        "resumen": row.resumen, "reporte": row.reporte, "n_hallazgos": row.n_hallazgos,
+        "resumen": row.resumen, "reporte": row.reporte, "hallazgos": hallazgos,
+        "n_hallazgos": row.n_hallazgos,
     }
 
 

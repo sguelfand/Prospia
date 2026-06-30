@@ -98,6 +98,8 @@ class CamilaPromptAudit(Base):
     source: Mapped[str] = mapped_column(String(60), nullable=False, index=True, default="etiguel")
     resumen: Mapped[str] = mapped_column(Text, nullable=False, default="")
     reporte: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # Hallazgos estructurados (JSON list de {tipo, detalle, sugerencia}) para render lindo.
+    hallazgos: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
     n_hallazgos: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
