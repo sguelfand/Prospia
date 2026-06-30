@@ -215,9 +215,9 @@ export default function Tokens() {
                 { l: 'Errores', v: fmt(t?.errores ?? 0), alert: (t?.errores ?? 0) > 0 },
                 { l: 'Timeouts', v: fmt(t?.timeouts ?? 0), alert: (t?.timeouts ?? 0) > 0 },
               ].map((k) => (
-                <div key={k.l} className="bg-app border border-line rounded-xl p-3">
-                  <div className={`text-2xl font-semibold ${k.alert ? 'text-red-500' : 'text-ink'}`}>{k.v}</div>
-                  <div className="text-xs text-muted mt-1">{k.l}</div>
+                <div key={k.l} className="cq bg-app border border-line rounded-xl p-3">
+                  <div className={`fluid-num font-semibold ${k.alert ? 'text-red-500' : 'text-ink'}`}>{k.v}</div>
+                  <div className="text-xs text-muted mt-1 truncate">{k.l}</div>
                 </div>
               ))}
             </div>

@@ -94,11 +94,11 @@ function KpiCard({ label, value, sub, color = '#6366f1', onClick }: {
   return (
     <div
       onClick={onClick}
-      className={`bg-card rounded-xl p-4 flex flex-col gap-1${onClick ? ' cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+      className={`cq bg-card rounded-xl p-4 flex flex-col gap-1${onClick ? ' cursor-pointer hover:shadow-md transition-shadow' : ''}`}
     >
-      <p className="text-xs text-faint font-medium uppercase tracking-wide">{label}</p>
-      <p className="text-2xl md:text-3xl font-bold" style={{ color }}>{value}</p>
-      {sub && <p className="text-xs text-faint">{sub}</p>}
+      <p className="text-xs text-faint font-medium uppercase tracking-wide truncate">{label}</p>
+      <p className="fluid-num font-bold" style={{ color }}>{value}</p>
+      {sub && <p className="text-xs text-faint truncate">{sub}</p>}
     </div>
   )
 }
@@ -475,15 +475,15 @@ function GastosClientes() {
       {/* cards del mes actual */}
       <div className="grid-auto-cards">
         {rows.map((r, i) => (
-          <div key={r.id} className="bg-card rounded-xl shadow p-4">
-            <div className="text-2xl font-semibold tabular-nums" style={{ color: COSTO_COLORS[i % COSTO_COLORS.length] }}>${r.gasto_mes_actual.toFixed(2)}</div>
-            <div className="text-xs text-faint mt-1">{r.nombre}</div>
+          <div key={r.id} className="cq bg-card rounded-xl shadow p-4">
+            <div className="fluid-num font-semibold tabular-nums" style={{ color: COSTO_COLORS[i % COSTO_COLORS.length] }}>${r.gasto_mes_actual.toFixed(2)}</div>
+            <div className="text-xs text-faint mt-1 truncate">{r.nombre}</div>
             <div className="text-[11px] text-faint">{fmt(r.llamadas_mes)} llamadas · mes corriente</div>
           </div>
         ))}
         {rows.length > 1 && (
-          <div className="bg-card rounded-xl shadow p-4 border border-line">
-            <div className="text-2xl font-semibold tabular-nums text-ink">${total.toFixed(2)}</div>
+          <div className="cq bg-card rounded-xl shadow p-4 border border-line">
+            <div className="fluid-num font-semibold tabular-nums text-ink">${total.toFixed(2)}</div>
             <div className="text-xs text-faint mt-1">Total clientes</div>
           </div>
         )}

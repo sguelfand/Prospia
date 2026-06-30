@@ -17,9 +17,15 @@ type Layouts = { [bp: string]: LayoutItem[] }
 const COLS = { lg: 12, md: 12, sm: 6, xs: 4, xxs: 2 }
 const BREAKPOINTS = { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }
 
-// Títulos personalizados por widget (los renombra el usuario, se guardan por usuario).
-type TitulosCtx = { get: (id: string, def: string) => string; set: (id: string, t: string) => void }
-const TitulosContext = createContext<TitulosCtx>({ get: (_i, d) => d, set: () => {} })
+// Contexto del tablero: títulos custom (renombrables) + "ajustar" (optimizar el
+// alto del widget a su contenido en el tamaño/breakpoint actual).
+type WidgetCtx = {
+  get: (id: string, def: string) => string
+  set: (id: string, t: string) => void
+  fit: (id: string, px: number) => void
+}
+const TitulosContext = createContext<WidgetCtx>({ get: (_i, d) => d, set: () => {}, fit: () => {} })
+const MARGIN_Y = 16
 
 /**
  * Tablero de widgets movibles + redimensionables + responsive.
@@ -38,6 +44,7 @@ export function DashboardGrid({
 }) {
   const [layouts, setLayouts] = useState<Layouts>(defaultLayout)
   const [titulos, setTitulos] = useState<Record<string, string>>({})
+  const [bp, setBp] = useState<string>('lg')
   const [ready, setReady] = useState(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -64,13 +71,23 @@ export function DashboardGrid({
     }, 800)
   }
 
-  const titCtx: TitulosCtx = {
+  const titCtx: WidgetCtx = {
     get: (id, def) => titulos[id] ?? def,
     set: (id, t) => {
       setTitulos((prev) => {
         const next = { ...prev }
         if (t.trim()) next[id] = t.trim(); else delete next[id]
         api.put('/me/layout', { pantalla, titulos: next }).catch(() => {})
+        return next
+      })
+    },
+    // Optimiza el alto del widget a su contenido (px) en el breakpoint actual.
+    fit: (id, px) => {
+      const rows = Math.max(2, Math.ceil((px + MARGIN_Y) / (rowHeight + MARGIN_Y)))
+      setLayouts((prev) => {
+        const cur = (prev[bp] || []).map((it) => (it.i === id ? { ...it, h: rows } : it))
+        const next = { ...prev, [bp]: cur }
+        api.put('/me/layout', { pantalla, layout: next }).catch(() => {})
         return next
       })
     },
@@ -97,6 +114,7 @@ export function DashboardGrid({
           draggableHandle=".rgl-grip"
           isResizable
           isBounded
+          onBreakpointChange={(b: string) => setBp(b)}
           onLayoutChange={onLayoutChange}
         >
           {children}
@@ -128,13 +146,19 @@ export function Widget({ id, title = '', fuente, right, children }: {
   const actual = tit.get(id, title)
   const [editando, setEditando] = useState(false)
   const [valor, setValor] = useState(actual)
+  const headerRef = useRef<HTMLDivElement>(null)
+  const bodyRef = useRef<HTMLDivElement>(null)
 
   function abrir() { setValor(actual); setEditando(true) }
   function guardar() { setEditando(false); if (valor !== actual) tit.set(id, valor) }
+  function ajustar() {
+    const h = (headerRef.current?.offsetHeight ?? 38) + (bodyRef.current?.scrollHeight ?? 0) + 4
+    tit.fit(id, h)
+  }
 
   return (
     <div className="h-full bg-card border border-line rounded-2xl flex flex-col overflow-hidden">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-line/60">
+      <div ref={headerRef} className="flex items-center gap-2 px-3 py-2 border-b border-line/60">
         <span className="rgl-grip cursor-grab active:cursor-grabbing -ml-0.5 text-muted hover:text-ink shrink-0" title="Arrastrar para reordenar">
           <GripDots />
         </span>
@@ -155,10 +179,24 @@ export function Widget({ id, title = '', fuente, right, children }: {
           </button>
         )}
         {fuente && <FuenteChip fuente={fuente} />}
-        {right && <div className="ml-auto shrink-0">{right}</div>}
+        <div className="ml-auto flex items-center gap-2 shrink-0">
+          {right}
+          <button onClick={ajustar} title="Ajustar el alto del widget a su contenido"
+            className="text-muted hover:text-primary" aria-label="Ajustar al contenido">
+            <FitIcon />
+          </button>
+        </div>
       </div>
-      <div className="flex-1 min-h-0 overflow-auto p-4">{children}</div>
+      <div ref={bodyRef} className="flex-1 min-h-0 overflow-auto p-4">{children}</div>
     </div>
+  )
+}
+
+function FitIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   )
 }
 

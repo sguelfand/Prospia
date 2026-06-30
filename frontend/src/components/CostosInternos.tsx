@@ -109,9 +109,9 @@ export function CostosHistorico({ data }: { data: AnthUsage }) {
 function Kpi({ label, value, amber, tone }: { label: string; value: string; amber?: boolean; tone?: 'up' | 'down' }) {
   const c = tone === 'up' ? 'text-red-400' : tone === 'down' ? 'text-emerald-400' : amber ? 'text-amber-400' : 'text-ink'
   return (
-    <div className="bg-app border border-line rounded-xl p-3">
-      <div className={`text-xl font-semibold ${c}`}>{value}</div>
-      <div className="text-[11px] text-muted mt-1">{label}</div>
+    <div className="cq bg-app border border-line rounded-xl p-3">
+      <div className={`fluid-num font-semibold ${c}`}>{value}</div>
+      <div className="text-[11px] text-muted mt-1 truncate">{label}</div>
     </div>
   )
 }
