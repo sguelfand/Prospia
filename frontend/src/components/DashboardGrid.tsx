@@ -1,15 +1,15 @@
 import { ReactNode, useEffect, useRef, useState } from 'react'
-// react-grid-layout publica sus tipos con `export =`; el default trae Responsive
-// y WidthProvider como propiedades (existen en runtime). Tipos propios abajo.
-import RGL from 'react-grid-layout'
+// react-grid-layout v2 movió Responsive/WidthProvider al subpath `/legacy`
+// (el entry principal ya no exporta WidthProvider). Importarlos como named
+// exports desde ahí. Si se importa del entry principal, WidthProvider queda
+// undefined y `WidthProvider(Responsive)` crashea TODA la app al cargar.
+import { Responsive, WidthProvider } from 'react-grid-layout/legacy'
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
 import './dashboard-grid.css'
 import { api } from '../api/client'
 
-const Responsive = (RGL as any).Responsive
-const WidthProvider = (RGL as any).WidthProvider
-const ResponsiveGrid = WidthProvider(Responsive)
+const ResponsiveGrid = WidthProvider(Responsive as any) as any
 
 type LayoutItem = { i: string; x: number; y: number; w: number; h: number; minH?: number; minW?: number; [k: string]: unknown }
 type Layouts = { [bp: string]: LayoutItem[] }
