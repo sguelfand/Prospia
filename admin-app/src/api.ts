@@ -522,6 +522,20 @@ export interface TokenClienteCosto {
 export const getTokenClientes = (token: string) =>
   request<TokenClienteCosto[]>("/admin/tokens/clientes", {}, token);
 
+// Vista General: comparativa entre clientes + totales agregados.
+export interface TokenGenCliente {
+  id: string; nombre: string; gasto_mes_actual: number; gasto_mes_anterior: number;
+  llamadas_mes: number; conversaciones_mes: number; costo_por_conversacion: number;
+  oportunidades_abiertas: number; serie_mensual: TokenMesTrend[];
+}
+export interface TokenGeneral {
+  mes_actual: string; mes_anterior: string;
+  clientes: TokenGenCliente[];
+  totales: { gasto_mes_actual: number; gasto_mes_anterior: number; conversaciones_mes: number; oportunidades_abiertas: number; n_clientes: number };
+}
+export const getTokenGeneral = (token: string) =>
+  request<TokenGeneral>("/admin/tokens/general", {}, token);
+
 // Costo EN VIVO de una conversación (por teléfono) — pantalla de chat.
 export interface TokenConvTurno { ts: string; model: string; input: number; output: number; cacheRead: number; cacheWrite: number; costo: number }
 export interface TokenConvCosto {
