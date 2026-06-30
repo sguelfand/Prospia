@@ -899,6 +899,41 @@ def desbloquear_prospect_cliente(tenant_id: int, prospect_id: int, db: Session =
     return _bloquear_prospect_cliente(tenant_id, prospect_id, False, db)
 
 
+class ReportarCalidadIn(BaseModel):
+    texto: str
+
+
+@router.post("/clientes/{tenant_id}/prospects/{prospect_id}/reportar-calidad")
+def reportar_calidad_prospect(tenant_id: int, prospect_id: int, body: ReportarCalidadIn,
+                              db: Session = Depends(get_db)):
+    """Sebi reporta que Camila estuvo mal en este lead. Crea una revisión de calidad
+    YA confirmada como 'acierto' (Sebi es la verdad), que suma directo a las lecciones
+    pendientes para corregir a Camila. Solo superadmin."""
+    texto = (body.texto or "").strip()
+    if not texto:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="El reporte está vacío")
+    if tenant_id == etiguel_monday.ETIGUEL_TENANT_ID:
+        source = "etiguel"
+        telefono = None
+        nombre = None
+    else:
+        prospect = db.get(Prospect, prospect_id)
+        if not prospect or prospect.tenant_id != tenant_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prospect no encontrado")
+        tenant = db.get(Tenant, tenant_id)
+        if not tenant:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No existe ese cliente.")
+        source = tenant.slug
+        telefono = prospect.whatsapp or prospect.telefono
+        nombre = prospect.nombre
+    from app.services import camila_quality
+    try:
+        rev = camila_quality.crear_reporte_manual(source, texto, telefono, nombre)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    return {"ok": True, "revision": rev}
+
+
 ESTADOS_ERROR = ("nuevo", "reportado", "fixed")
 
 
