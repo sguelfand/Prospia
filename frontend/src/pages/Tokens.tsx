@@ -1,7 +1,18 @@
-import { RefreshCw, Lightbulb, Phone } from 'lucide-react'
+import { RefreshCw, Phone } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
 import CostosInternos, { AnthUsage } from '../components/CostosInternos'
+import { DashboardGrid, Widget, buildLayouts } from '../components/DashboardGrid'
+
+const TOKENS_LAYOUT = buildLayouts([
+  { i: 'oportunidades', x: 0, y: 0, w: 12, h: 4 },
+  { i: 'costos', x: 0, y: 4, w: 12, h: 21 },
+  { i: 'kpis', x: 0, y: 25, w: 12, h: 3 },
+  { i: 'costoDia', x: 0, y: 28, w: 7, h: 9 },
+  { i: 'historico', x: 7, y: 28, w: 5, h: 9 },
+  { i: 'convs', x: 0, y: 37, w: 7, h: 13 },
+  { i: 'porModelo', x: 7, y: 37, w: 5, h: 7 },
+])
 
 type Totales = {
   total: number; llamadas: number; costo_usd: number
@@ -128,127 +139,124 @@ export default function Tokens() {
       {error && <p className="text-sm text-red-500">{error}</p>}
       <p className="text-xs text-muted -mt-2">Costo real estimado a tarifa MyClaw (10% off el precio oficial). Tocá un día del gráfico para ver sus conversaciones.</p>
 
-      {/* Oportunidades FIJAS */}
-      <div className="bg-card border border-line rounded-2xl p-6 space-y-3">
-        <div className="flex items-center gap-2">
-          <Lightbulb size={16} className="text-primary" />
-          <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Oportunidades de mejora</h2>
-          <span className="text-xs text-muted">(quedan fijas hasta resolverlas)</span>
+      <DashboardGrid pantalla="tokens" defaultLayout={TOKENS_LAYOUT}>
+        {/* Oportunidades */}
+        <div key="oportunidades">
+          <Widget title="Oportunidades de mejora" right={<span className="text-[11px] text-muted">fijas hasta resolver</span>}>
+            {(data?.oportunidades ?? []).length === 0 ? (
+              <p className="text-sm text-emerald-500">Sin oportunidades abiertas. 👌</p>
+            ) : (
+              <div className="space-y-2">
+                {data!.oportunidades.map((o) => {
+                  const sev = SEV[o.severidad] ?? SEV.baja
+                  return (
+                    <div key={o.id} className="border border-line rounded-xl p-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded border" style={{ color: sev.color, borderColor: sev.color + '66', backgroundColor: sev.color + '18' }}>{sev.label}</span>
+                        {o.tipo === 'ia' && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-primary/50 text-primary bg-primary/10" title="Detectada por el analista de costos (IA), no por reglas fijas">IA</span>
+                        )}
+                        <span className="text-sm font-medium text-ink">{o.titulo}</span>
+                        <span className="text-[11px] text-muted ml-auto">detectada {haceDias(o.primera_vez)}</span>
+                      </div>
+                      <p className="text-xs text-muted mt-1.5">{o.detalle}</p>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </Widget>
         </div>
-        {(data?.oportunidades ?? []).length === 0 ? (
-          <p className="text-sm text-emerald-500">Sin oportunidades abiertas. 👌</p>
-        ) : (
-          data!.oportunidades.map((o) => {
-            const sev = SEV[o.severidad] ?? SEV.baja
-            return (
-              <div key={o.id} className="border border-line rounded-xl p-4">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded border" style={{ color: sev.color, borderColor: sev.color + '66', backgroundColor: sev.color + '18' }}>{sev.label}</span>
-                  {o.tipo === 'ia' && (
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-primary/50 text-primary bg-primary/10" title="Detectada por el analista de costos (IA), no por reglas fijas">IA</span>
-                  )}
-                  <span className="text-sm font-medium text-ink">{o.titulo}</span>
-                  <span className="text-[11px] text-muted ml-auto">detectada {haceDias(o.primera_vez)}</span>
-                </div>
-                <p className="text-xs text-muted mt-1.5">{o.detalle}</p>
-              </div>
-            )
-          })
-        )}
-      </div>
 
-      {/* Costos internos: API de Anthropic (funciones de Prospia, NO Camila) */}
-      {apiUsage && (
-        <div className="bg-card border border-line rounded-2xl p-6">
-          <CostosInternos data={apiUsage} />
+        {/* Costos internos */}
+        <div key="costos">
+          <Widget title="Costos internos · API Anthropic">
+            {apiUsage ? <CostosInternos data={apiUsage} flat /> : <p className="text-sm text-muted">Cargando…</p>}
+          </Widget>
         </div>
-      )}
 
-      {!u ? (
-        <div className="bg-card border border-line rounded-2xl p-6 text-sm text-muted">Sin datos del día todavía. Tocá “Recalcular hoy”.</div>
-      ) : (
-        <>
-          {/* KPIs del día seleccionado */}
-          <div className="flex items-center gap-2 -mb-2">
-            <p className="text-xs text-muted">Día <span className="font-medium text-ink-soft">{det?.fecha ?? diaSel}</span>{verUltimo ? ' (último)' : ''}</p>
-            {diaLoading && <RefreshCw size={12} className="animate-spin text-muted" />}
-            {!verUltimo && <button onClick={() => setDiaSel(null)} className="text-xs text-primary hover:underline">← volver al último</button>}
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {[
-              { l: 'Costo del día', v: usd(t?.costo_usd ?? 0), alert: false },
-              { l: 'Conversaciones', v: fmt(det?.n_conversaciones ?? 0), alert: false },
-              { l: 'Errores', v: fmt(t?.errores ?? 0), alert: (t?.errores ?? 0) > 0 },
-              { l: 'Timeouts', v: fmt(t?.timeouts ?? 0), alert: (t?.timeouts ?? 0) > 0 },
-            ].map((k) => (
-              <div key={k.l} className="bg-card border border-line rounded-2xl p-4">
-                <div className={`text-2xl font-semibold ${k.alert ? 'text-red-500' : 'text-ink'}`}>{k.v}</div>
-                <div className="text-xs text-muted mt-1">{k.l}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Costo por día + Histórico mensual, misma fila */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-            <div className="bg-card border border-line rounded-2xl p-5">
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Costo por día <span className="text-[11px] normal-case text-muted font-normal">· tocá un día</span></h2>
-                <div className="flex items-center gap-3 text-[11px] text-muted">
-                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: '#F5B23D' }} />mensajes</span>
-                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: '#ef4444' }} />errores</span>
+        {/* KPIs del día */}
+        <div key="kpis">
+          <Widget
+            title={`Día ${det?.fecha ?? diaSel ?? ''}${verUltimo ? ' (último)' : ''}`}
+            right={
+              <span className="flex items-center gap-2">
+                {diaLoading && <RefreshCw size={12} className="animate-spin text-muted" />}
+                {!verUltimo && <button onClick={() => setDiaSel(null)} className="text-xs text-primary hover:underline">← último</button>}
+              </span>
+            }
+          >
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {[
+                { l: 'Costo del día', v: usd(t?.costo_usd ?? 0), alert: false },
+                { l: 'Conversaciones', v: fmt(det?.n_conversaciones ?? 0), alert: false },
+                { l: 'Errores', v: fmt(t?.errores ?? 0), alert: (t?.errores ?? 0) > 0 },
+                { l: 'Timeouts', v: fmt(t?.timeouts ?? 0), alert: (t?.timeouts ?? 0) > 0 },
+              ].map((k) => (
+                <div key={k.l} className="bg-app border border-line rounded-xl p-3">
+                  <div className={`text-2xl font-semibold ${k.alert ? 'text-red-500' : 'text-ink'}`}>{k.v}</div>
+                  <div className="text-xs text-muted mt-1">{k.l}</div>
                 </div>
-              </div>
-              {dias.length === 0 ? <p className="text-sm text-muted">Sin datos.</p> : <BarrasDia dias={dias} sel={det?.fecha} onSelect={(f) => { setDiaSel(f); setConvAbierta(null) }} />}
+              ))}
             </div>
-            <div className="bg-card border border-line rounded-2xl p-5">
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Histórico mensual</h2>
-                <span className="text-[11px] text-muted">pasá el mouse por un mes</span>
-              </div>
-              {meses.length === 0 ? <p className="text-sm text-muted">Sin histórico todavía.</p> : <LineaMensual meses={meses} hover={hoverMes} setHover={setHoverMes} />}
-            </div>
-          </div>
+          </Widget>
+        </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-            {/* Conversaciones del día (clic = detalle) */}
-            <div className="bg-card border border-line rounded-2xl p-6">
-              <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-3">Conversaciones del día <span className="text-[11px] normal-case text-muted font-normal">· {convs.length} · tocá una para el detalle</span></h2>
-              {convs.length === 0 ? <p className="text-sm text-muted">{diaLoading ? 'Cargando…' : 'Sin conversaciones.'}</p> : (
-                <div className="space-y-2 max-h-[28rem] overflow-y-auto pr-1">
-                  {convs.map((c) => {
-                    const abierta = convAbierta === c.telefono
-                    return (
-                      <div key={c.telefono} className="border border-line rounded-xl overflow-hidden">
-                        <button onClick={() => abrirConv(c)}
-                          className="w-full text-left p-3 hover:bg-app/50 transition-colors">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-sm font-bold text-ink flex items-center gap-1.5"><Phone size={13} className="text-muted" />{c.telefono}</span>
-                            <span className="text-sm font-semibold text-amber-400">{usd3(c.costo_usd)}</span>
-                          </div>
-                          {c.nombre && <p className="text-xs text-ink-soft mt-0.5 truncate">{c.nombre}</p>}
-                          <div className="text-xs text-muted mt-0.5">
-                            {Object.keys(c.por_modelo ?? {}).length > 0 && <span>{Object.keys(c.por_modelo!).map((m) => m.replace('claude-', '')).join(', ')}</span>}
-                            {c.timeouts > 0 && <span className="text-red-400"> · {c.timeouts} timeout</span>}
-                            {c.errores > 0 && <span className="text-red-400"> · {c.errores} error</span>}
-                          </div>
-                          {!abierta && c.ejemplo && <p className="text-xs text-muted mt-1 truncate">“{c.ejemplo}”</p>}
-                        </button>
-                        {abierta && (
-                          <div className="px-3 pb-3 pt-2 border-t border-line/60 bg-app/30 space-y-2">
-                            {/* la conversación entera */}
-                            {convMsgsLoading === c.telefono ? <p className="text-xs text-muted">Cargando conversación…</p> :
-                              convMsgs[c.telefono]?.length ? (
-                                <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
-                                  {convMsgs[c.telefono].map((m) => (
-                                    <div key={m.id} className={`flex ${m.direccion === 'out' ? 'justify-end' : 'justify-start'}`}>
-                                      <div className={`max-w-[85%] rounded-lg px-2.5 py-1.5 text-xs whitespace-pre-wrap ${m.direccion === 'out' ? 'bg-amber-500/15 border border-amber-500/30 text-ink' : 'bg-card text-ink-soft border border-line'}`}>{m.texto}</div>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : c.mirror_id ? <p className="text-xs text-muted">Sin mensajes espejados.</p> : <p className="text-xs text-muted">Conversación no encontrada en el espejo.</p>}
-                            {/* detalle de costo */}
-                            <div className="border-t border-line/40 pt-2 space-y-1">
-                            {/* split por modelo */}
+        {/* Costo por día */}
+        <div key="costoDia">
+          <Widget title="Costo por día · tocá un día"
+            right={
+              <span className="flex items-center gap-3 text-[11px] text-muted">
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: '#F5B23D' }} />mensajes</span>
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: '#ef4444' }} />errores</span>
+              </span>
+            }>
+            {dias.length === 0 ? <p className="text-sm text-muted">Sin datos.</p> : <BarrasDia dias={dias} sel={det?.fecha} onSelect={(f) => { setDiaSel(f); setConvAbierta(null) }} />}
+          </Widget>
+        </div>
+
+        {/* Histórico mensual */}
+        <div key="historico">
+          <Widget title="Histórico mensual" right={<span className="text-[11px] text-muted">pasá el mouse</span>}>
+            {meses.length === 0 ? <p className="text-sm text-muted">Sin histórico todavía.</p> : <LineaMensual meses={meses} hover={hoverMes} setHover={setHoverMes} />}
+          </Widget>
+        </div>
+
+        {/* Conversaciones del día */}
+        <div key="convs">
+          <Widget title={`Conversaciones del día · ${convs.length}`}>
+            {convs.length === 0 ? <p className="text-sm text-muted">{diaLoading ? 'Cargando…' : 'Sin conversaciones.'}</p> : (
+              <div className="space-y-2">
+                {convs.map((c) => {
+                  const abierta = convAbierta === c.telefono
+                  return (
+                    <div key={c.telefono} className="border border-line rounded-xl overflow-hidden">
+                      <button onClick={() => abrirConv(c)} className="w-full text-left p-3 hover:bg-app/50 transition-colors">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm font-bold text-ink flex items-center gap-1.5"><Phone size={13} className="text-muted" />{c.telefono}</span>
+                          <span className="text-sm font-semibold text-amber-400">{usd3(c.costo_usd)}</span>
+                        </div>
+                        {c.nombre && <p className="text-xs text-ink-soft mt-0.5 truncate">{c.nombre}</p>}
+                        <div className="text-xs text-muted mt-0.5">
+                          {Object.keys(c.por_modelo ?? {}).length > 0 && <span>{Object.keys(c.por_modelo!).map((m) => m.replace('claude-', '')).join(', ')}</span>}
+                          {c.timeouts > 0 && <span className="text-red-400"> · {c.timeouts} timeout</span>}
+                          {c.errores > 0 && <span className="text-red-400"> · {c.errores} error</span>}
+                        </div>
+                        {!abierta && c.ejemplo && <p className="text-xs text-muted mt-1 truncate">“{c.ejemplo}”</p>}
+                      </button>
+                      {abierta && (
+                        <div className="px-3 pb-3 pt-2 border-t border-line/60 bg-app/30 space-y-2">
+                          {convMsgsLoading === c.telefono ? <p className="text-xs text-muted">Cargando conversación…</p> :
+                            convMsgs[c.telefono]?.length ? (
+                              <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                                {convMsgs[c.telefono].map((m) => (
+                                  <div key={m.id} className={`flex ${m.direccion === 'out' ? 'justify-end' : 'justify-start'}`}>
+                                    <div className={`max-w-[85%] rounded-lg px-2.5 py-1.5 text-xs whitespace-pre-wrap ${m.direccion === 'out' ? 'bg-amber-500/15 border border-amber-500/30 text-ink' : 'bg-card text-ink-soft border border-line'}`}>{m.texto}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : c.mirror_id ? <p className="text-xs text-muted">Sin mensajes espejados.</p> : <p className="text-xs text-muted">Conversación no encontrada en el espejo.</p>}
+                          <div className="border-t border-line/40 pt-2 space-y-1">
                             <div className="space-y-1">
                               {Object.entries(c.por_modelo ?? {}).sort((a, b) => b[1].costo_usd - a[1].costo_usd).map(([m, v]) => (
                                 <div key={m} className="flex items-center justify-between text-xs">
@@ -262,34 +270,34 @@ export default function Tokens() {
                               {c.primer_ts && <span>Horario: <span className="text-ink-soft">{hhmm(c.primer_ts)}–{hhmm(c.ultimo_ts)}</span></span>}
                             </div>
                             {c.ejemplo && <p className="text-xs text-muted italic">“{c.ejemplo}”</p>}
-                            </div>
                           </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                  {sistema && <p className="text-xs text-muted pt-1">+ sistema (crons/mantenimiento): {usd3(sistema.costo_usd)}</p>}
-                </div>
-              )}
-            </div>
-
-            {/* Por modelo — mes actual */}
-            <div className="bg-card border border-line rounded-2xl p-6">
-              <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-3">Por modelo · mes {data!.mes_actual}</h2>
-              {Object.keys(data!.por_modelo_mes).length === 0 ? <p className="text-sm text-muted">Sin datos del mes.</p> : (
-                <div className="space-y-1.5">
-                  {Object.entries(data!.por_modelo_mes).sort((a, b) => b[1].costo_usd - a[1].costo_usd).map(([m, v]) => (
-                    <div key={m} className="flex items-center justify-between text-sm">
-                      <span className="text-ink-soft">{m}</span>
-                      <span className="text-muted">{usd(v.costo_usd)}</span>
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </>
-      )}
+                  )
+                })}
+                {sistema && <p className="text-xs text-muted pt-1">+ sistema (crons/mantenimiento): {usd3(sistema.costo_usd)}</p>}
+              </div>
+            )}
+          </Widget>
+        </div>
+
+        {/* Por modelo · mes */}
+        <div key="porModelo">
+          <Widget title={`Por modelo · mes ${data?.mes_actual ?? ''}`}>
+            {!data || Object.keys(data.por_modelo_mes).length === 0 ? <p className="text-sm text-muted">Sin datos del mes.</p> : (
+              <div className="space-y-1.5">
+                {Object.entries(data.por_modelo_mes).sort((a, b) => b[1].costo_usd - a[1].costo_usd).map(([m, v]) => (
+                  <div key={m} className="flex items-center justify-between text-sm">
+                    <span className="text-ink-soft">{m}</span>
+                    <span className="text-muted">{usd(v.costo_usd)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Widget>
+        </div>
+      </DashboardGrid>
     </div>
   )
 }

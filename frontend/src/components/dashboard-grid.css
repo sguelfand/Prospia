@@ -1,0 +1,40 @@
+/* react-grid-layout — ajustes para el tema oscuro de Prospia */
+
+/* Sombra del lugar donde caerá el widget al arrastrar/redimensionar */
+.react-grid-item.react-grid-placeholder {
+  background: #F5B23D !important;
+  opacity: 0.18;
+  border-radius: 16px;
+}
+
+/* Transición suave al reacomodar */
+.react-grid-item {
+  transition: transform 180ms ease, width 180ms ease, height 180ms ease;
+}
+.react-grid-item.resizing,
+.react-grid-item.react-draggable-dragging {
+  transition: none;
+  z-index: 30;
+}
+
+/* Handle de redimensionar (esquina inferior derecha) visible sobre navy */
+.react-grid-item > .react-resizable-handle {
+  width: 16px;
+  height: 16px;
+  right: 3px;
+  bottom: 3px;
+}
+.react-grid-item > .react-resizable-handle::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid #8294B4;
+  border-bottom: 2px solid #8294B4;
+  border-bottom-right-radius: 2px;
+}
+.react-grid-item:hover > .react-resizable-handle::after {
+  border-color: #F5B23D;
+}
