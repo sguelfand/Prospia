@@ -12,4 +12,13 @@ test.describe("Dashboard", () => {
     await expect(page.getByText("Tasa de respuesta")).toBeVisible();
     await expect(page.getByText("Tasa de conversión")).toBeVisible();
   });
+
+  test("click en el KPI Interesados navega a Prospects filtrado", async ({ page }) => {
+    await page.goto("/dashboard");
+    // El label del KPI es un <p> (las leyendas del gráfico son <span>).
+    await page.locator("p").filter({ hasText: /^Interesados$/ }).click();
+    await expect(page).toHaveURL(/\/prospects\?.*estado=interesado/);
+    // El listado ya filtrado muestra el prospect interesado sembrado.
+    await expect(page.getByRole("cell", { name: "Construcciones Epsilon" })).toBeVisible();
+  });
 });
