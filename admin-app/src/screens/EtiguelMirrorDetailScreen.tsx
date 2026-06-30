@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { MensajeRow, TokenConvCosto, bloquearEtiguelMirror, desbloquearEtiguelMirror, getConversacionCosto, getEtiguelMirrorMensajes, reportarCalidadManual } from "../api";
+import { pickImageBase64, type PickedImage } from "../imagePicker";
 import { useAuth } from "../auth";
 import { CollapsibleSection, Loader } from "../components/ui";
 import { EtiguelMirrorDetailProps } from "../navigation";
@@ -21,6 +22,7 @@ export default function EtiguelMirrorDetailScreen({ route, navigation }: Etiguel
   const [costo, setCosto] = useState<TokenConvCosto | null>(null);
   const [reporteOpen, setReporteOpen] = useState(false);
   const [reporteTexto, setReporteTexto] = useState("");
+  const [reporteImg, setReporteImg] = useState<PickedImage | null>(null);
   const [reportando, setReportando] = useState(false);
 
   useEffect(() => {
@@ -72,21 +74,32 @@ export default function EtiguelMirrorDetailScreen({ route, navigation }: Etiguel
     ]);
   }, [token, bloqueando, bloqueado, item.id, item.nombre, item.telefono]);
 
+  const elegirImagenReporte = useCallback(async () => {
+    try {
+      const img = await pickImageBase64();
+      if (img) setReporteImg(img);
+    } catch (e: any) {
+      Alert.alert("No se pudo", String(e?.message ?? e));
+    }
+  }, []);
+
   const enviarReporte = useCallback(async () => {
     const texto = reporteTexto.trim();
-    if (!token || reportando || !texto) return;
+    if (!token || reportando || (!texto && !reporteImg)) return;
     setReportando(true);
     try {
-      await reportarCalidadManual(token, "etiguel", texto, item.telefono ?? undefined);
+      await reportarCalidadManual(token, "etiguel", texto, item.telefono ?? undefined,
+        reporteImg ? { b64: reporteImg.b64, mime: reporteImg.mime } : undefined);
       setReporteOpen(false);
       setReporteTexto("");
+      setReporteImg(null);
       Alert.alert("Reportado ✓", "Lo sumé a la lista de Calidad de Camila (cuenta para las 5 lecciones).");
     } catch (e: any) {
       Alert.alert("No se pudo", String(e?.message ?? e));
     } finally {
       setReportando(false);
     }
-  }, [token, reportando, reporteTexto, item.telefono]);
+  }, [token, reportando, reporteTexto, reporteImg, item.telefono]);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -210,19 +223,32 @@ export default function EtiguelMirrorDetailScreen({ route, navigation }: Etiguel
                 autoFocus
                 textAlignVertical="top"
               />
+              {reporteImg ? (
+                <View style={styles.imgRow}>
+                  <Text style={styles.imgName} numberOfLines={1}>📎 {reporteImg.nombre}</Text>
+                  <TouchableOpacity onPress={() => setReporteImg(null)} disabled={reportando}>
+                    <Text style={styles.imgQuitar}>Quitar</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity style={styles.imgBtn} onPress={elegirImagenReporte} disabled={reportando} activeOpacity={0.8}>
+                  <Icon name="plus" size={14} color={colors.primary} strokeWidth={2.5} />
+                  <Text style={styles.imgBtnText}>Adjuntar captura de la conversación</Text>
+                </TouchableOpacity>
+              )}
               <View style={styles.modalBtns}>
                 <TouchableOpacity style={styles.modalCancel} onPress={() => setReporteOpen(false)} disabled={reportando}>
                   <Text style={styles.modalCancelText}>Cancelar</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.modalEnviar, (!reporteTexto.trim() || reportando) && styles.modalEnviarOff]}
+                  style={[styles.modalEnviar, ((!reporteTexto.trim() && !reporteImg) || reportando) && styles.modalEnviarOff]}
                   onPress={enviarReporte}
-                  disabled={!reporteTexto.trim() || reportando}
+                  disabled={(!reporteTexto.trim() && !reporteImg) || reportando}
                 >
                   {reportando ? (
                     <ActivityIndicator size="small" color={colors.onPrimary} />
                   ) : (
-                    <Text style={styles.modalEnviarText}>Reportar</Text>
+                    <Text style={styles.modalEnviarText}>{reporteImg ? "Analizar y reportar" : "Reportar"}</Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -274,6 +300,11 @@ const styles = StyleSheet.create({
   modalBtns: { flexDirection: "row", justifyContent: "flex-end", gap: 10, alignItems: "center" },
   modalCancel: { paddingHorizontal: 14, paddingVertical: 9 },
   modalCancelText: { color: colors.textDim, fontSize: 14, fontWeight: "700" },
+  imgBtn: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", borderWidth: 1, borderColor: colors.primary, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 14 },
+  imgBtnText: { color: colors.primary, fontSize: 13, fontWeight: "700" },
+  imgRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
+  imgName: { color: colors.text, fontSize: 13, flex: 1 },
+  imgQuitar: { color: colors.textDim, fontSize: 12, fontWeight: "700" },
   modalEnviar: { backgroundColor: colors.primary, borderRadius: 9, paddingHorizontal: 18, paddingVertical: 9, minWidth: 96, alignItems: "center" },
   modalEnviarOff: { opacity: 0.5 },
   modalEnviarText: { color: colors.onPrimary, fontSize: 14, fontWeight: "800" },

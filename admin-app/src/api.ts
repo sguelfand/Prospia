@@ -605,10 +605,10 @@ export const desbloquearProspectCliente = (token: string, tenantId: number, pros
 
 // Reportar calidad: Sebi reporta que Camila estuvo mal en este lead. Entra a la
 // lista de Calidad ya confirmado como 'acierto' y suma para las 5 lecciones.
-export const reportarCalidadProspect = (token: string, tenantId: number, prospectId: number, texto: string) =>
+export const reportarCalidadProspect = (token: string, tenantId: number, prospectId: number, texto: string, imagen?: { b64: string; mime: string }) =>
   request<{ ok: boolean; revision: RevisionCalidad }>(
     `/admin/clientes/${tenantId}/prospects/${prospectId}/reportar-calidad`,
-    { method: "POST", body: JSON.stringify({ texto }) }, token);
+    { method: "POST", body: JSON.stringify({ texto, imagen_b64: imagen?.b64 || null, imagen_mime: imagen?.mime || "image/jpeg" }) }, token);
 
 export const getProspect = (token: string, tenantId: number, prospectId: number) =>
   request<ProspectRow>(`/admin/clientes/${tenantId}/prospects/${prospectId}`, {}, token);
@@ -653,10 +653,10 @@ export const getCalidadSources = (token: string) =>
 
 // Crear a mano un registro de calidad desde la pantalla Calidad (teléfono opcional
 // + descripción). Igual que reportar desde un lead: entra ya confirmado.
-export const reportarCalidadManual = (token: string, source: string, texto: string, telefono?: string) =>
+export const reportarCalidadManual = (token: string, source: string, texto: string, telefono?: string, imagen?: { b64: string; mime: string }) =>
   request<{ ok: boolean; revision: RevisionCalidad }>(`/admin/calidad/reportar`, {
     method: "POST",
-    body: JSON.stringify({ source, texto, telefono: telefono || null }),
+    body: JSON.stringify({ source, texto, telefono: telefono || null, imagen_b64: imagen?.b64 || null, imagen_mime: imagen?.mime || "image/jpeg" }),
   }, token);
 
 // Auditoría del prompt completo de Camila (nivel 2): revisa duplicados/contradicciones.

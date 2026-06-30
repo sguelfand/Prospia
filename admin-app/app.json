@@ -3,7 +3,7 @@
     "name": "Prospia",
     "slug": "prospia-admin",
     "owner": "sguelfand",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
@@ -40,6 +40,12 @@
         "expo-local-authentication",
         {
           "faceIDPermission": "Permitir que Prospia use Face ID para desbloquear la app."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Prospia necesita acceso a tus fotos para adjuntar una captura de la conversación a un registro de calidad."
         }
       ],
       "expo-font"

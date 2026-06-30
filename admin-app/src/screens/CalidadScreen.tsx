@@ -9,6 +9,7 @@ import {
   getRevisiones, putPreferences, reportarCalidadManual,
 } from "../api";
 import { useAuth } from "../auth";
+import { pickImageBase64, type PickedImage } from "../imagePicker";
 import { Icon, IconText } from "../components/Icon";
 import { SwipeRow } from "../components/SwipeRow";
 import { ErrorBox, Loader } from "../components/ui";
@@ -72,6 +73,7 @@ export default function CalidadScreen(_props: CalidadProps) {
   const [nuevoTel, setNuevoTel] = useState("");
   const [nuevoTexto, setNuevoTexto] = useState("");
   const [nuevoBusy, setNuevoBusy] = useState(false);
+  const [nuevoImg, setNuevoImg] = useState<PickedImage | null>(null);
   const [audit, setAudit] = useState<AuditEstado | null>(null);
   const [auditBusy, setAuditBusy] = useState(false);
   const [verReporte, setVerReporte] = useState(false);
@@ -130,13 +132,23 @@ export default function CalidadScreen(_props: CalidadProps) {
     }
   };
 
+  const elegirImagenNuevo = async () => {
+    try {
+      const img = await pickImageBase64();
+      if (img) setNuevoImg(img);
+    } catch (e) {
+      Alert.alert("No se pudo", e instanceof Error ? e.message : "Error");
+    }
+  };
+
   const crearRegistro = async () => {
     const texto = nuevoTexto.trim();
-    if (!token || nuevoBusy || !texto) return;
+    if (!token || nuevoBusy || (!texto && !nuevoImg)) return;
     setNuevoBusy(true);
     try {
-      await reportarCalidadManual(token, source, texto, nuevoTel.trim() || undefined);
-      setNuevoOpen(false); setNuevoTel(""); setNuevoTexto("");
+      await reportarCalidadManual(token, source, texto, nuevoTel.trim() || undefined,
+        nuevoImg ? { b64: nuevoImg.b64, mime: nuevoImg.mime } : undefined);
+      setNuevoOpen(false); setNuevoTel(""); setNuevoTexto(""); setNuevoImg(null);
       await load();
       Alert.alert("Registrado ✓", "Lo sumé a la lista de Calidad (cuenta para las 5 lecciones).");
     } catch (e) {
@@ -463,16 +475,35 @@ export default function CalidadScreen(_props: CalidadProps) {
                 multiline
                 textAlignVertical="top"
               />
+
+              <Text style={styles.modalLabel}>Captura de la conversación (opcional)</Text>
+              {nuevoImg ? (
+                <View style={styles.imgRow}>
+                  <Text style={styles.imgName} numberOfLines={1}>📎 {nuevoImg.nombre}</Text>
+                  <TouchableOpacity onPress={() => setNuevoImg(null)} disabled={nuevoBusy}>
+                    <Text style={styles.imgQuitar}>Quitar</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity style={styles.imgBtn} onPress={elegirImagenNuevo} disabled={nuevoBusy} activeOpacity={0.8}>
+                  <Icon name="plus" size={14} color={colors.primary} strokeWidth={2.5} />
+                  <Text style={styles.imgBtnText}>Adjuntar imagen</Text>
+                </TouchableOpacity>
+              )}
+              <Text style={styles.imgHint}>Si adjuntás una captura, la IA la lee y suma la conversación a la lección (cuesta centavos).</Text>
+
               <View style={styles.modalBtns}>
                 <TouchableOpacity style={styles.modalCancel} onPress={() => setNuevoOpen(false)} disabled={nuevoBusy}>
                   <Text style={styles.modalCancelText}>Cancelar</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.modalCrear, (!nuevoTexto.trim() || nuevoBusy) && styles.modalCrearOff]}
+                  style={[styles.modalCrear, ((!nuevoTexto.trim() && !nuevoImg) || nuevoBusy) && styles.modalCrearOff]}
                   onPress={crearRegistro}
-                  disabled={!nuevoTexto.trim() || nuevoBusy}
+                  disabled={(!nuevoTexto.trim() && !nuevoImg) || nuevoBusy}
                 >
-                  <Text style={styles.modalCrearText}>{nuevoBusy ? "Creando…" : "Crear"}</Text>
+                  {nuevoBusy ? <ActivityIndicator size="small" color={colors.onPrimary} /> : (
+                    <Text style={styles.modalCrearText}>{nuevoImg ? "Analizar y crear" : "Crear"}</Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -520,6 +551,12 @@ const styles = StyleSheet.create({
   modalLabel: { color: colors.textDim, fontSize: 12, fontWeight: "700", marginBottom: 4 },
   modalInput: { backgroundColor: colors.bg, borderRadius: 10, borderWidth: 1, borderColor: colors.border, color: colors.text, fontSize: 14, padding: 12, marginBottom: 12 },
   modalTextarea: { minHeight: 100 },
+  imgBtn: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", borderWidth: 1, borderColor: colors.primary, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 6 },
+  imgBtnText: { color: colors.primary, fontSize: 13, fontWeight: "700" },
+  imgRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 6 },
+  imgName: { color: colors.text, fontSize: 13, flex: 1 },
+  imgQuitar: { color: colors.textDim, fontSize: 12, fontWeight: "700" },
+  imgHint: { color: colors.textDim, fontSize: 11, marginBottom: 12 },
   modalBtns: { flexDirection: "row", justifyContent: "flex-end", gap: 10, alignItems: "center", marginTop: 2 },
   modalCancel: { paddingHorizontal: 14, paddingVertical: 9 },
   modalCancelText: { color: colors.textDim, fontSize: 14, fontWeight: "700" },

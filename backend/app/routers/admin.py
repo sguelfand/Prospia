@@ -910,17 +910,19 @@ def desbloquear_prospect_cliente(tenant_id: int, prospect_id: int, db: Session =
 
 
 class ReportarCalidadIn(BaseModel):
-    texto: str
+    texto: str = ""
+    imagen_b64: str | None = None
+    imagen_mime: str = "image/jpeg"
 
 
 @router.post("/clientes/{tenant_id}/prospects/{prospect_id}/reportar-calidad")
 def reportar_calidad_prospect(tenant_id: int, prospect_id: int, body: ReportarCalidadIn,
                               db: Session = Depends(get_db)):
     """Sebi reporta que Camila estuvo mal en este lead. Crea una revisión de calidad
-    YA confirmada como 'acierto' (Sebi es la verdad), que suma directo a las lecciones
-    pendientes para corregir a Camila. Solo superadmin."""
+    YA confirmada como 'acierto' (Sebi es la verdad), que suma directo a las lecciones.
+    Puede venir con una captura (imagen_b64) que se transcribe y se suma. Solo superadmin."""
     texto = (body.texto or "").strip()
-    if not texto:
+    if not texto and not body.imagen_b64:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="El reporte está vacío")
     if tenant_id == etiguel_monday.ETIGUEL_TENANT_ID:
         source = "etiguel"
@@ -938,7 +940,9 @@ def reportar_calidad_prospect(tenant_id: int, prospect_id: int, body: ReportarCa
         nombre = prospect.nombre
     from app.services import camila_quality
     try:
-        rev = camila_quality.crear_reporte_manual(source, texto, telefono, nombre)
+        rev = camila_quality.crear_reporte_manual(
+            source, texto, telefono, nombre,
+            imagen_b64=body.imagen_b64, imagen_mime=body.imagen_mime or "image/jpeg")
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     return {"ok": True, "revision": rev}
