@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, FlatList, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Alert, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
-  AprendizajeEstado, MensajeRow, RevisionCalidad, aprobarAprendizaje,
+  AprendizajeEstado, CalidadSource, MensajeRow, RevisionCalidad, aprobarAprendizaje,
   confirmarRevision, consolidarAprendizajes, deleteRevision, descartarAprendizaje,
-  getAprendizajes, getEtiguelMirrorMensajes, getRevisiones,
+  getAprendizajes, getCalidadSources, getEtiguelMirrorMensajes, getPreferences,
+  getRevisiones, putPreferences,
 } from "../api";
 import { useAuth } from "../auth";
 import { Icon, IconText } from "../components/Icon";
@@ -45,12 +46,31 @@ export default function CalidadScreen(_props: CalidadProps) {
   const [apr, setApr] = useState<AprendizajeEstado | null>(null);
   const [verBloque, setVerBloque] = useState(false);
   const [aprBusy, setAprBusy] = useState(false);
+  const [source, setSource] = useState("etiguel");
+  const [sources, setSources] = useState<CalidadSource[]>([{ source: "etiguel", nombre: "Etiguel" }]);
+  const [savedDefault, setSavedDefault] = useState("etiguel");
+
+  // Cliente inicial: el default guardado por el usuario (tilde) o Etiguel.
+  useEffect(() => {
+    if (!token) return;
+    (async () => {
+      try {
+        const [srcs, prefs] = await Promise.all([
+          getCalidadSources(token),
+          getPreferences(token, "calidad"),
+        ]);
+        if (srcs.length) setSources(srcs);
+        const def = (prefs.prefs as { default_source?: string })?.default_source;
+        if (def && srcs.some((s) => s.source === def)) { setSavedDefault(def); setSource(def); }
+      } catch { /* usa el fallback */ }
+    })();
+  }, [token]);
 
   const load = useCallback(async () => {
     if (!token) return;
     setError(null);
     try {
-      const [revs, aprE] = await Promise.all([getRevisiones(token), getAprendizajes(token)]);
+      const [revs, aprE] = await Promise.all([getRevisiones(token, source), getAprendizajes(token, source)]);
       setRevisiones(revs);
       setApr(aprE);
     } catch (e) {
@@ -59,12 +79,19 @@ export default function CalidadScreen(_props: CalidadProps) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [token]);
+  }, [token, source]);
+
+  const setDefault = async () => {
+    if (!token) return;
+    const nuevo = savedDefault === source ? "etiguel" : source;
+    setSavedDefault(nuevo);
+    try { await putPreferences(token, "calidad", { default_source: nuevo }); } catch { /* noop */ }
+  };
 
   const consolidar = async () => {
     if (!token) return;
     setAprBusy(true);
-    try { await consolidarAprendizajes(token); await load(); } finally { setAprBusy(false); }
+    try { await consolidarAprendizajes(token, source); await load(); } finally { setAprBusy(false); }
   };
   const aprobarApr = (id: number) => {
     Alert.alert("Enseñar a Camila", "¿Aplicar estos aprendizajes al prompt de Camila? Hay backup automático y es reversible.", [
@@ -146,6 +173,7 @@ export default function CalidadScreen(_props: CalidadProps) {
           <Text style={[styles.cat, { color: colors.amber }]}>{CAT_LABEL[r.categoria] || r.categoria}</Text>
           <Text style={styles.meta}>· {r.severidad}</Text>
           <Text style={styles.meta}>· {r.fecha}</Text>
+          {r.origen === "sebi" && <Text style={styles.badgeReporte}>Reportado por vos</Text>}
           {r.estado === "revisado" && r.veredicto === "acierto" && <Text style={styles.badgeMal}>Camila mal</Text>}
           {r.estado === "revisado" && r.veredicto === "falso_positivo" && <Text style={styles.badgeBien}>Camila bien</Text>}
         </View>
@@ -202,6 +230,26 @@ export default function CalidadScreen(_props: CalidadProps) {
       <Text style={styles.intro}>
         <Text style={{ fontWeight: "700", color: colors.text }}>Especialista Negocio</Text> marcó respuestas de Camila. Confirmá si estuvo bien o mal — así afina su criterio.
       </Text>
+
+      {sources.length > 1 ? (
+        <View style={styles.selectorWrap}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillsRow}>
+            {sources.map((s) => (
+              <TouchableOpacity
+                key={s.source}
+                style={[styles.pill, source === s.source ? styles.pillActive : null]}
+                onPress={() => setSource(s.source)}
+              >
+                <Text style={[styles.pillText, source === s.source ? styles.pillTextActive : null]}>{s.nombre}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          <TouchableOpacity style={styles.defaultToggle} onPress={setDefault} activeOpacity={0.7}>
+            <Icon name="check" size={13} color={savedDefault === source ? colors.primary : colors.textDim} strokeWidth={2.5} />
+            <Text style={[styles.defaultText, savedDefault === source ? { color: colors.primary } : null]}>Por defecto</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {apr ? (
         <View style={[styles.aprCard, apr.propuesta ? styles.aprCardProp : null]}>
@@ -289,6 +337,15 @@ const styles = StyleSheet.create({
   empty: { color: colors.textDim, textAlign: "center", marginTop: 40 },
   intro: { color: colors.textDim, fontSize: 12, paddingHorizontal: 12, paddingTop: 12 },
 
+  selectorWrap: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingTop: 10, gap: 8 },
+  pillsRow: { gap: 6, paddingRight: 6 },
+  pill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
+  pillActive: { borderColor: colors.primary, backgroundColor: colors.cardAlt },
+  pillText: { color: colors.textDim, fontSize: 12, fontWeight: "700" },
+  pillTextActive: { color: colors.text },
+  defaultToggle: { flexDirection: "row", alignItems: "center", gap: 3 },
+  defaultText: { color: colors.textDim, fontSize: 11, fontWeight: "700" },
+
   aprCard: { marginHorizontal: 12, marginTop: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 12, padding: 12 },
   aprCardProp: { borderColor: colors.primary, backgroundColor: colors.cardAlt },
   aprHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
@@ -310,6 +367,7 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 4, marginBottom: 6 },
   cat: { fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.4 },
   meta: { color: colors.textDim, fontSize: 11 },
+  badgeReporte: { color: colors.primary, fontSize: 11, fontWeight: "700", borderColor: colors.primary, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   badgeMal: { marginLeft: "auto", color: colors.red, fontSize: 11, fontWeight: "700", borderColor: colors.red, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   badgeBien: { marginLeft: "auto", color: colors.green, fontSize: 11, fontWeight: "700", borderColor: colors.green, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   titulo: { color: colors.text, fontSize: 14, fontWeight: "700", marginBottom: 3 },
