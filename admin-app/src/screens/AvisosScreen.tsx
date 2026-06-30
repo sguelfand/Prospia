@@ -192,8 +192,8 @@ export default function AvisosScreen({ navigation, route }: AvisosProps) {
 
   // Avisos que tienen una pantalla propia para ver el detalle (botón "Ver").
   const PANTALLA_POR_TIPO: Record<string, { pantalla: "Calidad" | "Tokens"; icon: IconName; label: string }> = {
-    calidad_revision: { pantalla: "Calidad", icon: "star", label: "Ver" },
-    tokens_oportunidad: { pantalla: "Tokens", icon: "pulse", label: "Ver" },
+    calidad_revision: { pantalla: "Calidad", icon: "eye", label: "Ver" },
+    tokens_oportunidad: { pantalla: "Tokens", icon: "eye", label: "Ver" },
   };
   const irAPantalla = (a: Aviso) => {
     const dest = PANTALLA_POR_TIPO[a.tipo];

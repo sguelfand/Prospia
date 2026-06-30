@@ -32,7 +32,8 @@ export type IconName =
   | "info"
   | "refresh"
   | "user"
-  | "trash";
+  | "trash"
+  | "eye";
 
 export function Icon({
   name,
@@ -193,6 +194,12 @@ export function Icon({
         <>
           <Polyline points="3,6 21,6" {...p} />
           <Path d="M8 6V4h8v2M6 6l1 14h10l1-14" {...p} />
+        </>
+      )}
+      {name === "eye" && (
+        <>
+          <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" {...p} />
+          <Circle cx="12" cy="12" r="3" {...p} />
         </>
       )}
     </Svg>
