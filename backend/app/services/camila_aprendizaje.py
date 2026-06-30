@@ -103,6 +103,22 @@ def _bloque_vigente(db, source: str) -> str:
 
 # ── proponer (consolidación por IA) ───────────────────────────────────────────
 
+def _prompt_base(source: str) -> str:
+    """Prompt completo ACTUAL de Camila SIN la sección de aprendizajes (esa la
+    reescribimos nosotros). Sirve de contexto para no duplicar/contradecir lo que
+    ya está en el prompt base. "" si no se puede leer (cae al comportamiento viejo)."""
+    try:
+        _, prompt, _ = _leer_prompt(source)
+    except Exception as e:
+        print(f"[CAMILA-APRENDIZAJE] no pude leer prompt base: {type(e).__name__}: {e}")
+        return ""
+    if MARKER_START in prompt and MARKER_END in prompt:
+        pre = prompt.split(MARKER_START)[0]
+        post = prompt.split(MARKER_END, 1)[1]
+        prompt = pre.rstrip() + "\n" + post.lstrip()
+    return prompt.strip()
+
+
 def proponer(source: str = "etiguel", notify: bool = True) -> dict:
     from app.database import SessionLocal
     from app.models.camila_revision import CamilaConsolidacion
@@ -112,6 +128,7 @@ def proponer(source: str = "etiguel", notify: bool = True) -> dict:
         if not pend:
             return {"source": source, "ok": False, "motivo": "sin_lecciones"}
         vigente = _bloque_vigente(db, source)
+        base_prompt = _prompt_base(source)
 
         lecciones_txt = "\n".join(
             f"- [{r.categoria}] {r.titulo}. Qué corregir: {r.sugerencia or '(ver detalle)'}"
@@ -129,12 +146,21 @@ def proponer(source: str = "etiguel", notify: bool = True) -> dict:
             "- Mantenelo CORTO y accionable: reglas concretas en imperativo, en español "
             "argentino, agrupadas por tema si conviene. Sin relleno ni explicaciones.\n"
             "- Es un bloque que se inserta dentro del prompt de Camila, así que escribilo "
-            "como instrucciones directas a ella.\n\n"
+            "como instrucciones directas a ella.\n"
+            "- Te paso también el PROMPT BASE actual de Camila (todo lo que ya está activo, "
+            "fuera de este bloque) SOLO como contexto: NO lo reescribas ni lo repitas. NO "
+            "agregues reglas que ya estén dichas ahí (evitás duplicar). Si una lección nueva "
+            "CONTRADICE el prompt base, reformulá la regla para que sea coherente con la "
+            "intención del dueño (no opuesta) en vez de pisarla.\n\n"
             "Respondé SOLO con el texto del bloque (markdown simple con viñetas), sin "
             "encabezado de sección, sin ``` y sin comentarios alrededor."
         )
-        user = (f"BLOQUE VIGENTE:\n{vigente or '(vacío, es la primera vez)'}\n\n"
-                f"LECCIONES NUEVAS ({len(pend)}):\n{lecciones_txt}")
+        user = (
+            (f"PROMPT BASE ACTUAL DE CAMILA (contexto, ya activo, NO reescribir ni repetir):\n"
+             f"{base_prompt}\n\n" if base_prompt else "")
+            + f"BLOQUE VIGENTE (esto SÍ lo reemplazás):\n{vigente or '(vacío, es la primera vez)'}\n\n"
+            + f"LECCIONES NUEVAS ({len(pend)}):\n{lecciones_txt}"
+        )
         bloque = (_post(system, user, max_tokens=1800, funcion="Consolidación aprendizajes") or "").strip()
         if not bloque:
             return {"source": source, "ok": False, "motivo": "ia_no_disponible"}

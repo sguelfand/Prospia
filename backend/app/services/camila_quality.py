@@ -449,6 +449,12 @@ def start():
                     revisar_dia("etiguel", _ayer_ba(), notify=True)
                 except Exception as e:
                     print(f"[CAMILA-QUALITY] revisar ayer: {type(e).__name__}: {e}")
+                # Recordatorio semanal de auditoría del prompt completo (nivel 2).
+                try:
+                    from app.services import camila_prompt_audit
+                    camila_prompt_audit.chequear_recordatorio("etiguel")
+                except Exception as e:
+                    print(f"[CAMILA-QUALITY] recordatorio auditoría: {type(e).__name__}: {e}")
                 last_day = hoy
             time.sleep(3 * 3600)
 

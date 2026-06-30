@@ -160,6 +160,10 @@ def run_migrations():
         conn.execute(text(
             "ALTER TABLE camila_revision ADD COLUMN IF NOT EXISTS origen VARCHAR(16) NOT NULL DEFAULT 'especialista'"
         ))
+        # ── monitor_settings: timestamp del último recordatorio de auditoría de prompt ──
+        conn.execute(text(
+            "ALTER TABLE monitor_settings ADD COLUMN IF NOT EXISTS audit_recordatorio_at TIMESTAMPTZ"
+        ))
         # ── dashboard_layout: títulos personalizados de los widgets ──
         conn.execute(text(
             "ALTER TABLE dashboard_layout ADD COLUMN IF NOT EXISTS titulos TEXT NOT NULL DEFAULT '{}'"

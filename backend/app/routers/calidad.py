@@ -31,6 +31,23 @@ def sources():
     return camila_quality.get_sources_calidad()
 
 
+@router.get("/auditoria-prompt")
+def auditoria_prompt_estado(source: str = Query("etiguel")):
+    """Última auditoría del prompt completo + si conviene re-correr (1×/semana)."""
+    from app.services import camila_prompt_audit
+    return camila_prompt_audit.estado(source)
+
+
+@router.post("/auditoria-prompt")
+def auditoria_prompt_correr(source: str = Query("etiguel")):
+    """Corre la auditoría del prompt completo de Camila (nivel 2). Cuesta una llamada IA."""
+    from app.services import camila_prompt_audit
+    res = camila_prompt_audit.auditar(source)
+    if not res.get("ok"):
+        raise HTTPException(status_code=502, detail=res)
+    return res
+
+
 @router.post("/reportar")
 def reportar(body: ReportarIn):
     """Crea a mano un registro de calidad ('Camila estuvo mal') desde la pantalla

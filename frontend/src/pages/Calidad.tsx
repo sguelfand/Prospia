@@ -41,6 +41,10 @@ type AprEstado = {
   propuesta: Consolidacion | null; ultima_aplicada: Consolidacion | null
   lecciones_pendientes: { id: number; titulo: string; categoria: string }[]
 }
+type AuditEstado = {
+  ultima_at: string | null; dias_desde: number | null; recomendar: boolean
+  dias_recomendado: number; resumen: string | null; reporte: string | null; n_hallazgos: number
+}
 
 const CAT_LABEL: Record<string, string> = {
   lead_perdido: 'Lead perdido',
@@ -81,6 +85,9 @@ export default function Calidad() {
   const [nuevoTel, setNuevoTel] = useState('')
   const [nuevoTexto, setNuevoTexto] = useState('')
   const [nuevoBusy, setNuevoBusy] = useState(false)
+  const [audit, setAudit] = useState<AuditEstado | null>(null)
+  const [auditBusy, setAuditBusy] = useState(false)
+  const [verReporte, setVerReporte] = useState(false)
 
   // Cliente inicial: el default guardado por el usuario (tilde) o Etiguel.
   useEffect(() => {
@@ -101,12 +108,14 @@ export default function Calidad() {
     setError(null)
     try {
       const q = `?source=${encodeURIComponent(src)}`
-      const [revs, aprE] = await Promise.all([
+      const [revs, aprE, auditE] = await Promise.all([
         api.get<Revision[]>(`/admin/calidad/revisiones${q}`),
         api.get<AprEstado>(`/admin/calidad/aprendizajes${q}`),
+        api.get<AuditEstado>(`/admin/calidad/auditoria-prompt${q}`),
       ])
       setRevisiones(revs)
       setApr(aprE)
+      setAudit(auditE)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al cargar')
     } finally {
@@ -141,6 +150,18 @@ export default function Calidad() {
     setAprBusy(true)
     try { await api.post(`/admin/calidad/aprendizajes/proponer?source=${encodeURIComponent(source)}`); await load(source) }
     finally { setAprBusy(false) }
+  }
+
+  async function auditarPrompt() {
+    setAuditBusy(true)
+    try {
+      const r = await api.post<AuditEstado>(`/admin/calidad/auditoria-prompt?source=${encodeURIComponent(source)}`)
+      setAudit(r); setVerReporte(true)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'No se pudo auditar')
+    } finally {
+      setAuditBusy(false)
+    }
   }
   async function aprobarApr(id: number) {
     if (!confirm('¿Aplicar estos aprendizajes al prompt de Camila? Se hace backup automático y es reversible.')) return
@@ -307,6 +328,39 @@ export default function Calidad() {
                 Consolidar ahora
               </button>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Auditoría del prompt completo (nivel 2) */}
+      {audit && (
+        <div className={`rounded-xl border p-4 mb-5 ${audit.recomendar ? 'border-amber/60 bg-amber/5' : 'border-line bg-card'}`}>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-semibold text-ink">🧱 Auditoría del prompt de Camila</span>
+            {audit.recomendar && (
+              <span className="text-[11px] font-bold text-amber border border-amber/50 rounded px-1.5 py-0.5">conviene re-auditar</span>
+            )}
+            <span className="text-[11px] text-muted ml-auto">
+              {audit.ultima_at ? `última: ${fmtFecha(audit.ultima_at)}` : 'nunca'}
+            </span>
+          </div>
+          <p className="text-xs text-muted mt-2">
+            Revisa el prompt entero (reglas duplicadas, contradicciones, estructura) para que al ir
+            sumando correcciones nada se pise. Conviene hacerla 1×/semana.
+          </p>
+          {audit.resumen && <p className="text-xs text-ink mt-2">{audit.resumen}{audit.n_hallazgos ? ` · ${audit.n_hallazgos} hallazgo(s)` : ''}</p>}
+          <div className="flex gap-2 mt-2 items-center">
+            <button disabled={auditBusy} onClick={auditarPrompt} className="text-xs font-semibold border border-primary/50 text-primary rounded-lg px-3 py-1.5 hover:bg-primary/10 disabled:opacity-50">
+              {auditBusy ? 'Auditando…' : 'Auditar ahora'}
+            </button>
+            {audit.reporte && (
+              <button onClick={() => setVerReporte((v) => !v)} className="text-xs text-primary hover:underline">
+                {verReporte ? 'Ocultar' : 'Ver'} reporte
+              </button>
+            )}
+          </div>
+          {verReporte && audit.reporte && (
+            <pre className="text-xs text-ink whitespace-pre-wrap break-words bg-black/20 rounded-lg p-3 mt-2 max-h-96 overflow-y-auto font-mono">{audit.reporte}</pre>
           )}
         </div>
       )}

@@ -3,9 +3,9 @@ import { Alert, FlatList, KeyboardAvoidingView, Modal, Platform, RefreshControl,
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
-  AprendizajeEstado, CalidadSource, MensajeRow, RevisionCalidad, aprobarAprendizaje,
-  confirmarRevision, consolidarAprendizajes, deleteRevision, descartarAprendizaje,
-  getAprendizajes, getCalidadSources, getEtiguelMirrorMensajes, getPreferences,
+  AprendizajeEstado, AuditEstado, CalidadSource, MensajeRow, RevisionCalidad, aprobarAprendizaje,
+  confirmarRevision, consolidarAprendizajes, correrAuditoriaPrompt, deleteRevision, descartarAprendizaje,
+  getAprendizajes, getAuditoriaPrompt, getCalidadSources, getEtiguelMirrorMensajes, getPreferences,
   getRevisiones, putPreferences, reportarCalidadManual,
 } from "../api";
 import { useAuth } from "../auth";
@@ -26,6 +26,12 @@ const CAT_LABEL: Record<string, string> = {
   confuso: "Confuso",
   otro: "Otro",
 };
+
+function fmtFechaCorta(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
+}
 
 const SEV_COLOR: Record<string, string> = {
   alta: colors.red,
@@ -53,6 +59,9 @@ export default function CalidadScreen(_props: CalidadProps) {
   const [nuevoTel, setNuevoTel] = useState("");
   const [nuevoTexto, setNuevoTexto] = useState("");
   const [nuevoBusy, setNuevoBusy] = useState(false);
+  const [audit, setAudit] = useState<AuditEstado | null>(null);
+  const [auditBusy, setAuditBusy] = useState(false);
+  const [verReporte, setVerReporte] = useState(false);
 
   // Cliente inicial: el default guardado por el usuario (tilde) o Etiguel.
   useEffect(() => {
@@ -74,9 +83,12 @@ export default function CalidadScreen(_props: CalidadProps) {
     if (!token) return;
     setError(null);
     try {
-      const [revs, aprE] = await Promise.all([getRevisiones(token, source), getAprendizajes(token, source)]);
+      const [revs, aprE, auditE] = await Promise.all([
+        getRevisiones(token, source), getAprendizajes(token, source), getAuditoriaPrompt(token, source),
+      ]);
       setRevisiones(revs);
       setApr(aprE);
+      setAudit(auditE);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al cargar.");
     } finally {
@@ -90,6 +102,19 @@ export default function CalidadScreen(_props: CalidadProps) {
     const nuevo = savedDefault === source ? "etiguel" : source;
     setSavedDefault(nuevo);
     try { await putPreferences(token, "calidad", { default_source: nuevo }); } catch { /* noop */ }
+  };
+
+  const auditarPrompt = async () => {
+    if (!token || auditBusy) return;
+    setAuditBusy(true);
+    try {
+      const r = await correrAuditoriaPrompt(token, source);
+      setAudit(r); setVerReporte(true);
+    } catch (e) {
+      Alert.alert("No se pudo", e instanceof Error ? e.message : "Error");
+    } finally {
+      setAuditBusy(false);
+    }
   };
 
   const crearRegistro = async () => {
@@ -324,6 +349,32 @@ export default function CalidadScreen(_props: CalidadProps) {
         </View>
       ) : null}
 
+      {audit ? (
+        <View style={[styles.aprCard, audit.recomendar ? styles.auditCardRec : null]}>
+          <View style={styles.aprHeader}>
+            <Text style={styles.aprTitle}>🧱 Auditoría del prompt</Text>
+            <Text style={styles.meta}>{audit.ultima_at ? `última: ${fmtFechaCorta(audit.ultima_at)}` : "nunca"}</Text>
+          </View>
+          <Text style={styles.aprDesc}>
+            Revisa el prompt entero (duplicados, contradicciones, estructura) para que al sumar
+            correcciones nada se pise. Conviene 1×/semana.
+          </Text>
+          {audit.recomendar ? <Text style={styles.auditRec}>Conviene re-auditar.</Text> : null}
+          {audit.resumen ? <Text style={styles.aprDesc}>{audit.resumen}{audit.n_hallazgos ? ` · ${audit.n_hallazgos} hallazgo(s)` : ""}</Text> : null}
+          <View style={styles.aprActions}>
+            <TouchableOpacity disabled={auditBusy} style={[styles.actionBtn, { borderColor: colors.primary, flex: 1 }]} onPress={auditarPrompt}>
+              <Text style={[styles.actionLabel, { color: colors.primary }]}>{auditBusy ? "Auditando…" : "Auditar ahora"}</Text>
+            </TouchableOpacity>
+            {audit.reporte ? (
+              <TouchableOpacity style={[styles.actionBtn, { borderColor: colors.border }]} onPress={() => setVerReporte((v) => !v)}>
+                <Text style={[styles.actionLabel, { color: colors.textDim }]}>{verReporte ? "Ocultar" : "Ver"}</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+          {verReporte && audit.reporte ? <Text style={styles.aprBloque}>{audit.reporte}</Text> : null}
+        </View>
+      ) : null}
+
       <View style={styles.tabs}>
         {tabs.map(([k, l]) => (
           <TouchableOpacity key={k} style={[styles.tab, filtro === k ? styles.tabActive : null]} onPress={() => setFiltro(k)}>
@@ -452,6 +503,8 @@ const styles = StyleSheet.create({
   aprBadge: { color: colors.primary, fontSize: 11, fontWeight: "700", borderColor: colors.primary, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   aprDesc: { color: colors.textDim, fontSize: 12, marginTop: 6, flex: 1 },
   aprBloque: { color: colors.text, fontSize: 11, fontFamily: "monospace", backgroundColor: colors.bg, borderRadius: 8, padding: 10, marginTop: 8 },
+  auditCardRec: { borderColor: colors.amber },
+  auditRec: { color: colors.amber, fontSize: 12, fontWeight: "700", marginTop: 4 },
   aprActions: { flexDirection: "row", gap: 8, marginTop: 10 },
   aprRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4 },
 

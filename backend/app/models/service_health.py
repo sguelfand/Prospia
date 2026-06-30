@@ -53,6 +53,9 @@ class MonitorSettings(Base):
     # de la terminal. Lo prende/apaga Sebi desde la app; lo lee el MCP local antes
     # de cada pregunta. Default OFF = comportamiento normal en la compu.
     preguntas_al_cel: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    # Última vez que se mandó el recordatorio semanal de auditoría del prompt de Camila
+    # (para no repetir el push más de 1×/semana). Lo setea el loop de camila_quality.
+    audit_recordatorio_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

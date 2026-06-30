@@ -659,6 +659,16 @@ export const reportarCalidadManual = (token: string, source: string, texto: stri
     body: JSON.stringify({ source, texto, telefono: telefono || null }),
   }, token);
 
+// Auditoría del prompt completo de Camila (nivel 2): revisa duplicados/contradicciones.
+export interface AuditEstado {
+  ultima_at: string | null; dias_desde: number | null; recomendar: boolean;
+  dias_recomendado: number; resumen: string | null; reporte: string | null; n_hallazgos: number;
+}
+export const getAuditoriaPrompt = (token: string, source: string) =>
+  request<AuditEstado>(`/admin/calidad/auditoria-prompt?source=${encodeURIComponent(source)}`, {}, token);
+export const correrAuditoriaPrompt = (token: string, source: string) =>
+  request<AuditEstado>(`/admin/calidad/auditoria-prompt?source=${encodeURIComponent(source)}`, { method: "POST" }, token);
+
 // ── Preferencias de UI por usuario/pantalla (default del selector, etc.) ───────
 export const getPreferences = (token: string, pantalla: string) =>
   request<{ pantalla: string; prefs: Record<string, unknown> }>(

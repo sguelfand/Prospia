@@ -85,3 +85,20 @@ class CamilaConsolidacion(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
     )
     aplicada_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CamilaPromptAudit(Base):
+    """Auditoría del prompt COMPLETO de Camila (nivel 2): una IA lee todo el prompt y
+    reporta redundancias, contradicciones y mejoras de estructura. Se corre a pedido
+    (botón) y conviene ~1×/semana. Guardamos cada corrida para mostrar la última fecha
+    y el reporte."""
+    __tablename__ = "camila_prompt_audit"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source: Mapped[str] = mapped_column(String(60), nullable=False, index=True, default="etiguel")
+    resumen: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    reporte: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    n_hallazgos: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
