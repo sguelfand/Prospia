@@ -12,10 +12,54 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from app.services.camila_quality import _post, _parse_json
+from app.services.camila_quality import _post
 
 _BA = timezone(timedelta(hours=-3))
 DIAS_RECOMENDADO = 7   # cada cuánto se recomienda re-auditar
+
+
+def _parse_audit(raw: str | None) -> dict | None:
+    """Parseo tolerante de la respuesta de la IA: saca fences ```json, intenta json.loads
+    directo y, si falla, busca el primer objeto {...} con balance de llaves. None si nada."""
+    import json
+    import re
+    if not raw:
+        return None
+    txt = raw.strip()
+    txt = re.sub(r"^```(?:json)?\s*|\s*```$", "", txt, flags=re.IGNORECASE).strip()
+    try:
+        d = json.loads(txt)
+        return d if isinstance(d, dict) else None
+    except Exception:
+        pass
+    # Buscar el primer objeto JSON balanceado.
+    start = txt.find("{")
+    if start < 0:
+        return None
+    depth, in_str, esc = 0, False, False
+    for i in range(start, len(txt)):
+        c = txt[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                in_str = False
+        else:
+            if c == '"':
+                in_str = True
+            elif c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    try:
+                        d = json.loads(txt[start:i + 1])
+                        return d if isinstance(d, dict) else None
+                    except Exception:
+                        return None
+    return None
 
 
 def _system() -> str:
@@ -29,11 +73,14 @@ def _system() -> str:
         "- CONTRADICCIONES: reglas que se pisan o se oponen entre sí.\n"
         "- OBSOLETO: cosas que parecen viejas, sin sentido o que sobran.\n"
         "- ESTRUCTURA: oportunidades de reordenar/agrupar para que se siga mejor.\n"
-        "Sé concreto: citá la parte textual o el tema. Si está todo sano, decílo claro.\n\n"
-        "Respondé SOLO un JSON válido (sin ``` ni texto alrededor):\n"
-        '{"resumen": "<1 frase: estado general>", '
-        '"hallazgos": [{"tipo": "duplicacion|contradiccion|obsoleto|estructura", '
-        '"detalle": "<qué y dónde, concreto>", "sugerencia": "<qué hacer>"}]}'
+        "Sé concreto: citá la parte textual o el tema. Si está todo sano, devolvé hallazgos vacío.\n\n"
+        "FORMATO DE SALIDA — CRÍTICO:\n"
+        "- Respondé ÚNICAMENTE un objeto JSON válido. NADA antes ni después. SIN ``` ni texto.\n"
+        "- Máximo 10 hallazgos. Cada `detalle` y `sugerencia`: 1-2 oraciones, en UNA línea (sin "
+        "saltos de línea adentro de los strings). Comillas dobles, escapadas si hace falta.\n"
+        "Esquema EXACTO:\n"
+        '{"resumen":"<1 frase: estado general>","hallazgos":[{"tipo":"duplicacion|contradiccion|obsoleto|estructura","detalle":"<qué y dónde>","sugerencia":"<qué hacer>"}]}\n'
+        "Ejemplo si está todo bien: {\"resumen\":\"El prompt está prolijo, sin redundancias ni contradicciones.\",\"hallazgos\":[]}"
     )
 
 
@@ -65,16 +112,17 @@ def auditar(source: str = "etiguel") -> dict:
 
     # timeout largo: el prompt completo es grande y genera bastante → la IA tarda.
     raw = _post(_system(), f"PROMPT COMPLETO DE CAMILA:\n\n{prompt}",
-                max_tokens=1600, timeout=120, funcion="Auditoría prompt Camila")
-    data = _parse_json(raw)
+                max_tokens=3000, timeout=120, funcion="Auditoría prompt Camila")
+    if not raw:
+        return {"ok": False, "motivo": "ia_no_disponible"}
+    data = _parse_audit(raw)
     if data is None:
-        if not raw:
-            return {"ok": False, "motivo": "ia_no_disponible"}
-        resumen, hallazgos, reporte = "Auditoría (texto libre)", [], raw.strip()
+        # No vino JSON parseable → guardamos el texto crudo como reporte (no lo perdemos).
+        resumen, hallazgos, reporte = "", [], raw.strip()
     else:
-        resumen = (data.get("resumen") or "Auditoría completada").strip()
-        hallazgos = data.get("hallazgos") or []
-        reporte = _md(resumen, hallazgos)
+        resumen = (data.get("resumen") or "").strip()
+        hallazgos = [h for h in (data.get("hallazgos") or []) if isinstance(h, dict)]
+        reporte = _md(resumen or "Auditoría completada", hallazgos)
 
     import json
     db = SessionLocal()

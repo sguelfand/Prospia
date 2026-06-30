@@ -67,7 +67,10 @@ function reporteHtml(audit: AuditEstado, cliente: string): string {
     </div>`
   }).join('')
   const cuerpo = (audit.hallazgos && audit.hallazgos.length)
-    ? cards : `<p class="ok">✅ Sin problemas de mantenimiento detectados.</p>`
+    ? cards
+    : (audit.reporte && audit.reporte.trim()
+        ? `<pre class="raw">${esc(audit.reporte)}</pre>`
+        : `<p class="ok">✅ Sin problemas de mantenimiento detectados.</p>`)
   return `<!doctype html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Auditoría del prompt — ${esc(cliente)}</title>
@@ -83,6 +86,7 @@ function reporteHtml(audit: AuditEstado, cliente: string): string {
   .det { margin:0; }
   .sug { margin:8px 0 0; color:#9fb3d1; font-size:14px; }
   .ok { color:#34d399; font-size:16px; }
+  .raw { background:#13213C; border:1px solid #243454; border-radius:10px; padding:14px 16px; white-space:pre-wrap; word-break:break-word; font-family:'JetBrains Mono',ui-monospace,monospace; font-size:13px; line-height:1.55; }
   .foot { color:#5C6E90; font-size:12px; margin-top:24px; }
 </style></head><body><div class="wrap">
   <h1>🧱 Auditoría del prompt de Camila</h1>
