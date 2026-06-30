@@ -484,14 +484,16 @@ export interface TokenAudit {
   mes_actual: string; oportunidades: TokenOportunidad[];
 }
 
-// Costos internos: API de Anthropic por función (NO Camila, que va por MyClaw).
-export interface AnthFuncion { funcion: string; llamadas: number; tokens: number; costo_usd: number; modelos: string[] }
+// Costos internos: API de Anthropic por función (NO Camila, que va por MyClaw). Solo plata.
+export interface AnthFuncion { funcion: string; costo_usd: number }
+export interface AnthMes { mes: string; nombre: string; total: number; por_funcion: Record<string, number> }
 export interface AnthUsage {
-  dias: number; total_usd: number; tokens_total: number; llamadas_total: number;
-  por_funcion: AnthFuncion[]; por_dia: { fecha: string; costo_usd: number }[];
+  mes_actual: string; mes_nombre: string; dias_transcurridos: number;
+  total_mes: number; prev_total: number; delta_pct: number | null;
+  por_funcion: AnthFuncion[]; meses: AnthMes[];
 }
-export const getAnthropicUsage = (token: string, dias = 30) =>
-  request<AnthUsage>(`/admin/tokens/anthropic?dias=${dias}`, {}, token);
+export const getAnthropicUsage = (token: string, meses = 12) =>
+  request<AnthUsage>(`/admin/tokens/anthropic?meses=${meses}`, {}, token);
 
 export const getTokenSources = (token: string) =>
   request<TokenSource[]>("/admin/tokens/sources", {}, token);

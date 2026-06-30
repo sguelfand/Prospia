@@ -26,6 +26,7 @@ import {
   recomputeTokens,
 } from "../api";
 import { useAuth } from "../auth";
+import CostosInternos from "../components/CostosInternos";
 import { Icon } from "../components/Icon";
 import { ErrorBox, Loader } from "../components/ui";
 import { colors } from "../theme";
@@ -144,7 +145,7 @@ export default function TokensScreen() {
           {recomputando ? <ActivityIndicator size="small" color={colors.onPrimary} /> : <Icon name="refresh" size={15} color={colors.onPrimary} />}
         </TouchableOpacity>
       </View>
-      <Text style={styles.nota}>Costo real = tokens × tarifa MyClaw (10% off oficial). Tocá un día del gráfico para ver sus conversaciones.</Text>
+      <Text style={styles.nota}>Costo real estimado a tarifa MyClaw (10% off oficial). Tocá un día del gráfico para ver sus conversaciones.</Text>
 
       {/* Oportunidades FIJAS */}
       <View style={styles.card}>
@@ -166,30 +167,8 @@ export default function TokensScreen() {
         )}
       </View>
 
-      {/* Costos internos: API de Anthropic (funciones de Prospia, NO Camila) */}
-      {apiUsage ? (
-        <View style={styles.card}>
-          <View style={styles.apiHead}>
-            <Text style={styles.cardTitle}>Costos internos · API Anthropic</Text>
-            <Text style={styles.apiTotal}>{usd3(apiUsage.total_usd)} <Text style={styles.sub}>/ {apiUsage.dias}d</Text></Text>
-          </View>
-          <Text style={styles.sub}>Funciones de Prospia (Especialista, intake, clasificación…), NO Camila.</Text>
-          {apiUsage.por_funcion.length === 0 ? (
-            <Text style={styles.ok}>Sin uso en los últimos {apiUsage.dias} días.</Text>
-          ) : (
-            apiUsage.por_funcion.map((f, i) => (
-              <View key={f.funcion} style={[styles.apiRow, i > 0 && styles.border]}>
-                <View style={{ flex: 1, paddingRight: 8 }}>
-                  <Text style={styles.apiFn}>{f.funcion}</Text>
-                  <Text style={styles.apiMeta}>{f.llamadas} llamada(s) · {fmt(f.tokens)} tok · {f.modelos.join(", ")}</Text>
-                </View>
-                <Text style={styles.apiCost}>{usd3(f.costo_usd)}</Text>
-              </View>
-            ))
-          )}
-          <Text style={styles.apiNota}>Precio oficial de Anthropic (key directa, sin el 10% off de MyClaw).</Text>
-        </View>
-      ) : null}
+      {/* Costos internos: API de Anthropic (mes actual + histórico) */}
+      {apiUsage ? <CostosInternos data={apiUsage} /> : null}
 
       {!u ? <Text style={styles.empty}>Sin datos del día. Tocá recalcular.</Text> : (
         <>
@@ -201,7 +180,6 @@ export default function TokensScreen() {
           <View style={styles.kpis}>
             <Kpi label="Costo del día" value={usd(t?.costo_usd ?? 0)} />
             <Kpi label="Conversac." value={fmt(nConv)} />
-            <Kpi label="Llamadas" value={fmt(t?.llamadas ?? 0)} />
             <Kpi label="Errores" value={fmt(t?.errores ?? 0)} alert={(t?.errores ?? 0) > 0} />
             <Kpi label="Timeouts" value={fmt(t?.timeouts ?? 0)} alert={(t?.timeouts ?? 0) > 0} />
           </View>
@@ -278,8 +256,7 @@ export default function TokensScreen() {
                   </View>
                   {c.nombre ? <Text style={styles.convNombre}>{c.nombre}</Text> : null}
                   <Text style={styles.convMeta}>
-                    {c.llamadas} ll · {fmt(c.tokens)} tok
-                    {modelos.length > 0 ? ` · ${modelos.map(([m]) => m.replace("claude-", "")).join(", ")}` : ""}
+                    {modelos.length > 0 ? modelos.map(([m]) => m.replace("claude-", "")).join(", ") : ""}
                     {c.timeouts > 0 ? ` · ${c.timeouts} timeout` : ""}{c.errores > 0 ? ` · ${c.errores} error` : ""}
                   </Text>
                   {!abierta && c.ejemplo ? <Text style={styles.convEj} numberOfLines={1}>“{c.ejemplo}”</Text> : null}
@@ -296,7 +273,7 @@ export default function TokensScreen() {
                       {/* Detalle de costo (compacto): split por modelo + horario */}
                       <View style={styles.costoSep}>
                         {modelos.map(([m, v]) => (
-                          <View key={m} style={styles.kv}><Text style={styles.detK}>{m}</Text><Text style={styles.detV}>{usd3(v.costo_usd)} · {v.llamadas} ll</Text></View>
+                          <View key={m} style={styles.kv}><Text style={styles.detK}>{m}</Text><Text style={styles.detV}>{usd3(v.costo_usd)}</Text></View>
                         ))}
                         {(c.primer_ts || (c.compactaciones ?? 0) > 0) ? (
                           <View style={styles.detGrid}>
@@ -318,7 +295,7 @@ export default function TokensScreen() {
             <Text style={styles.cardTitle}>Por modelo · mes {data!.mes_actual}</Text>
             {Object.keys(data!.por_modelo_mes).length === 0 ? <Text style={styles.empty}>Sin datos del mes.</Text> :
               Object.entries(data!.por_modelo_mes).sort((a, b) => b[1].costo_usd - a[1].costo_usd).map(([m, v]) => (
-                <View key={m} style={styles.kv}><Text style={styles.kvK}>{m}</Text><Text style={styles.kvV}>{usd(v.costo_usd)} · {fmt(v.tokens)}</Text></View>
+                <View key={m} style={styles.kv}><Text style={styles.kvK}>{m}</Text><Text style={styles.kvV}>{usd(v.costo_usd)}</Text></View>
               ))}
           </View>
         </>

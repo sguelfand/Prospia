@@ -64,43 +64,62 @@ def registrar(funcion: str, modelo: str, usage: dict | None) -> None:
         print(f"[ANTHROPIC-USAGE] registrar: {type(e).__name__}: {e}")
 
 
-def resumen(dias: int = 30) -> dict:
-    """Agrega el uso de los últimos `dias`: por función y por día, + total."""
+_MES_ABBR = ["", "Ene", "Feb", "Mar", "Abr", "May", "Jun",
+             "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+_MES_NOMBRE = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+               "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+
+
+def resumen(meses: int = 12) -> dict:
+    """Estadísticas de costo (solo plata) de las funciones internas:
+      - mes_actual: costo por función del mes corriente + total + delta vs anterior.
+      - meses: serie mensual con desglose por función (para el gráfico apilado)."""
     from app.database import SessionLocal
     from app.models.anthropic_usage import AnthropicUsage
-    desde = (datetime.now(_BA) - timedelta(days=max(1, dias))).strftime("%Y-%m-%d")
+    ahora = datetime.now(_BA)
     db = SessionLocal()
     try:
-        rows = (db.query(AnthropicUsage)
-                .filter(AnthropicUsage.fecha >= desde)
-                .all())
-        por_funcion: dict[str, dict] = {}
-        por_dia: dict[str, float] = {}
-        total = 0.0
-        tokens_total = 0
+        rows = db.query(AnthropicUsage).all()
+        por_mes: dict[str, dict[str, float]] = {}  # 'YYYY-MM' -> funcion -> costo
         for r in rows:
-            f = por_funcion.setdefault(r.funcion, {
-                "funcion": r.funcion, "llamadas": 0, "tokens": 0,
-                "costo_usd": 0.0, "modelos": set()})
-            toks = r.input_tokens + r.output_tokens + r.cache_read + r.cache_write
-            f["llamadas"] += 1
-            f["tokens"] += toks
-            f["costo_usd"] += r.costo_usd
-            f["modelos"].add(r.modelo)
-            por_dia[r.fecha] = por_dia.get(r.fecha, 0.0) + r.costo_usd
-            total += r.costo_usd
-            tokens_total += toks
-        funciones = sorted(por_funcion.values(), key=lambda x: x["costo_usd"], reverse=True)
-        for f in funciones:
-            f["costo_usd"] = round(f["costo_usd"], 4)
-            f["modelos"] = sorted(m for m in f["modelos"] if m)
+            mes = (r.fecha or "")[:7]
+            if not mes:
+                continue
+            por_mes.setdefault(mes, {})
+            por_mes[mes][r.funcion] = por_mes[mes].get(r.funcion, 0.0) + r.costo_usd
+
+        meses_ord = sorted(por_mes)[-max(1, meses):]
+        serie = []
+        for m in meses_ord:
+            pf = {k: round(v, 4) for k, v in por_mes[m].items()}
+            try:
+                mm = int(m[5:7])
+            except ValueError:
+                mm = 0
+            serie.append({"mes": m, "nombre": _MES_ABBR[mm] if 0 < mm < 13 else m,
+                          "por_funcion": pf, "total": round(sum(pf.values()), 4)})
+
+        mes_actual = ahora.strftime("%Y-%m")
+        mm = int(mes_actual[5:7])
+        actual = por_mes.get(mes_actual, {})
+        por_funcion = sorted(
+            ({"funcion": k, "costo_usd": round(v, 4)} for k, v in actual.items()),
+            key=lambda x: x["costo_usd"], reverse=True)
+        total_mes = round(sum(actual.values()), 4)
+
+        anteriores = [m for m in sorted(por_mes) if m < mes_actual]
+        prev_total = round(sum(por_mes[anteriores[-1]].values()), 4) if anteriores else 0.0
+        delta = round((total_mes - prev_total) / prev_total * 100, 0) if prev_total > 0 else None
+
         return {
-            "dias": dias,
-            "total_usd": round(total, 4),
-            "tokens_total": tokens_total,
-            "llamadas_total": len(rows),
-            "por_funcion": funciones,
-            "por_dia": [{"fecha": k, "costo_usd": round(v, 4)} for k, v in sorted(por_dia.items())],
+            "mes_actual": mes_actual,
+            "mes_nombre": f"{_MES_NOMBRE[mm]} {mes_actual[:4]}" if 0 < mm < 13 else mes_actual,
+            "dias_transcurridos": ahora.day,
+            "total_mes": total_mes,
+            "prev_total": prev_total,
+            "delta_pct": delta,
+            "por_funcion": por_funcion,
+            "meses": serie,
         }
     finally:
         db.close()
