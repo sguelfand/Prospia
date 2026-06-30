@@ -152,10 +152,10 @@ function TerminoChart({ data, navigate }: { data: TerminoRow[]; navigate: Return
   }
 
   return (
-    <div>
-      <p className="text-xs text-faint mb-2">Pasá el mouse por una barra y clickeá el estado</p>
-      <div ref={wrapRef} className="relative" onMouseLeave={() => setHover(null)}>
-        <ResponsiveContainer width="100%" height={260}>
+    <div className="h-full flex flex-col min-h-0">
+      <p className="text-xs text-faint mb-2 shrink-0">Pasá el mouse por una barra y clickeá el estado</p>
+      <div ref={wrapRef} className="relative flex-1 min-h-0" style={{ minHeight: 180 }} onMouseLeave={() => setHover(null)}>
+        <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 5, bottom: 5, left: -10, right: 5 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="termino" tick={DiagonalTick as any} interval={0} height={80} />
@@ -381,7 +381,8 @@ function ClienteDashboard() {
         <div key="evolucion">
           <Widget id="evolucion" title="Evolución histórica">
           {mesData.length === 0 ? <p className="text-sm text-muted">Sin histórico todavía.</p> : (
-          <ResponsiveContainer width="100%" height={220}>
+          <div className="flex-1 min-h-0" style={{ minHeight: 180 }}>
+          <ResponsiveContainer width="100%" height="100%">
             <LineChart data={mesData} margin={{ left: -10 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
@@ -397,6 +398,7 @@ function ClienteDashboard() {
               <Line type="monotone" dataKey="No le interesa"   stroke="#6b7280" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 5 }} strokeDasharray="4 2" />
             </LineChart>
           </ResponsiveContainer>
+          </div>
           )}
           </Widget>
         </div>
@@ -427,9 +429,10 @@ function CompBarChart({ title, sub, data, color, pct, onPick }: {
   onPick: (c: { tenant_id: number; fuente: string }) => void
 }) {
   return (
-    <div>
-      {sub && <p className="text-xs text-faint mb-2">{sub}</p>}
-      <ResponsiveContainer width="100%" height={Math.max(160, data.length * 38)}>
+    <div className="h-full flex flex-col min-h-0">
+      {sub && <p className="text-xs text-faint mb-2 shrink-0">{sub}</p>}
+      <div className="flex-1 min-h-0" style={{ minHeight: Math.max(160, data.length * 38) }}>
+      <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} layout="vertical" margin={{ top: 5, bottom: 5, left: 10, right: 16 }}>
           <CartesianGrid strokeDasharray="3 3" horizontal={false} />
           <XAxis type="number" tick={{ fontSize: 10 }} domain={pct ? [0, 100] : undefined} />
@@ -440,6 +443,7 @@ function CompBarChart({ title, sub, data, color, pct, onPick }: {
             onClick={(d: any) => onPick(d?.payload)} />
         </BarChart>
       </ResponsiveContainer>
+      </div>
     </div>
   )
 }
@@ -468,8 +472,8 @@ function GastosClientes() {
   const total = rows.reduce((a, r) => a + r.gasto_mes_actual, 0)
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-end">
+    <div className="h-full flex flex-col gap-3 min-h-0">
+      <div className="flex items-center justify-end shrink-0">
         <button onClick={() => navigate('/monitoreo/tokens')} className="text-xs text-accent hover:underline">ver detalle →</button>
       </div>
       {/* cards del mes actual */}
@@ -489,9 +493,10 @@ function GastosClientes() {
         )}
       </div>
       {/* gráfico mensual por cliente */}
-      <div className="border-t border-line pt-3">
-        <h3 className="font-semibold mb-1 text-sm">Gasto mensual por cliente (USD)</h3>
-        <ResponsiveContainer width="100%" height={260}>
+      <div className="border-t border-line pt-3 flex-1 min-h-0 flex flex-col" style={{ minHeight: 200 }}>
+        <h3 className="font-semibold mb-1 text-sm shrink-0">Gasto mensual por cliente (USD)</h3>
+        <div className="flex-1 min-h-0">
+        <ResponsiveContainer width="100%" height="100%">
           <BarChart data={dataset} margin={{ top: 8, bottom: 5, left: 0, right: 8 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
@@ -502,6 +507,7 @@ function GastosClientes() {
             ))}
           </BarChart>
         </ResponsiveContainer>
+        </div>
       </div>
     </div>
   )
