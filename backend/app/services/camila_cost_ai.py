@@ -92,7 +92,19 @@ def diagnosticar(source: str = "etiguel", fecha: str | None = None, notify: bool
         '"severidad": "alta"|"media"|"baja", "titulo": "<máx 110 car>", '
         '"detalle": "<qué viste y qué hacer, 1-3 oraciones>"}]}'
     )
-    user = f"Consumo del {fecha} de {camila_audit.SOURCES[source]['nombre']}:\n\n{_resumen_compacto(data)}"
+    # Dedup semántico: el modelo inventa una `clave` distinta cada corrida para el
+    # MISMO hallazgo, así que el dedup por (source,tipo,clave) nunca matchea y se
+    # acumulan casi-duplicados. Le pasamos las oportunidades YA abiertas (de reglas y
+    # de IA) y le pedimos que no las repita ni reformule → solo devuelve lo nuevo.
+    abiertas = camila_audit.get_oportunidades(source, incluir_resueltas=False)
+    ya_track = "\n".join(f"- {o['titulo']}" for o in abiertas)
+    bloque_track = (
+        "\n\nYA HAY oportunidades abiertas registradas (NO las repitas ni reformules; "
+        "solo devolvé hallazgos GENUINAMENTE nuevos y distintos a estos):\n" + ya_track
+    ) if ya_track else ""
+
+    user = (f"Consumo del {fecha} de {camila_audit.SOURCES[source]['nombre']}:\n\n"
+            f"{_resumen_compacto(data)}{bloque_track}")
     parsed = _parse_json(_post(system, user, max_tokens=1200, funcion="Diagnóstico de costos (IA)"))
     ops_raw = (parsed or {}).get("oportunidades") or []
 
@@ -107,6 +119,10 @@ def diagnosticar(source: str = "etiguel", fecha: str | None = None, notify: bool
             sev = "media"
         ops.append({"tipo": "ia", "clave": clave, "severidad": sev,
                     "titulo": titulo[:200], "detalle": (o.get("detalle") or "")[:2000]})
+
+    # Mismo cap por monto absoluto que las reglas: una oportunidad de costo 'alta' en
+    # un día barato es ruido (los $/día acá son chicos → casi todo cae a media/baja).
+    camila_audit._cap_severidad_por_monto(ops, (data.get("totales") or {}).get("costo_usd", 0.0))
 
     nuevas = camila_audit._upsert_oportunidades(source, ops) if ops else 0
 

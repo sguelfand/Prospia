@@ -337,6 +337,27 @@ def _detectar(resumen: dict) -> list[dict]:
     return ops
 
 
+# Tipos de oportunidad cuya severidad es de COSTO (escala con la plata del día). Los
+# de confiabilidad (timeouts/errores/compactación) NO se topean: un problema operativo
+# es igual de válido en un día barato que en uno caro.
+_TIPOS_COSTO = {"modelo_caro", "modelo_caro_sistema", "cache", "conversacion_cara", "ia"}
+
+
+def _cap_severidad_por_monto(ops: list[dict], costo_dia: float) -> list[dict]:
+    """Una oportunidad de costo marcada 'alta' por PORCENTAJE es ruido en un día
+    barato: $0.13 que es el 53% de un día de $0.24 no amerita alerta roja. Topea la
+    severidad de las oportunidades de costo según el gasto ABSOLUTO del día. Muta y
+    devuelve la misma lista."""
+    if costo_dia >= 0.50:
+        return ops
+    tope = "media" if costo_dia >= 0.20 else "baja"
+    orden = {"alta": 0, "media": 1, "baja": 2}
+    for o in ops:
+        if o.get("tipo") in _TIPOS_COSTO and orden.get(o.get("severidad"), 1) < orden[tope]:
+            o["severidad"] = tope
+    return ops
+
+
 def _upsert_oportunidades(source: str, ops: list[dict]) -> int:
     """Acumula oportunidades (no las borra). Devuelve cuántas se abrieron nuevas
     (insertadas o re-abiertas) para decidir el push."""
@@ -457,7 +478,7 @@ def run_audit(source: str, fecha: str, notify: bool = True) -> dict:
         row.llamadas = t["llamadas"]; row.errores = t["errores"]
         row.data = json.dumps(resumen, ensure_ascii=False)
         row.generated_at = datetime.now(timezone.utc)
-        detectadas = _detectar(resumen)
+        detectadas = _cap_severidad_por_monto(_detectar(resumen), t["costo_usd"])
         nuevas = _upsert_oportunidades(source, detectadas)
         _auto_resolver_inactivas(source, detectadas)
         row.oportunidades = len(get_oportunidades(source))
