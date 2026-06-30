@@ -32,10 +32,13 @@ from app.models.tenant import Tenant, TenantConfig
 from app.models.termino import Termino
 from app.models.user import User
 from app.routers.prospects import _enrich
+from app.models.test_run import TestRun
 from app.schemas.admin import (
     AdminOverview,
     AgentErrorOut,
     AgentErrorResolve,
+    TestRunResumen,
+    TestRunDetalleOut,
     ConsultaOut,
     ConsultaResponder,
     ConsultasEliminar,
@@ -118,8 +121,14 @@ def _conteos_por_tenant(db: Session, estado: str | None = None, solo_mes: bool =
 
 
 @router.get("/clientes", response_model=list[ClienteResumen])
-def listar_clientes(db: Session = Depends(get_db)):
-    tenants = db.query(Tenant).order_by(Tenant.nombre).all()
+def listar_clientes(include_test: bool = False, db: Session = Depends(get_db)):
+    # Por defecto se EXCLUYEN los tenants de prueba (qa-test): no salen en stats
+    # ni en el dropdown de gestión. Solo el selector "Ver como cliente" pide
+    # include_test=true para poder impersonarlos.
+    q = db.query(Tenant)
+    if not include_test:
+        q = q.filter(Tenant.is_test.is_(False))
+    tenants = q.order_by(Tenant.nombre).all()
 
     totales       = _conteos_por_tenant(db)
     en_conv       = _conteos_por_tenant(db, estado="en_conversacion")
@@ -141,6 +150,7 @@ def listar_clientes(db: Session = Depends(get_db)):
             interesados=interesados.get(t.id, 0),
             interesados_mes=interes_mes.get(t.id, 0),
             ultimo_prospect=ultimos.get(t.id),
+            es_test=t.is_test,
         )
         for t in tenants
     ]
@@ -1210,20 +1220,26 @@ def borrar_pendiente(pendiente_id: int, db: Session = Depends(get_db)):
 @router.get("/overview", response_model=AdminOverview)
 def overview(db: Session = Depends(get_db)):
     hoy = date.today()
-    total_clientes = db.query(func.count(Tenant.id)).scalar() or 0
-    total_prospects = db.query(func.count(Prospect.id)).scalar() or 0
+    # Excluir tenants de prueba (qa-test) de todos los totales.
+    test_ids = [tid for (tid,) in db.query(Tenant.id).filter(Tenant.is_test.is_(True)).all()]
+
+    def _no_test(q):
+        return q.filter(Prospect.tenant_id.notin_(test_ids)) if test_ids else q
+
+    total_clientes = db.query(func.count(Tenant.id)).filter(Tenant.is_test.is_(False)).scalar() or 0
+    total_prospects = _no_test(db.query(func.count(Prospect.id))).scalar() or 0
     en_conv = (
-        db.query(func.count(Prospect.id))
+        _no_test(db.query(func.count(Prospect.id)))
         .filter(Prospect.estado == "en_conversacion")
         .scalar() or 0
     )
     interesados = (
-        db.query(func.count(Prospect.id))
+        _no_test(db.query(func.count(Prospect.id)))
         .filter(Prospect.estado == "interesado")
         .scalar() or 0
     )
     interes_mes = (
-        db.query(func.count(Prospect.id))
+        _no_test(db.query(func.count(Prospect.id)))
         .filter(
             Prospect.estado == "interesado",
             extract("year", Prospect.created_at) == hoy.year,
@@ -1277,7 +1293,7 @@ def comparativa(db: Session = Depends(get_db)):
     clientes: list[ClienteComparativa] = []
     tot_prospects = tot_conv = tot_interes = tot_interes_mes = 0
 
-    for t in db.query(Tenant).order_by(Tenant.nombre).all():
+    for t in db.query(Tenant).filter(Tenant.is_test.is_(False)).order_by(Tenant.nombre).all():
         estados = por_tenant.get(t.id, {})
         total = sum(estados.values())
         contactados = sum(estados.get(e, 0) for e in _CONTACTADOS)
@@ -1625,3 +1641,26 @@ def eliminar_avisos(body: AvisosEliminar, db: Session = Depends(get_db)):
     if body.ids:
         db.query(Aviso).filter(Aviso.id.in_(body.ids)).delete(synchronize_session=False)
         db.commit()
+
+
+# ── Test visuales: historial de corridas ─────────────────────────────────────
+@router.get("/test-runs", response_model=list[TestRunResumen])
+def listar_test_runs(db: Session = Depends(get_db), limit: int = 50):
+    """Historial de corridas de tests visuales, más recientes primero (sin el
+    detalle por test, que se trae al abrir una)."""
+    limit = max(1, min(limit, 200))
+    return (
+        db.query(TestRun)
+        .order_by(TestRun.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+@router.get("/test-runs/{run_id}", response_model=TestRunDetalleOut)
+def detalle_test_run(run_id: int, db: Session = Depends(get_db)):
+    """Detalle de una corrida: resultado por test, con el error de los que fallaron."""
+    run = db.get(TestRun, run_id)
+    if not run:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Corrida no encontrada")
+    return run

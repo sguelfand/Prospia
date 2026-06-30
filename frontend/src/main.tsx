@@ -13,6 +13,7 @@ import Preguntas from './pages/Preguntas'
 import MonitoreoPage from './pages/MonitoreoPage'
 import Tokens from './pages/Tokens'
 import Calidad from './pages/Calidad'
+import TestVisuales from './pages/TestVisuales'
 import Layout from './components/Layout'
 import { ThemeProvider } from './theme'
 import './index.css'
@@ -41,6 +42,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="monitoreo/servicios" element={<MonitoreoPage />} />
           <Route path="monitoreo/tokens" element={<Tokens />} />
           <Route path="monitoreo/calidad" element={<Calidad />} />
+          <Route path="test-visuales" element={<TestVisuales />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, BarChart2, ChevronDown, ChevronLeft, ChevronRight, Coins, Eye, ListTodo, LogOut, Menu, MessageCircleQuestion, MessageSquareWarning, Search, Server, Settings, ShieldCheck, Users, X } from 'lucide-react'
+import { Activity, AlertTriangle, BarChart2, ChevronDown, ChevronLeft, ChevronRight, Coins, Eye, FlaskConical, ListTodo, LogOut, Menu, MessageCircleQuestion, MessageSquareWarning, Search, Server, Settings, ShieldCheck, Users, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
@@ -13,7 +13,7 @@ const nav = [
   { to: '/terminos',  label: 'Términos',  icon: Search },
 ]
 
-type ClienteOpt = { tenant_id: number; nombre: string; fuente: string }
+type ClienteOpt = { tenant_id: number; nombre: string; fuente: string; es_test?: boolean }
 
 /* Clases del item de navegación (sidebar siempre navy) */
 function navClass(active: boolean, collapsed = false) {
@@ -52,7 +52,9 @@ export default function Layout() {
 
   useEffect(() => {
     if (nivel === 1 && !impersonating) {
-      api.get<ClienteOpt[]>('/admin/clientes')
+      // include_test=true: este es el ÚNICO lugar donde aparecen los tenants de
+      // prueba (qa-test). El resto de la app los excluye.
+      api.get<ClienteOpt[]>('/admin/clientes?include_test=true')
         .then(cs => setClientes(cs.filter(c => c.fuente === 'plataforma')))
         .catch(() => {})
     }
@@ -142,7 +144,7 @@ export default function Layout() {
       >
         <option value="">Ver como un cliente…</option>
         {clientes.map(c => (
-          <option key={c.tenant_id} value={c.tenant_id} className="text-ink">{c.nombre}</option>
+          <option key={c.tenant_id} value={c.tenant_id} className="text-ink">{c.nombre}{c.es_test ? ' · test' : ''}</option>
         ))}
       </select>
     </div>
@@ -232,6 +234,16 @@ export default function Layout() {
               >
                 <ShieldCheck size={16} />
                 Admin clientes
+              </Link>
+            )}
+            {nivel === 1 && (
+              <Link
+                to="/test-visuales"
+                onClick={() => setMobileOpen(false)}
+                className={navClass(location.pathname.startsWith('/test-visuales'))}
+              >
+                <FlaskConical size={16} />
+                Test visuales
               </Link>
             )}
             {nivel === 1 && renderMonitoreo(false, () => setMobileOpen(false))}
@@ -340,6 +352,16 @@ export default function Layout() {
           >
             <ShieldCheck size={16} />
             {!collapsed && 'Admin clientes'}
+          </Link>
+        )}
+        {nivel === 1 && (
+          <Link
+            to="/test-visuales"
+            title={collapsed ? 'Test visuales' : undefined}
+            className={navClass(location.pathname.startsWith('/test-visuales'), collapsed)}
+          >
+            <FlaskConical size={16} />
+            {!collapsed && 'Test visuales'}
           </Link>
         )}
         {nivel === 1 && renderMonitoreo(collapsed)}

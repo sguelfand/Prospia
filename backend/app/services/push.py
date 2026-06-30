@@ -315,7 +315,9 @@ def _notificar_pregunta_claude(pregunta_id: int, header: str | None, pregunta: s
     db = SessionLocal()
     try:
         marca = f"{header} · " if header else ""
-        title = "🤔 Claude te pregunta algo" if n_preguntas <= 1 else f"🤔 Claude te hace {n_preguntas} preguntas"
+        base_title = "🤔 Claude te pregunta algo" if n_preguntas <= 1 else f"🤔 Claude te hace {n_preguntas} preguntas"
+        # Lleva el #N para poder distinguir cada pregunta (mismo número que en la pantalla).
+        title = f"{base_title} (#{pregunta_id})"
         resumen = (pregunta or "").strip().replace("\n", " ")
         cola = f" · +{n_preguntas - 1} más" if n_preguntas > 1 else (f" · {n_opciones} opciones" if n_opciones else "")
         body = (marca + resumen)[:140] + cola

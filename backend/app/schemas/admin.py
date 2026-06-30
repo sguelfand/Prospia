@@ -14,6 +14,7 @@ class ClienteResumen(BaseModel):
     interesados_mes: int          # interesados creados este mes
     ultimo_prospect: datetime | None  # created_at del prospect más reciente
     fuente: str = "plataforma"    # "plataforma" | "etiguel" (adapter Monday, Fase 4)
+    es_test: bool = False         # tenant de prueba (qa-test): solo en "Ver como cliente"
 
 
 class AdminOverview(BaseModel):
@@ -526,3 +527,41 @@ class ResetNumeroPruebaTenantOut(BaseModel):
     webhook_estado: str
     webhook_respuesta: dict | None = None
     webhook_error: str | None = None
+
+
+# ── Test visuales: historial de corridas (Playwright) ─────────────────────────
+class TestRunTestDetalle(BaseModel):
+    """Resultado de un test dentro de una corrida."""
+    nombre: str
+    archivo: str | None = None
+    estado: str                 # passed | failed | skipped
+    error: str | None = None    # mensaje del fallo (si estado=failed)
+    duracion_ms: int = 0
+
+
+class TestRunResumen(BaseModel):
+    """Una corrida, sin el detalle por test (para la lista del historial)."""
+    id: int
+    created_at: datetime
+    origen: str
+    total: int
+    pasaron: int
+    fallaron: int
+    duracion_ms: int
+
+    model_config = {"from_attributes": True}
+
+
+class TestRunDetalleOut(TestRunResumen):
+    """Una corrida con el detalle por test (al abrirla en el historial)."""
+    detalle: list[TestRunTestDetalle] = []
+
+
+class TestRunIn(BaseModel):
+    """Lo que postea el reporter al terminar de correr la suite."""
+    origen: str = "local"       # local | servidor
+    total: int = 0
+    pasaron: int = 0
+    fallaron: int = 0
+    duracion_ms: int = 0
+    detalle: list[TestRunTestDetalle] = []

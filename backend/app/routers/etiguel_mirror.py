@@ -17,7 +17,8 @@ from app.models.agent_error import AgentError
 from app.models.consulta import Consulta
 from app.models.etiguel_mirror import EtiguelMirror, EtiguelMirrorMensaje
 from app.models.pregunta_claude import PreguntaClaude
-from app.schemas.admin import AgentErrorIn, AvisoIn, ConsultaIn, EtiguelMirrorIn, PreguntaClaudeIn
+from app.models.test_run import TestRun
+from app.schemas.admin import AgentErrorIn, AvisoIn, ConsultaIn, EtiguelMirrorIn, PreguntaClaudeIn, TestRunIn
 from app.models.tenant import Tenant, TenantConfig
 from app.services import email as email_svc
 from app.services import push
@@ -48,6 +49,29 @@ def _resolver_dueno(x_mirror_token: str | None, db: Session):
         if tenant:
             return False, tenant, cfg
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token inválido")
+
+
+@router.post("/test-run", status_code=status.HTTP_201_CREATED)
+def ingest_test_run(
+    body: TestRunIn,
+    x_mirror_token: str | None = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Registra una corrida de los tests visuales (la postea el reporter al
+    terminar). Autenticado con el token global. Devuelve el id creado."""
+    _check_token(x_mirror_token)
+    run = TestRun(
+        origen=body.origen or "local",
+        total=body.total,
+        pasaron=body.pasaron,
+        fallaron=body.fallaron,
+        duracion_ms=body.duracion_ms,
+        detalle=[d.model_dump() for d in body.detalle],
+    )
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+    return {"id": run.id}
 
 
 @router.post("/etiguel-mirror")

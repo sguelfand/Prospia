@@ -100,6 +100,11 @@ def run_migrations():
         # superadmin ⇔ nivel 1 (idempotente)
         conn.execute(text("UPDATE users SET nivel = 1 WHERE role = 'superadmin'"))
 
+        # ── tenants.is_test: tenant de prueba (qa-test), oculto de agregados ──
+        conn.execute(text(
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS is_test BOOLEAN NOT NULL DEFAULT false"
+        ))
+
         # ── pendientes: cola de procesamiento (tildar + Procesar) ──
         conn.execute(text(
             "ALTER TABLE pendientes ADD COLUMN IF NOT EXISTS cola_estado VARCHAR(20)"

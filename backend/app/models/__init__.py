@@ -17,5 +17,6 @@ from app.models.camila_revision import CamilaRevision, CamilaConsolidacion, Cami
 from app.models.anthropic_usage import AnthropicUsage
 from app.models.dashboard_layout import DashboardLayout
 from app.models.user_preference import UserPreference
+from app.models.test_run import TestRun
 
-__all__ = ["Tenant", "TenantConfig", "User", "Rubro", "Termino", "Prospect", "ProspectHistorial", "ProspectMensaje", "Device", "PushMute", "EtiguelMirror", "EtiguelMirrorMensaje", "AgentError", "Consulta", "Pendiente", "IntakeSubmission", "PreguntaClaude", "CamilaRevision", "CamilaConsolidacion", "CamilaPromptAudit", "AnthropicUsage", "DashboardLayout", "UserPreference"]
+__all__ = ["Tenant", "TenantConfig", "User", "Rubro", "Termino", "Prospect", "ProspectHistorial", "ProspectMensaje", "Device", "PushMute", "EtiguelMirror", "EtiguelMirrorMensaje", "AgentError", "Consulta", "Pendiente", "IntakeSubmission", "PreguntaClaude", "CamilaRevision", "CamilaConsolidacion", "CamilaPromptAudit", "AnthropicUsage", "DashboardLayout", "UserPreference", "TestRun"]
