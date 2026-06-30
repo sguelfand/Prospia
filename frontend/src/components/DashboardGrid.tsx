@@ -17,9 +17,12 @@ type Layouts = { [bp: string]: LayoutItem[] }
 const COLS = { lg: 12, md: 12, sm: 6, xs: 4, xxs: 2 }
 const BREAKPOINTS = { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }
 
-// Títulos personalizados por widget (los renombra el usuario, se guardan por usuario).
-type TitulosCtx = { get: (id: string, def: string) => string; set: (id: string, t: string) => void }
-const TitulosContext = createContext<TitulosCtx>({ get: (_i, d) => d, set: () => {} })
+// Contexto del tablero: títulos custom (renombrables).
+type WidgetCtx = {
+  get: (id: string, def: string) => string
+  set: (id: string, t: string) => void
+}
+const TitulosContext = createContext<WidgetCtx>({ get: (_i, d) => d, set: () => {} })
 
 /**
  * Tablero de widgets movibles + redimensionables + responsive.
@@ -64,7 +67,7 @@ export function DashboardGrid({
     }, 800)
   }
 
-  const titCtx: TitulosCtx = {
+  const titCtx: WidgetCtx = {
     get: (id, def) => titulos[id] ?? def,
     set: (id, t) => {
       setTitulos((prev) => {
@@ -157,7 +160,8 @@ export function Widget({ id, title = '', fuente, right, children }: {
         {fuente && <FuenteChip fuente={fuente} />}
         {right && <div className="ml-auto shrink-0">{right}</div>}
       </div>
-      <div className="flex-1 min-h-0 overflow-auto p-4">{children}</div>
+      {/* min-h-0 permite que un gráfico hijo con h-full llene el alto del widget */}
+      <div className="flex-1 min-h-0 overflow-auto p-4 flex flex-col">{children}</div>
     </div>
   )
 }

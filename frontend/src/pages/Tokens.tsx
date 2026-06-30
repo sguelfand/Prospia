@@ -50,7 +50,7 @@ type DiaDetalle = { fecha: string; totales: Totales; por_modelo: Record<string, 
 type Ultimo = DiaDetalle
 type DiaTrend = { fecha: string; costo_usd: number; costo_mensajes: number; costo_errores: number }
 type MesTrend = { mes: string; costo_usd: number; conversaciones: number; llamadas: number; costo_por_conversacion: number }
-type Oportunidad = { id: number; tipo: string; clave: string; severidad: 'alta' | 'media' | 'baja'; titulo: string; detalle: string; estado: string; primera_vez: string | null }
+type Oportunidad = { id: number; tipo: string; clave: string; severidad: 'alta' | 'media' | 'baja'; titulo: string; detalle: string; estado: string; primera_vez: string | null; ultima_vez: string | null }
 type Source = { id: string; nombre: string }
 type GenCliente = {
   id: string; nombre: string; gasto_mes_actual: number; gasto_mes_anterior: number
@@ -80,6 +80,8 @@ function haceDias(iso: string | null): string {
   return d <= 0 ? 'hoy' : d === 1 ? 'hace 1 día' : `hace ${d} días`
 }
 const hhmm = (iso?: string | null) => iso ? new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : ''
+// Fecha + hora absolutas, ej "28/06 14:35" — datar la oportunidad en el momento del uso.
+const fechaHora = (iso?: string | null) => iso ? new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''
 
 export default function Tokens() {
   const [sources, setSources] = useState<Source[]>([])
@@ -291,7 +293,7 @@ export default function Tokens() {
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-primary/50 text-primary bg-primary/10" title="Detectada por el analista de costos (IA), no por reglas fijas">IA</span>
                         )}
                         <span className="text-sm font-medium text-ink">{o.titulo}</span>
-                        <span className="text-[11px] text-muted ml-auto">detectada {haceDias(o.primera_vez)}</span>
+                        <span className="text-[11px] text-muted ml-auto" title={o.ultima_vez && o.ultima_vez !== o.primera_vez ? `Última señal: ${fechaHora(o.ultima_vez)}` : undefined}>detectada {fechaHora(o.primera_vez)} ({haceDias(o.primera_vez)})</span>
                       </div>
                       <p className="text-xs text-muted mt-1.5">{o.detalle}</p>
                     </div>
@@ -315,16 +317,16 @@ export default function Tokens() {
               </span>
             }
           >
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid-auto-cards">
               {[
                 { l: 'Costo del día', v: usd(t?.costo_usd ?? 0), alert: false },
                 { l: 'Conversaciones', v: fmt(det?.n_conversaciones ?? 0), alert: false },
                 { l: 'Errores', v: fmt(t?.errores ?? 0), alert: (t?.errores ?? 0) > 0 },
                 { l: 'Timeouts', v: fmt(t?.timeouts ?? 0), alert: (t?.timeouts ?? 0) > 0 },
               ].map((k) => (
-                <div key={k.l} className="bg-app border border-line rounded-xl p-3">
-                  <div className={`text-2xl font-semibold ${k.alert ? 'text-red-500' : 'text-ink'}`}>{k.v}</div>
-                  <div className="text-xs text-muted mt-1">{k.l}</div>
+                <div key={k.l} className="cq bg-app border border-line rounded-xl p-3">
+                  <div className={`fluid-num font-semibold ${k.alert ? 'text-red-500' : 'text-ink'}`}>{k.v}</div>
+                  <div className="text-xs text-muted mt-1 truncate">{k.l}</div>
                 </div>
               ))}
             </div>
@@ -452,7 +454,7 @@ function BarrasDia({ dias, sel, onSelect }: { dias: DiaTrend[]; sel?: string; on
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * top)
   const h = hi != null ? dias[hi] : null
   return (
-    <div className="relative">
+    <div className="relative flex-1 min-h-0 w-full">
       {h && (
         <div className="absolute top-0 right-2 bg-app border border-line rounded-lg px-3 py-2 text-xs z-10 shadow whitespace-nowrap">
           <div className="font-semibold text-ink mb-0.5">{h.fecha}</div>
@@ -461,7 +463,7 @@ function BarrasDia({ dias, sel, onSelect }: { dias: DiaTrend[]; sel?: string; on
           <div className="text-muted">Errores: <span className="font-medium" style={{ color: '#ef4444' }}>{usd3(h.costo_errores)}</span></div>
         </div>
       )}
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 320 }}>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full" style={{ minHeight: 160 }}>
         {ticks.map((tk, i) => (
           <g key={i}>
             <line x1={padL} y1={y(tk)} x2={W - padR} y2={y(tk)} stroke="#243454" strokeWidth={1} />
@@ -509,7 +511,7 @@ function LineaMensual({ meses, hover, setHover }: { meses: MesTrend[]; hover: nu
   const h = hover != null ? meses[hover] : null
   const ticks = [0, 0.5, 1].map((f) => f * top)
   return (
-    <div className="relative flex-1">
+    <div className="relative flex-1 min-h-0 w-full">
       {h && (
         <div className="absolute top-0 right-1 bg-app border border-line rounded-lg px-3 py-2 text-xs z-10 shadow whitespace-nowrap">
           <div className="font-semibold text-ink mb-0.5">{h.mes}</div>
@@ -518,7 +520,7 @@ function LineaMensual({ meses, hover, setHover }: { meses: MesTrend[]; hover: nu
           <div className="text-muted">Prom. $/conv.: <span className="text-ink font-medium">{usd3(h.costo_por_conversacion)}</span></div>
         </div>
       )}
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 300 }}>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full" style={{ minHeight: 160 }}>
         <defs>
           <linearGradient id="areaTok" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#F5B23D" stopOpacity={0.35} />

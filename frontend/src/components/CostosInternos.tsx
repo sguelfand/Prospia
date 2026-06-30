@@ -92,9 +92,11 @@ export function CostosHistorico({ data }: { data: AnthUsage }) {
   const { nombres, color } = colorMap(data)
   if (data.meses.length === 0) return <p className="text-sm text-muted">Sin histórico todavía.</p>
   return (
-    <div>
-      <Stacked meses={data.meses} nombres={nombres} color={color} hover={hover} setHover={setHover} />
-      <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
+    <div className="h-full flex flex-col min-h-0">
+      <div className="flex-1 min-h-0">
+        <Stacked meses={data.meses} nombres={nombres} color={color} hover={hover} setHover={setHover} />
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3 shrink-0">
         {nombres.map((n) => (
           <span key={n} className="flex items-center gap-1.5 text-[11.5px] text-ink-soft">
             <span className="w-2.5 h-2.5 rounded-sm" style={{ background: color(n) }} />{corto(n)}
@@ -109,9 +111,9 @@ export function CostosHistorico({ data }: { data: AnthUsage }) {
 function Kpi({ label, value, amber, tone }: { label: string; value: string; amber?: boolean; tone?: 'up' | 'down' }) {
   const c = tone === 'up' ? 'text-red-400' : tone === 'down' ? 'text-emerald-400' : amber ? 'text-amber-400' : 'text-ink'
   return (
-    <div className="bg-app border border-line rounded-xl p-3">
-      <div className={`text-xl font-semibold ${c}`}>{value}</div>
-      <div className="text-[11px] text-muted mt-1">{label}</div>
+    <div className="cq bg-app border border-line rounded-xl p-3">
+      <div className={`fluid-num font-semibold ${c}`}>{value}</div>
+      <div className="text-[11px] text-muted mt-1 truncate">{label}</div>
     </div>
   )
 }
@@ -148,7 +150,7 @@ function Stacked({ meses, nombres, color, hover, setHover }: {
   const y = (v: number) => padT + ch - (v / maxT) * ch
   const grid = [0, 0.25, 0.5, 0.75, 1].map((p) => maxT * p)
   return (
-    <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
+    <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ minHeight: 160 }}>
       {grid.map((v, i) => (
         <g key={i}>
           <line x1={padL} y1={y(v)} x2={W - padR} y2={y(v)} stroke="#243454" strokeWidth="1" />

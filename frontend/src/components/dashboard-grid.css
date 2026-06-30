@@ -1,5 +1,23 @@
 /* react-grid-layout — ajustes para el tema oscuro de Prospia */
 
+/* Grilla de tarjetas KPI que se acomoda por el ANCHO REAL del contenedor (no del
+ * viewport). Necesario dentro de los widgets: el widget puede ser angosto aunque
+ * la ventana sea ancha, así que los breakpoints md:/lg: de Tailwind no sirven. */
+.grid-auto-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+/* Número grande (KPI/plata) que escala con el ANCHO de su tarjeta, no del viewport.
+ * La tarjeta debe llevar `.cq` (container) y el número `.fluid-num`. */
+.cq { container-type: inline-size; }
+.fluid-num {
+  font-size: clamp(1rem, 14cqi, 1.6rem);
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
 /* Sombra del lugar donde caerá el widget al arrastrar/redimensionar */
 .react-grid-item.react-grid-placeholder {
   background: #F5B23D !important;

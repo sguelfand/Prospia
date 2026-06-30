@@ -94,11 +94,11 @@ function KpiCard({ label, value, sub, color = '#6366f1', onClick }: {
   return (
     <div
       onClick={onClick}
-      className={`bg-card rounded-xl p-4 flex flex-col gap-1${onClick ? ' cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+      className={`cq bg-card rounded-xl p-4 flex flex-col gap-1${onClick ? ' cursor-pointer hover:shadow-md transition-shadow' : ''}`}
     >
-      <p className="text-xs text-faint font-medium uppercase tracking-wide">{label}</p>
-      <p className="text-2xl md:text-3xl font-bold" style={{ color }}>{value}</p>
-      {sub && <p className="text-xs text-faint">{sub}</p>}
+      <p className="text-xs text-faint font-medium uppercase tracking-wide truncate">{label}</p>
+      <p className="fluid-num font-bold" style={{ color }}>{value}</p>
+      {sub && <p className="text-xs text-faint truncate">{sub}</p>}
     </div>
   )
 }
@@ -152,10 +152,10 @@ function TerminoChart({ data, navigate }: { data: TerminoRow[]; navigate: Return
   }
 
   return (
-    <div>
-      <p className="text-xs text-faint mb-2">Pasá el mouse por una barra y clickeá el estado</p>
-      <div ref={wrapRef} className="relative" onMouseLeave={() => setHover(null)}>
-        <ResponsiveContainer width="100%" height={260}>
+    <div className="h-full flex flex-col min-h-0">
+      <p className="text-xs text-faint mb-2 shrink-0">Pasá el mouse por una barra y clickeá el estado</p>
+      <div ref={wrapRef} className="relative flex-1 min-h-0" style={{ minHeight: 180 }} onMouseLeave={() => setHover(null)}>
+        <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 5, bottom: 5, left: -10, right: 5 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="termino" tick={DiagonalTick as any} interval={0} height={80} />
@@ -287,7 +287,7 @@ function ClienteDashboard() {
       <DashboardGrid pantalla="dashboard-cliente" defaultLayout={LAYOUT_CLIENTE}>
         <div key="mesActual">
           <Widget id="mesActual" title={`Mes actual — ${mesNombre}`}>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="grid-auto-cards">
           <KpiCard
             label="Prospects generados"
             value={fmt(mes_actual.prospects)}
@@ -381,7 +381,8 @@ function ClienteDashboard() {
         <div key="evolucion">
           <Widget id="evolucion" title="Evolución histórica">
           {mesData.length === 0 ? <p className="text-sm text-muted">Sin histórico todavía.</p> : (
-          <ResponsiveContainer width="100%" height={220}>
+          <div className="flex-1 min-h-0" style={{ minHeight: 180 }}>
+          <ResponsiveContainer width="100%" height="100%">
             <LineChart data={mesData} margin={{ left: -10 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
@@ -397,6 +398,7 @@ function ClienteDashboard() {
               <Line type="monotone" dataKey="No le interesa"   stroke="#6b7280" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 5 }} strokeDasharray="4 2" />
             </LineChart>
           </ResponsiveContainer>
+          </div>
           )}
           </Widget>
         </div>
@@ -427,9 +429,10 @@ function CompBarChart({ title, sub, data, color, pct, onPick }: {
   onPick: (c: { tenant_id: number; fuente: string }) => void
 }) {
   return (
-    <div>
-      {sub && <p className="text-xs text-faint mb-2">{sub}</p>}
-      <ResponsiveContainer width="100%" height={Math.max(160, data.length * 38)}>
+    <div className="h-full flex flex-col min-h-0">
+      {sub && <p className="text-xs text-faint mb-2 shrink-0">{sub}</p>}
+      <div className="flex-1 min-h-0" style={{ minHeight: Math.max(160, data.length * 38) }}>
+      <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} layout="vertical" margin={{ top: 5, bottom: 5, left: 10, right: 16 }}>
           <CartesianGrid strokeDasharray="3 3" horizontal={false} />
           <XAxis type="number" tick={{ fontSize: 10 }} domain={pct ? [0, 100] : undefined} />
@@ -440,6 +443,7 @@ function CompBarChart({ title, sub, data, color, pct, onPick }: {
             onClick={(d: any) => onPick(d?.payload)} />
         </BarChart>
       </ResponsiveContainer>
+      </div>
     </div>
   )
 }
@@ -468,30 +472,31 @@ function GastosClientes() {
   const total = rows.reduce((a, r) => a + r.gasto_mes_actual, 0)
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-end">
+    <div className="h-full flex flex-col gap-3 min-h-0">
+      <div className="flex items-center justify-end shrink-0">
         <button onClick={() => navigate('/monitoreo/tokens')} className="text-xs text-accent hover:underline">ver detalle →</button>
       </div>
       {/* cards del mes actual */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid-auto-cards">
         {rows.map((r, i) => (
-          <div key={r.id} className="bg-card rounded-xl shadow p-4">
-            <div className="text-2xl font-semibold tabular-nums" style={{ color: COSTO_COLORS[i % COSTO_COLORS.length] }}>${r.gasto_mes_actual.toFixed(2)}</div>
-            <div className="text-xs text-faint mt-1">{r.nombre}</div>
+          <div key={r.id} className="cq bg-card rounded-xl shadow p-4">
+            <div className="fluid-num font-semibold tabular-nums" style={{ color: COSTO_COLORS[i % COSTO_COLORS.length] }}>${r.gasto_mes_actual.toFixed(2)}</div>
+            <div className="text-xs text-faint mt-1 truncate">{r.nombre}</div>
             <div className="text-[11px] text-faint">{fmt(r.llamadas_mes)} llamadas · mes corriente</div>
           </div>
         ))}
         {rows.length > 1 && (
-          <div className="bg-card rounded-xl shadow p-4 border border-line">
-            <div className="text-2xl font-semibold tabular-nums text-ink">${total.toFixed(2)}</div>
+          <div className="cq bg-card rounded-xl shadow p-4 border border-line">
+            <div className="fluid-num font-semibold tabular-nums text-ink">${total.toFixed(2)}</div>
             <div className="text-xs text-faint mt-1">Total clientes</div>
           </div>
         )}
       </div>
       {/* gráfico mensual por cliente */}
-      <div className="border-t border-line pt-3">
-        <h3 className="font-semibold mb-1 text-sm">Gasto mensual por cliente (USD)</h3>
-        <ResponsiveContainer width="100%" height={260}>
+      <div className="border-t border-line pt-3 flex-1 min-h-0 flex flex-col" style={{ minHeight: 200 }}>
+        <h3 className="font-semibold mb-1 text-sm shrink-0">Gasto mensual por cliente (USD)</h3>
+        <div className="flex-1 min-h-0">
+        <ResponsiveContainer width="100%" height="100%">
           <BarChart data={dataset} margin={{ top: 8, bottom: 5, left: 0, right: 8 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
@@ -502,6 +507,7 @@ function GastosClientes() {
             ))}
           </BarChart>
         </ResponsiveContainer>
+        </div>
       </div>
     </div>
   )
@@ -535,7 +541,7 @@ function ComparativaDashboard() {
       <DashboardGrid pantalla="dashboard-comparativa" defaultLayout={LAYOUT_COMPARATIVA}>
         <div key="kpisGlobal">
           <Widget id="kpisGlobal" title="Totales — todos los clientes">
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="grid-auto-cards">
         <KpiCard label="Clientes"        value={fmt(data.total_clientes)}  color="#1e293b" />
         <KpiCard label="Prospects"       value={fmt(data.total_prospects)} color="#3b82f6" />
         <KpiCard label="En conversación" value={fmt(data.en_conversacion)}  color={ESTADOS.en_conversacion.color} />
