@@ -326,11 +326,11 @@ function BarrasDia({ dias, sel, onSelect }: { dias: DiaTrend[]; sel?: string; on
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 320 }}>
         {ticks.map((tk, i) => (
           <g key={i}>
-            <line x1={padL} y1={y(tk)} x2={W - padR} y2={y(tk)} stroke="#94a3b8" strokeOpacity={0.18} strokeWidth={1} />
-            <text x={padL - 8} y={y(tk) + 3} textAnchor="end" fontSize={10} fill="#94a3b8">{usd(tk)}</text>
+            <line x1={padL} y1={y(tk)} x2={W - padR} y2={y(tk)} stroke="#243454" strokeWidth={1} />
+            <text x={padL - 8} y={y(tk) + 3} textAnchor="end" fontSize={10} fill="#5C6E90" fontFamily="JetBrains Mono">{usd(tk)}</text>
           </g>
         ))}
-        <line x1={padL} y1={H - padB} x2={W - padR} y2={H - padB} stroke="#94a3b8" strokeOpacity={0.4} strokeWidth={1} />
+        <line x1={padL} y1={H - padB} x2={W - padR} y2={H - padB} stroke="#243454" strokeWidth={1} />
         {dias.map((d, i) => {
           const hMsg = (H - padB) - y(d.costo_mensajes)
           const hErr = (H - padB) - y(d.costo_errores)
@@ -347,9 +347,9 @@ function BarrasDia({ dias, sel, onSelect }: { dias: DiaTrend[]; sel?: string; on
               {d.costo_errores > 0 && <rect x={xc(i) - bw / 2} y={yTop} width={bw} height={hErr} fill="#ef4444" rx={2} />}
               {isSel && <rect x={xc(i) - bw / 2 - 1.5} y={yTop - 1.5} width={bw + 3} height={(H - padB) - yTop + 1.5} fill="none" stroke="#F5B23D" strokeWidth={1.5} rx={3} />}
               {/* total arriba */}
-              {d.costo_usd > 0 && <text x={xc(i)} y={yTop - 6} textAnchor="middle" fontSize={10.5} fontWeight={700} fill="currentColor" className="text-ink">{usd(d.costo_usd)}</text>}
+              {d.costo_usd > 0 && <text x={xc(i)} y={yTop - 6} textAnchor="middle" fontSize={10.5} fontWeight={700} fill="#EEF3FB" fontFamily="JetBrains Mono">{usd(d.costo_usd)}</text>}
               {/* fecha rotada */}
-              <text x={xc(i)} y={H - padB + 14} textAnchor="end" fontSize={10} fill="#94a3b8" transform={`rotate(-40 ${xc(i)} ${H - padB + 14})`}>{d.fecha.slice(5)}</text>
+              <text x={xc(i)} y={H - padB + 14} textAnchor="end" fontSize={10} fill="#8294B4" transform={`rotate(-40 ${xc(i)} ${H - padB + 14})`}>{d.fecha.slice(5)}</text>
               <rect x={xc(i) - slot / 2} y={padT} width={slot} height={H - padT - padB} fill="transparent" />
             </g>
           )
@@ -389,20 +389,20 @@ function LineaMensual({ meses, hover, setHover }: { meses: MesTrend[]; hover: nu
         </defs>
         {ticks.map((tk, i) => (
           <g key={i}>
-            <line x1={padL} y1={y(tk)} x2={W - padR} y2={y(tk)} stroke="#94a3b8" strokeOpacity={0.18} strokeWidth={1} />
-            <text x={padL - 8} y={y(tk) + 3} textAnchor="end" fontSize={9.5} fill="#94a3b8">{usd(tk)}</text>
+            <line x1={padL} y1={y(tk)} x2={W - padR} y2={y(tk)} stroke="#243454" strokeWidth={1} />
+            <text x={padL - 8} y={y(tk) + 3} textAnchor="end" fontSize={9.5} fill="#5C6E90" fontFamily="JetBrains Mono">{usd(tk)}</text>
           </g>
         ))}
-        <line x1={padL} y1={padT} x2={padL} y2={H - padB} stroke="#94a3b8" strokeOpacity={0.4} strokeWidth={1} />
-        <line x1={padL} y1={H - padB} x2={W - padR} y2={H - padB} stroke="#94a3b8" strokeOpacity={0.4} strokeWidth={1} />
+        <line x1={padL} y1={padT} x2={padL} y2={H - padB} stroke="#243454" strokeWidth={1} />
+        <line x1={padL} y1={H - padB} x2={W - padR} y2={H - padB} stroke="#243454" strokeWidth={1} />
         {meses.length > 1 && <polygon points={areaPts} fill="url(#areaTok)" />}
         <polyline points={linePts} fill="none" stroke="#F5B23D" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
         {meses.map((m, i) => (
           <g key={m.mes} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} style={{ cursor: 'pointer' }}>
-            <text x={x(i)} y={y(m.costo_usd) - 10} textAnchor="middle" fontSize={11} fontWeight={700} fill="currentColor" className="text-ink">{usd(m.costo_usd)}</text>
-            <circle cx={x(i)} cy={y(m.costo_usd)} r={hover === i ? 5.5 : 3.5} fill="#F5B23D" stroke="#fff" strokeWidth={hover === i ? 1.5 : 0} />
+            <text x={x(i)} y={y(m.costo_usd) - 10} textAnchor="middle" fontSize={11} fontWeight={700} fill="#EEF3FB" fontFamily="JetBrains Mono">{usd(m.costo_usd)}</text>
+            <circle cx={x(i)} cy={y(m.costo_usd)} r={hover === i ? 5.5 : 3.5} fill="#F5B23D" stroke="#13213C" strokeWidth={hover === i ? 2 : 0} />
             <rect x={x(i) - 20} y={padT} width={40} height={H - padT - padB} fill="transparent" />
-            <text x={x(i)} y={H - 9} textAnchor="middle" fontSize={9.5} fill="#94a3b8">{m.mes}</text>
+            <text x={x(i)} y={H - 9} textAnchor="middle" fontSize={9.5} fill="#8294B4">{m.mes}</text>
           </g>
         ))}
       </svg>

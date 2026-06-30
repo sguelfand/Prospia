@@ -215,7 +215,7 @@ export default function TokensScreen() {
             <View style={styles.legendRow}>
               <Text style={styles.cardTitle}>Costo por día</Text>
               <View style={styles.legend}>
-                <Text style={styles.legItem}><Text style={{ color: colors.blue }}>■</Text> mensajes  <Text style={{ color: colors.red }}>■</Text> errores</Text>
+                <Text style={styles.legItem}><Text style={{ color: colors.primary }}>■</Text> mensajes  <Text style={{ color: colors.red }}>■</Text> errores</Text>
               </View>
             </View>
             <Text style={styles.sub}>Tocá un día para ver sus conversaciones.</Text>
@@ -230,7 +230,7 @@ export default function TokensScreen() {
                     {selBar && d.costo_usd > 0 ? <Text style={styles.barVal}>{usd(d.costo_usd)}</Text> : null}
                     <View style={{ height: totalH, width: "72%", justifyContent: "flex-end", opacity: selBar || !diaSel ? 1 : 0.5 }}>
                       {errH > 0 && <View style={{ height: errH, backgroundColor: colors.red, borderTopLeftRadius: 3, borderTopRightRadius: 3 }} />}
-                      <View style={{ flex: 1, backgroundColor: selBar ? colors.primary : "#2F4068" }} />
+                      <View style={{ flex: 1, backgroundColor: colors.primary }} />
                     </View>
                     <Text style={[styles.barLabel, selBar && { color: colors.primary, fontWeight: "700" }]}>{d.fecha.slice(5)}</Text>
                   </TouchableOpacity>
