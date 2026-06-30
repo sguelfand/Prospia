@@ -464,52 +464,67 @@ function GastosClientes() {
   if (rows.length === 0) return <p className="text-sm text-muted">Sin datos de costo todavía.</p>
 
   const meses = Array.from(new Set(rows.flatMap(r => r.serie_mensual.map(m => m.mes)))).sort()
-  const dataset = meses.map(mes => {
-    const o: Record<string, number | string> = { mes }
-    rows.forEach(r => { o[r.id] = r.serie_mensual.find(m => m.mes === mes)?.costo_usd ?? 0 })
-    return o
-  })
   const total = rows.reduce((a, r) => a + r.gasto_mes_actual, 0)
 
   return (
-    <div className="h-full flex flex-col gap-3 min-h-0">
-      <div className="flex items-center justify-end shrink-0">
-        <button onClick={() => navigate('/monitoreo/tokens')} className="text-xs text-accent hover:underline">ver detalle →</button>
-      </div>
-      {/* cards del mes actual */}
-      <div className="grid-auto-cards">
-        {rows.map((r, i) => (
-          <div key={r.id} className="cq bg-card rounded-xl shadow p-4">
-            <div className="fluid-num font-semibold tabular-nums" style={{ color: COSTO_COLORS[i % COSTO_COLORS.length] }}>${r.gasto_mes_actual.toFixed(2)}</div>
-            <div className="text-xs text-faint mt-1 truncate">{r.nombre}</div>
-            <div className="text-[11px] text-faint">{fmt(r.llamadas_mes)} llamadas · mes corriente</div>
-          </div>
-        ))}
-        {rows.length > 1 && (
-          <div className="cq bg-card rounded-xl shadow p-4 border border-line">
-            <div className="fluid-num font-semibold tabular-nums text-ink">${total.toFixed(2)}</div>
-            <div className="text-xs text-faint mt-1">Total clientes</div>
-          </div>
-        )}
-      </div>
-      {/* gráfico mensual por cliente */}
-      <div className="border-t border-line pt-3 flex-1 min-h-0 flex flex-col" style={{ minHeight: 200 }}>
-        <h3 className="font-semibold mb-1 text-sm shrink-0">Gasto mensual por cliente (USD)</h3>
-        <div className="flex-1 min-h-0">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={dataset} margin={{ top: 8, bottom: 5, left: 0, right: 8 }}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
-            <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => '$' + v} width={48} />
-            <Tooltip formatter={(v: number, n: string) => ['$' + Number(v).toFixed(2), rows.find(r => r.id === n)?.nombre ?? n]} />
-            {rows.map((r, i) => (
-              <Bar key={r.id} dataKey={r.id} stackId="g" fill={COSTO_COLORS[i % COSTO_COLORS.length]} radius={[2, 2, 0, 0]} />
-            ))}
-          </BarChart>
-        </ResponsiveContainer>
+    <div className="h-full flex flex-col min-h-0">
+      {/* KPI total del mes + acceso al detalle */}
+      <div className="flex items-baseline justify-between shrink-0 mb-2 gap-2">
+        <div className="cq min-w-0">
+          <span className="fluid-num font-bold text-amber-400 tabular-nums">${total.toFixed(2)}</span>
+          <span className="text-xs text-faint ml-1.5">este mes · {rows.length} cliente{rows.length > 1 ? 's' : ''}</span>
         </div>
+        <button onClick={() => navigate('/monitoreo/tokens')} className="text-xs text-accent hover:underline shrink-0">ver detalle →</button>
+      </div>
+      {/* tendencia mensual: una línea por cliente */}
+      <div className="flex-1 min-h-0" style={{ minHeight: 180 }}>
+        <LineasClientes rows={rows} meses={meses} />
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-2 shrink-0">
+        {rows.map((r, i) => (
+          <span key={r.id} className="flex items-center gap-1.5 text-[11.5px] text-ink-soft">
+            <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: COSTO_COLORS[i % COSTO_COLORS.length] }} />
+            {r.nombre} · <span className="font-semibold tabular-nums">${r.gasto_mes_actual.toFixed(2)}</span>
+          </span>
+        ))}
       </div>
     </div>
+  )
+}
+
+// Tendencia mensual del costo IA: una línea por cliente. SVG que llena el widget.
+function LineasClientes({ rows, meses }: { rows: ClienteCosto[]; meses: string[] }) {
+  const W = 900, H = 300, padL = 48, padR = 46, padT = 16, padB = 34
+  const cw = W - padL - padR, ch = H - padT - padB, n = meses.length
+  const val = (r: ClienteCosto, mes: string) => r.serie_mensual.find(m => m.mes === mes)?.costo_usd ?? 0
+  const maxV = Math.max(1, ...rows.flatMap(r => meses.map(m => val(r, m))))
+  const x = (i: number) => (n <= 1 ? padL + cw / 2 : padL + (i * cw) / (n - 1))
+  const y = (v: number) => padT + ch - (v / maxV) * ch
+  const grid = [0, 0.25, 0.5, 0.75, 1].map(p => maxV * p)
+  return (
+    <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ minHeight: 160 }}>
+      {grid.map((v, i) => (
+        <g key={i}>
+          <line x1={padL} y1={y(v)} x2={W - padR} y2={y(v)} stroke="#243454" strokeWidth={1} />
+          <text x={padL - 8} y={y(v) + 4} textAnchor="end" fill="#5C6E90" fontSize="10" fontFamily="JetBrains Mono">${v.toFixed(0)}</text>
+        </g>
+      ))}
+      {meses.map((m, i) => (
+        <text key={m} x={x(i)} y={H - padB + 18} textAnchor="middle" fill="#8294B4" fontSize="11">{m}</text>
+      ))}
+      {rows.map((r, ci) => {
+        const color = COSTO_COLORS[ci % COSTO_COLORS.length]
+        const pts = meses.map((m, i) => `${x(i).toFixed(1)},${y(val(r, m)).toFixed(1)}`).join(' ')
+        const last = val(r, meses[n - 1])
+        return (
+          <g key={r.id}>
+            <polyline points={pts} fill="none" stroke={color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+            {meses.map((m, i) => <circle key={m} cx={x(i)} cy={y(val(r, m))} r={3} fill={color} />)}
+            <text x={x(n - 1) + 6} y={y(last) + 4} fill={color} fontSize="10" fontFamily="JetBrains Mono">${last.toFixed(2)}</text>
+          </g>
+        )
+      })}
+    </svg>
   )
 }
 
