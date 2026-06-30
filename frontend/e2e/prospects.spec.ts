@@ -35,4 +35,18 @@ test.describe("Prospects · acciones", () => {
     await expect(page.getByRole("cell", { name: "Construcciones Epsilon" })).toBeVisible();
     await expect(page.getByText("Distribuidora Alfa SRL")).toHaveCount(0);
   });
+
+  test("abrir el panel de Historial de un prospect", async ({ page }) => {
+    await page.goto("/prospects");
+    await page.getByRole("button", { name: "Historial" }).first().click();
+    // El panel lateral (overlay) se abre con la opción de agregar un registro.
+    await expect(page.locator(".fixed.inset-0.z-50")).toBeVisible();
+    await expect(page.getByText(/Agregar registro/)).toBeVisible();
+  });
+
+  test("abrir el panel de Chat de un prospect", async ({ page }) => {
+    await page.goto("/prospects");
+    await page.getByRole("button", { name: "Chat" }).first().click();
+    await expect(page.locator(".fixed.inset-0.z-50")).toBeVisible();
+  });
 });

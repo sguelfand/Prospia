@@ -114,6 +114,7 @@ export default function Terminos() {
                 )}
                 <button
                   onClick={() => eliminar(t.id)}
+                  aria-label={`Eliminar término ${t.texto}`}
                   className="text-faint hover:text-red-500 p-1.5 rounded"
                 >
                   <Trash2 size={14} />
