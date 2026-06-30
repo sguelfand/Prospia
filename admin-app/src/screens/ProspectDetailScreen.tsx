@@ -165,43 +165,45 @@ export default function ProspectDetailScreen({ route, navigation }: ProspectDeta
       </View>
 
       {/* ── Modal: Reportar calidad de Camila ───────────────────────── */}
-      <Modal visible={reporteOpen} transparent animationType="fade" onRequestClose={() => setReporteOpen(false)}>
+      <Modal visible={reporteOpen} transparent animationType="slide" onRequestClose={() => setReporteOpen(false)}>
         <KeyboardAvoidingView
           style={styles.modalBackdrop}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Reportar calidad</Text>
-            <Text style={styles.modalSub}>
-              Contá qué estuvo mal en lo que respondió Camila. Entra a la lista de Calidad ya
-              confirmado y suma para las 5 lecciones que la corrigen.
-            </Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Ej: le pasó un precio equivocado / cortó al cliente / no derivó a Delfina…"
-              placeholderTextColor={colors.textDim}
-              value={reporteTexto}
-              onChangeText={setReporteTexto}
-              multiline
-              autoFocus
-              textAlignVertical="top"
-            />
-            <View style={styles.modalBtns}>
-              <TouchableOpacity style={styles.modalCancel} onPress={() => setReporteOpen(false)} disabled={reportando}>
-                <Text style={styles.modalCancelText}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalEnviar, (!reporteTexto.trim() || reportando) && styles.modalEnviarOff]}
-                onPress={enviarReporte}
-                disabled={!reporteTexto.trim() || reportando}
-              >
-                {reportando ? (
-                  <ActivityIndicator size="small" color={colors.onPrimary} />
-                ) : (
-                  <Text style={styles.modalEnviarText}>Reportar</Text>
-                )}
-              </TouchableOpacity>
-            </View>
+          <View style={[styles.modalCard, { paddingBottom: insets.bottom + 18 }]}>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalTitle}>Reportar calidad</Text>
+              <Text style={styles.modalSub}>
+                Contá qué estuvo mal en lo que respondió Camila. Entra a la lista de Calidad ya
+                confirmado y suma para las 5 lecciones que la corrigen.
+              </Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Ej: le pasó un precio equivocado / cortó al cliente / no derivó a Delfina…"
+                placeholderTextColor={colors.textDim}
+                value={reporteTexto}
+                onChangeText={setReporteTexto}
+                multiline
+                autoFocus
+                textAlignVertical="top"
+              />
+              <View style={styles.modalBtns}>
+                <TouchableOpacity style={styles.modalCancel} onPress={() => setReporteOpen(false)} disabled={reportando}>
+                  <Text style={styles.modalCancelText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalEnviar, (!reporteTexto.trim() || reportando) && styles.modalEnviarOff]}
+                  onPress={enviarReporte}
+                  disabled={!reporteTexto.trim() || reportando}
+                >
+                  {reportando ? (
+                    <ActivityIndicator size="small" color={colors.onPrimary} />
+                  ) : (
+                    <Text style={styles.modalEnviarText}>Reportar</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -324,8 +326,8 @@ const styles = StyleSheet.create({
   blockBtnOff: { borderColor: colors.red },
   blockBtnOn: { borderColor: colors.primary, backgroundColor: colors.primary + "1A" },
   blockBtnText: { fontSize: 13, fontWeight: "700" },
-  modalBackdrop: { flex: 1, backgroundColor: "#0008", justifyContent: "center", padding: 22 },
-  modalCard: { backgroundColor: colors.card, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: colors.border },
+  modalBackdrop: { flex: 1, backgroundColor: "#0008", justifyContent: "flex-end" },
+  modalCard: { backgroundColor: colors.card, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 18, borderWidth: 1, borderColor: colors.border, maxHeight: "90%" },
   modalTitle: { color: colors.text, fontSize: 17, fontWeight: "800", marginBottom: 6 },
   modalSub: { color: colors.textDim, fontSize: 13, lineHeight: 18, marginBottom: 12 },
   modalInput: {

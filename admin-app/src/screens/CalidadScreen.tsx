@@ -354,44 +354,46 @@ export default function CalidadScreen(_props: CalidadProps) {
       />
 
       {/* Modal: nuevo registro manual (teléfono + descripción) */}
-      <Modal visible={nuevoOpen} transparent animationType="fade" onRequestClose={() => setNuevoOpen(false)}>
-        <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Nuevo registro de calidad</Text>
-            <Text style={styles.modalSub}>
-              Para {sources.find((s) => s.source === source)?.nombre ?? source}. Entra ya confirmado como "Camila estuvo mal" y suma para las {apr?.umbral ?? 5} lecciones.
-            </Text>
-            <Text style={styles.modalLabel}>Teléfono (opcional)</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Ej: 5491122334455"
-              placeholderTextColor={colors.textDim}
-              value={nuevoTel}
-              onChangeText={setNuevoTel}
-              keyboardType="phone-pad"
-            />
-            <Text style={styles.modalLabel}>¿Qué estuvo mal?</Text>
-            <TextInput
-              style={[styles.modalInput, styles.modalTextarea]}
-              placeholder="Describí qué hizo mal Camila…"
-              placeholderTextColor={colors.textDim}
-              value={nuevoTexto}
-              onChangeText={setNuevoTexto}
-              multiline
-              textAlignVertical="top"
-            />
-            <View style={styles.modalBtns}>
-              <TouchableOpacity style={styles.modalCancel} onPress={() => setNuevoOpen(false)} disabled={nuevoBusy}>
-                <Text style={styles.modalCancelText}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalCrear, (!nuevoTexto.trim() || nuevoBusy) && styles.modalCrearOff]}
-                onPress={crearRegistro}
-                disabled={!nuevoTexto.trim() || nuevoBusy}
-              >
-                <Text style={styles.modalCrearText}>{nuevoBusy ? "Creando…" : "Crear"}</Text>
-              </TouchableOpacity>
-            </View>
+      <Modal visible={nuevoOpen} transparent animationType="slide" onRequestClose={() => setNuevoOpen(false)}>
+        <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+          <View style={[styles.modalCard, { paddingBottom: insets.bottom + 18 }]}>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalTitle}>Nuevo registro de calidad</Text>
+              <Text style={styles.modalSub}>
+                Para {sources.find((s) => s.source === source)?.nombre ?? source}. Entra ya confirmado como "Camila estuvo mal" y suma para las {apr?.umbral ?? 5} lecciones.
+              </Text>
+              <Text style={styles.modalLabel}>Teléfono (opcional)</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Ej: 5491122334455"
+                placeholderTextColor={colors.textDim}
+                value={nuevoTel}
+                onChangeText={setNuevoTel}
+                keyboardType="phone-pad"
+              />
+              <Text style={styles.modalLabel}>¿Qué estuvo mal?</Text>
+              <TextInput
+                style={[styles.modalInput, styles.modalTextarea]}
+                placeholder="Describí qué hizo mal Camila…"
+                placeholderTextColor={colors.textDim}
+                value={nuevoTexto}
+                onChangeText={setNuevoTexto}
+                multiline
+                textAlignVertical="top"
+              />
+              <View style={styles.modalBtns}>
+                <TouchableOpacity style={styles.modalCancel} onPress={() => setNuevoOpen(false)} disabled={nuevoBusy}>
+                  <Text style={styles.modalCancelText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalCrear, (!nuevoTexto.trim() || nuevoBusy) && styles.modalCrearOff]}
+                  onPress={crearRegistro}
+                  disabled={!nuevoTexto.trim() || nuevoBusy}
+                >
+                  <Text style={styles.modalCrearText}>{nuevoBusy ? "Creando…" : "Crear"}</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -429,8 +431,8 @@ const styles = StyleSheet.create({
   progSeg: { width: 22, height: 7, borderRadius: 999, backgroundColor: colors.border },
   progSegOn: { backgroundColor: colors.primary },
   progText: { color: colors.textDim, fontSize: 11 },
-  modalBackdrop: { flex: 1, backgroundColor: "#0008", justifyContent: "center", padding: 22 },
-  modalCard: { backgroundColor: colors.card, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: colors.border },
+  modalBackdrop: { flex: 1, backgroundColor: "#0008", justifyContent: "flex-end" },
+  modalCard: { backgroundColor: colors.card, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 18, borderWidth: 1, borderColor: colors.border, maxHeight: "90%" },
   modalTitle: { color: colors.text, fontSize: 17, fontWeight: "800", marginBottom: 6 },
   modalSub: { color: colors.textDim, fontSize: 13, lineHeight: 18, marginBottom: 12 },
   modalLabel: { color: colors.textDim, fontSize: 12, fontWeight: "700", marginBottom: 4 },
