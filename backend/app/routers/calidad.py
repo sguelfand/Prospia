@@ -19,10 +19,29 @@ class ConfirmarIn(BaseModel):
     nota: str | None = None
 
 
+class ReportarIn(BaseModel):
+    source: str = "etiguel"
+    telefono: str | None = None
+    texto: str
+
+
 @router.get("/sources")
 def sources():
     """Clientes disponibles para el selector de Calidad: Etiguel + cada tenant."""
     return camila_quality.get_sources_calidad()
+
+
+@router.post("/reportar")
+def reportar(body: ReportarIn):
+    """Crea a mano un registro de calidad ('Camila estuvo mal') desde la pantalla
+    Calidad: teléfono (opcional) + descripción. Igual que reportar desde un lead:
+    entra ya confirmado como 'acierto' y suma para las lecciones. Solo superadmin."""
+    try:
+        rev = camila_quality.crear_reporte_manual(
+            body.source, body.texto, (body.telefono or None))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {"ok": True, "revision": rev}
 
 
 @router.get("/revisiones")

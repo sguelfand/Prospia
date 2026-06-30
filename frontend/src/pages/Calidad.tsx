@@ -1,4 +1,4 @@
-import { MessageSquare, Phone, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react'
+import { MessageSquare, Phone, Plus, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { ClienteSelector, type SourceOpt } from '../components/ClienteSelector'
@@ -77,6 +77,10 @@ export default function Calidad() {
   const [source, setSource] = useState(FALLBACK_SOURCE)
   const [sources, setSources] = useState<SourceOpt[]>([{ source: 'etiguel', nombre: 'Etiguel' }])
   const [savedDefault, setSavedDefault] = useState(FALLBACK_SOURCE)
+  const [nuevoOpen, setNuevoOpen] = useState(false)
+  const [nuevoTel, setNuevoTel] = useState('')
+  const [nuevoTexto, setNuevoTexto] = useState('')
+  const [nuevoBusy, setNuevoBusy] = useState(false)
 
   // Cliente inicial: el default guardado por el usuario (tilde) o Etiguel.
   useEffect(() => {
@@ -116,6 +120,21 @@ export default function Calidad() {
     const nuevo = checked ? source : FALLBACK_SOURCE
     setSavedDefault(nuevo)
     try { await api.put('/me/preferences', { pantalla: PANTALLA, prefs: { default_source: nuevo } }) } catch { /* noop */ }
+  }
+
+  async function crearRegistro() {
+    const texto = nuevoTexto.trim()
+    if (!texto || nuevoBusy) return
+    setNuevoBusy(true)
+    try {
+      await api.post('/admin/calidad/reportar', { source, telefono: nuevoTel.trim() || null, texto })
+      setNuevoOpen(false); setNuevoTel(''); setNuevoTexto('')
+      await load(source)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'No se pudo crear')
+    } finally {
+      setNuevoBusy(false)
+    }
   }
 
   async function consolidar() {
@@ -192,10 +211,45 @@ export default function Calidad() {
           onSetDefault={setDefault}
         />
       </div>
-      <p className="text-xs text-muted mb-4">
+      <p className="text-xs text-muted mb-3">
         <span className="font-semibold text-ink">Especialista Negocio</span> revisó las conversaciones y marcó
         respuestas que conviene mirar. Confirmá si Camila estuvo bien o mal — con eso afina su criterio.
       </p>
+
+      <div className="mb-4">
+        <button onClick={() => setNuevoOpen(true)}
+          className="flex items-center gap-1.5 text-xs font-semibold border border-primary/50 text-primary rounded-lg px-3 py-1.5 hover:bg-primary/10">
+          <Plus size={14} /> Nuevo registro de calidad
+        </button>
+      </div>
+
+      {/* Modal: nuevo registro manual (teléfono + descripción) */}
+      {nuevoOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setNuevoOpen(false)}>
+          <div className="bg-card border border-line rounded-2xl p-5 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-base font-semibold text-ink mb-1">Nuevo registro de calidad</h2>
+            <p className="text-xs text-muted mb-3">
+              Para <span className="font-semibold text-ink">{sources.find((s) => s.source === source)?.nombre ?? source}</span>.
+              Entra ya confirmado como "Camila estuvo mal" y suma para las {apr?.umbral ?? 5} lecciones.
+            </p>
+            <label className="block text-xs text-muted mb-1">Teléfono <span className="text-muted/60">(opcional)</span></label>
+            <input value={nuevoTel} onChange={(e) => setNuevoTel(e.target.value)} placeholder="Ej: 5491122334455"
+              className="w-full text-sm bg-transparent border border-line rounded-lg px-3 py-2 mb-3 text-ink placeholder:text-muted" />
+            <label className="block text-xs text-muted mb-1">¿Qué estuvo mal?</label>
+            <textarea value={nuevoTexto} onChange={(e) => setNuevoTexto(e.target.value)} rows={4} autoFocus
+              placeholder="Describí qué hizo mal Camila…"
+              className="w-full text-sm bg-transparent border border-line rounded-lg px-3 py-2 mb-4 text-ink placeholder:text-muted resize-none" />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setNuevoOpen(false)} disabled={nuevoBusy}
+                className="text-sm font-semibold text-muted rounded-lg px-3 py-1.5 hover:text-ink disabled:opacity-50">Cancelar</button>
+              <button onClick={crearRegistro} disabled={!nuevoTexto.trim() || nuevoBusy}
+                className="text-sm font-semibold bg-primary text-on-primary rounded-lg px-4 py-1.5 hover:bg-primary-dark disabled:opacity-50">
+                {nuevoBusy ? 'Creando…' : 'Crear'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Aprendizajes de Camila (Capa B) */}
       {apr && (
@@ -210,6 +264,18 @@ export default function Calidad() {
             {apr.ultima_aplicada?.aplicada_at && (
               <span className="text-[11px] text-muted ml-auto">última: {fmtFecha(apr.ultima_aplicada.aplicada_at)}</span>
             )}
+          </div>
+
+          {/* Progreso: cuántas modificaciones ya están cargadas de las {umbral} antes de pasarlas al código de Camila */}
+          <div className="flex items-center gap-2 mt-2">
+            <div className="flex gap-1">
+              {Array.from({ length: apr.umbral }).map((_, i) => (
+                <span key={i} className={`h-2 w-6 rounded-full ${i < apr.pendientes ? 'bg-primary' : 'bg-line'}`} />
+              ))}
+            </div>
+            <span className="text-xs text-muted">
+              <span className="font-semibold text-ink">{apr.pendientes} de {apr.umbral}</span> modificaciones cargadas
+            </span>
           </div>
 
           {apr.propuesta ? (

@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Alert, FlatList, KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
   AprendizajeEstado, CalidadSource, MensajeRow, RevisionCalidad, aprobarAprendizaje,
   confirmarRevision, consolidarAprendizajes, deleteRevision, descartarAprendizaje,
   getAprendizajes, getCalidadSources, getEtiguelMirrorMensajes, getPreferences,
-  getRevisiones, putPreferences,
+  getRevisiones, putPreferences, reportarCalidadManual,
 } from "../api";
 import { useAuth } from "../auth";
 import { Icon, IconText } from "../components/Icon";
@@ -49,6 +49,10 @@ export default function CalidadScreen(_props: CalidadProps) {
   const [source, setSource] = useState("etiguel");
   const [sources, setSources] = useState<CalidadSource[]>([{ source: "etiguel", nombre: "Etiguel" }]);
   const [savedDefault, setSavedDefault] = useState("etiguel");
+  const [nuevoOpen, setNuevoOpen] = useState(false);
+  const [nuevoTel, setNuevoTel] = useState("");
+  const [nuevoTexto, setNuevoTexto] = useState("");
+  const [nuevoBusy, setNuevoBusy] = useState(false);
 
   // Cliente inicial: el default guardado por el usuario (tilde) o Etiguel.
   useEffect(() => {
@@ -86,6 +90,22 @@ export default function CalidadScreen(_props: CalidadProps) {
     const nuevo = savedDefault === source ? "etiguel" : source;
     setSavedDefault(nuevo);
     try { await putPreferences(token, "calidad", { default_source: nuevo }); } catch { /* noop */ }
+  };
+
+  const crearRegistro = async () => {
+    const texto = nuevoTexto.trim();
+    if (!token || nuevoBusy || !texto) return;
+    setNuevoBusy(true);
+    try {
+      await reportarCalidadManual(token, source, texto, nuevoTel.trim() || undefined);
+      setNuevoOpen(false); setNuevoTel(""); setNuevoTexto("");
+      await load();
+      Alert.alert("Registrado ✓", "Lo sumé a la lista de Calidad (cuenta para las 5 lecciones).");
+    } catch (e) {
+      Alert.alert("No se pudo", e instanceof Error ? e.message : "Error");
+    } finally {
+      setNuevoBusy(false);
+    }
   };
 
   const consolidar = async () => {
@@ -251,6 +271,11 @@ export default function CalidadScreen(_props: CalidadProps) {
         </View>
       ) : null}
 
+      <TouchableOpacity style={styles.nuevoBtn} onPress={() => setNuevoOpen(true)} activeOpacity={0.8}>
+        <Icon name="plus" size={15} color={colors.primary} strokeWidth={2.5} />
+        <Text style={styles.nuevoBtnText}>Nuevo registro de calidad</Text>
+      </TouchableOpacity>
+
       {apr ? (
         <View style={[styles.aprCard, apr.propuesta ? styles.aprCardProp : null]}>
           <View style={styles.aprHeader}>
@@ -258,6 +283,15 @@ export default function CalidadScreen(_props: CalidadProps) {
             {apr.propuesta
               ? <Text style={styles.aprBadge}>Propuesta lista</Text>
               : <Text style={styles.meta}>{apr.pendientes}/{apr.umbral} lecciones</Text>}
+          </View>
+          {/* Progreso: cuántas modificaciones ya están cargadas de las {umbral} antes de pasarlas al código de Camila */}
+          <View style={styles.progRow}>
+            <View style={styles.progSegs}>
+              {Array.from({ length: apr.umbral }).map((_, i) => (
+                <View key={i} style={[styles.progSeg, i < apr.pendientes ? styles.progSegOn : null]} />
+              ))}
+            </View>
+            <Text style={styles.progText}><Text style={{ fontWeight: "700", color: colors.text }}>{apr.pendientes} de {apr.umbral}</Text> modificaciones cargadas</Text>
           </View>
           {apr.propuesta ? (
             <>
@@ -318,6 +352,49 @@ export default function CalidadScreen(_props: CalidadProps) {
           )
         }
       />
+
+      {/* Modal: nuevo registro manual (teléfono + descripción) */}
+      <Modal visible={nuevoOpen} transparent animationType="fade" onRequestClose={() => setNuevoOpen(false)}>
+        <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Nuevo registro de calidad</Text>
+            <Text style={styles.modalSub}>
+              Para {sources.find((s) => s.source === source)?.nombre ?? source}. Entra ya confirmado como "Camila estuvo mal" y suma para las {apr?.umbral ?? 5} lecciones.
+            </Text>
+            <Text style={styles.modalLabel}>Teléfono (opcional)</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Ej: 5491122334455"
+              placeholderTextColor={colors.textDim}
+              value={nuevoTel}
+              onChangeText={setNuevoTel}
+              keyboardType="phone-pad"
+            />
+            <Text style={styles.modalLabel}>¿Qué estuvo mal?</Text>
+            <TextInput
+              style={[styles.modalInput, styles.modalTextarea]}
+              placeholder="Describí qué hizo mal Camila…"
+              placeholderTextColor={colors.textDim}
+              value={nuevoTexto}
+              onChangeText={setNuevoTexto}
+              multiline
+              textAlignVertical="top"
+            />
+            <View style={styles.modalBtns}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setNuevoOpen(false)} disabled={nuevoBusy}>
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalCrear, (!nuevoTexto.trim() || nuevoBusy) && styles.modalCrearOff]}
+                onPress={crearRegistro}
+                disabled={!nuevoTexto.trim() || nuevoBusy}
+              >
+                <Text style={styles.modalCrearText}>{nuevoBusy ? "Creando…" : "Crear"}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -345,6 +422,26 @@ const styles = StyleSheet.create({
   pillTextActive: { color: colors.text },
   defaultToggle: { flexDirection: "row", alignItems: "center", gap: 3 },
   defaultText: { color: colors.textDim, fontSize: 11, fontWeight: "700" },
+  nuevoBtn: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", marginHorizontal: 12, marginTop: 12, borderWidth: 1, borderColor: colors.primary, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 8 },
+  nuevoBtnText: { color: colors.primary, fontSize: 13, fontWeight: "700" },
+  progRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
+  progSegs: { flexDirection: "row", gap: 4 },
+  progSeg: { width: 22, height: 7, borderRadius: 999, backgroundColor: colors.border },
+  progSegOn: { backgroundColor: colors.primary },
+  progText: { color: colors.textDim, fontSize: 11 },
+  modalBackdrop: { flex: 1, backgroundColor: "#0008", justifyContent: "center", padding: 22 },
+  modalCard: { backgroundColor: colors.card, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: colors.border },
+  modalTitle: { color: colors.text, fontSize: 17, fontWeight: "800", marginBottom: 6 },
+  modalSub: { color: colors.textDim, fontSize: 13, lineHeight: 18, marginBottom: 12 },
+  modalLabel: { color: colors.textDim, fontSize: 12, fontWeight: "700", marginBottom: 4 },
+  modalInput: { backgroundColor: colors.bg, borderRadius: 10, borderWidth: 1, borderColor: colors.border, color: colors.text, fontSize: 14, padding: 12, marginBottom: 12 },
+  modalTextarea: { minHeight: 100 },
+  modalBtns: { flexDirection: "row", justifyContent: "flex-end", gap: 10, alignItems: "center", marginTop: 2 },
+  modalCancel: { paddingHorizontal: 14, paddingVertical: 9 },
+  modalCancelText: { color: colors.textDim, fontSize: 14, fontWeight: "700" },
+  modalCrear: { backgroundColor: colors.primary, borderRadius: 9, paddingHorizontal: 18, paddingVertical: 9, minWidth: 96, alignItems: "center" },
+  modalCrearOff: { opacity: 0.5 },
+  modalCrearText: { color: colors.onPrimary, fontSize: 14, fontWeight: "800" },
 
   aprCard: { marginHorizontal: 12, marginTop: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 12, padding: 12 },
   aprCardProp: { borderColor: colors.primary, backgroundColor: colors.cardAlt },

@@ -650,6 +650,14 @@ export interface CalidadSource { source: string; nombre: string; }
 export const getCalidadSources = (token: string) =>
   request<CalidadSource[]>(`/admin/calidad/sources`, {}, token);
 
+// Crear a mano un registro de calidad desde la pantalla Calidad (teléfono opcional
+// + descripción). Igual que reportar desde un lead: entra ya confirmado.
+export const reportarCalidadManual = (token: string, source: string, texto: string, telefono?: string) =>
+  request<{ ok: boolean; revision: RevisionCalidad }>(`/admin/calidad/reportar`, {
+    method: "POST",
+    body: JSON.stringify({ source, texto, telefono: telefono || null }),
+  }, token);
+
 // ── Preferencias de UI por usuario/pantalla (default del selector, etc.) ───────
 export const getPreferences = (token: string, pantalla: string) =>
   request<{ pantalla: string; prefs: Record<string, unknown> }>(
