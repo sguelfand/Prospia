@@ -6,6 +6,24 @@ import {
 } from 'recharts'
 import { api } from '../api/client'
 import { ClienteComparativa, DashboardComparativa, DashboardStats, ESTADOS } from '../api/types'
+import { DashboardGrid, Widget, buildLayouts } from '../components/DashboardGrid'
+
+const LAYOUT_CLIENTE = buildLayouts([
+  { i: 'mesActual', x: 0, y: 0, w: 12, h: 5 },
+  { i: 'termino', x: 0, y: 5, w: 6, h: 9 },
+  { i: 'estado', x: 6, y: 5, w: 6, h: 9 },
+  { i: 'evolucion', x: 0, y: 14, w: 12, h: 7 },
+])
+
+const LAYOUT_COMPARATIVA = buildLayouts([
+  { i: 'kpisGlobal', x: 0, y: 0, w: 12, h: 4 },
+  { i: 'gastos', x: 0, y: 4, w: 12, h: 14 },
+  { i: 'compProspects', x: 0, y: 18, w: 6, h: 8 },
+  { i: 'compInteresados', x: 6, y: 18, w: 6, h: 8 },
+  { i: 'compResp', x: 0, y: 26, w: 6, h: 8 },
+  { i: 'compConv', x: 6, y: 26, w: 6, h: 8 },
+  { i: 'tabla', x: 0, y: 34, w: 12, h: 10 },
+])
 
 // Cada serie de la evolución histórica → estado por el que filtra en Prospects
 const SERIE_ESTADO: Record<string, string> = {
@@ -134,8 +152,7 @@ function TerminoChart({ data, navigate }: { data: TerminoRow[]; navigate: Return
   }
 
   return (
-    <div className="bg-card rounded-xl shadow p-4 md:p-5">
-      <h2 className="font-semibold mb-1 text-sm md:text-base">Prospects por término</h2>
+    <div>
       <p className="text-xs text-faint mb-2">Pasá el mouse por una barra y clickeá el estado</p>
       <div ref={wrapRef} className="relative" onMouseLeave={() => setHover(null)}>
         <ResponsiveContainer width="100%" height={260}>
@@ -267,13 +284,10 @@ function ClienteDashboard() {
     <div className="space-y-5">
       <h1 className="text-xl md:text-2xl font-bold">Dashboard</h1>
 
-      {/* ── MES ACTUAL ─────────────────────────────────────────────────────── */}
-      <div className="border border-line rounded-2xl p-4 md:p-5 space-y-4">
-        <p className="text-xs font-semibold text-faint uppercase tracking-widest">
-          MES ACTUAL — {mesNombre}
-        </p>
-
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      <DashboardGrid pantalla="dashboard-cliente" defaultLayout={LAYOUT_CLIENTE}>
+        <div key="mesActual">
+          <Widget id="mesActual" title={`Mes actual — ${mesNombre}`}>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           <KpiCard
             label="Prospects generados"
             value={fmt(mes_actual.prospects)}
@@ -306,18 +320,18 @@ function ClienteDashboard() {
             color="#22c55e"
             onClick={() => goProspects({ mes: mesAct, estado: 'interesado' })}
           />
+            </div>
+          </Widget>
         </div>
-      </div>
 
-      {/* ── GRÁFICOS FILA 1 ─────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div key="termino">
+          <Widget id="termino" title="Prospects por término">
+            <TerminoChart data={terminoData} navigate={navigate} />
+          </Widget>
+        </div>
 
-        {/* Prospects por término */}
-        <TerminoChart data={terminoData} navigate={navigate} />
-
-        {/* Distribución por estado — dos pies */}
-        <div className="bg-card rounded-xl shadow p-4 md:p-5">
-          <h2 className="font-semibold mb-4 text-sm md:text-base">Distribución por estado</h2>
+        <div key="estado">
+          <Widget id="estado" title="Distribución por estado">
           <div className="grid grid-cols-2 gap-2">
             <div>
               <p className="text-xs text-center text-faint mb-1">Este mes</p>
@@ -361,13 +375,12 @@ function ClienteDashboard() {
               </button>
             ))}
           </div>
+          </Widget>
         </div>
-      </div>
 
-      {/* ── EVOLUCIÓN HISTÓRICA ──────────────────────────────────────────────── */}
-      {mesData.length > 0 && (
-        <div className="bg-card rounded-xl shadow p-4 md:p-5">
-          <h2 className="font-semibold mb-4 text-sm md:text-base">Evolución histórica</h2>
+        <div key="evolucion">
+          <Widget id="evolucion" title="Evolución histórica">
+          {mesData.length === 0 ? <p className="text-sm text-muted">Sin histórico todavía.</p> : (
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={mesData} margin={{ left: -10 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -384,8 +397,10 @@ function ClienteDashboard() {
               <Line type="monotone" dataKey="No le interesa"   stroke="#6b7280" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 5 }} strokeDasharray="4 2" />
             </LineChart>
           </ResponsiveContainer>
+          )}
+          </Widget>
         </div>
-      )}
+      </DashboardGrid>
     </div>
   )
 }
@@ -412,8 +427,7 @@ function CompBarChart({ title, sub, data, color, pct, onPick }: {
   onPick: (c: { tenant_id: number; fuente: string }) => void
 }) {
   return (
-    <div className="bg-card rounded-xl shadow p-4 md:p-5">
-      <h2 className="font-semibold mb-1 text-sm md:text-base">{title}</h2>
+    <div>
       {sub && <p className="text-xs text-faint mb-2">{sub}</p>}
       <ResponsiveContainer width="100%" height={Math.max(160, data.length * 38)}>
         <BarChart data={data} layout="vertical" margin={{ top: 5, bottom: 5, left: 10, right: 16 }}>
@@ -442,7 +456,8 @@ function GastosClientes() {
   const navigate = useNavigate()
   const [rows, setRows] = useState<ClienteCosto[] | null>(null)
   useEffect(() => { api.get<ClienteCosto[]>('/admin/tokens/clientes').then(setRows).catch(() => setRows([])) }, [])
-  if (!rows || rows.length === 0) return null
+  if (!rows) return <p className="text-sm text-muted">Cargando…</p>
+  if (rows.length === 0) return <p className="text-sm text-muted">Sin datos de costo todavía.</p>
 
   const meses = Array.from(new Set(rows.flatMap(r => r.serie_mensual.map(m => m.mes)))).sort()
   const dataset = meses.map(mes => {
@@ -454,8 +469,7 @@ function GastosClientes() {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="font-semibold text-sm md:text-base">Gastos por cliente <span className="text-xs text-faint font-normal">· costo IA (MyClaw)</span></h2>
+      <div className="flex items-center justify-end">
         <button onClick={() => navigate('/monitoreo/tokens')} className="text-xs text-accent hover:underline">ver detalle →</button>
       </div>
       {/* cards del mes actual */}
@@ -475,7 +489,7 @@ function GastosClientes() {
         )}
       </div>
       {/* gráfico mensual por cliente */}
-      <div className="bg-card rounded-xl shadow p-4 md:p-5">
+      <div className="border-t border-line pt-3">
         <h3 className="font-semibold mb-1 text-sm">Gasto mensual por cliente (USD)</h3>
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={dataset} margin={{ top: 8, bottom: 5, left: 0, right: 8 }}>
@@ -518,28 +532,49 @@ function ComparativaDashboard() {
         <p className="text-xs text-faint mt-0.5">Comparativa entre clientes. Clickeá un cliente para verlo en detalle.</p>
       </div>
 
-      {/* KPIs globales */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      <DashboardGrid pantalla="dashboard-comparativa" defaultLayout={LAYOUT_COMPARATIVA}>
+        <div key="kpisGlobal">
+          <Widget id="kpisGlobal" title="Totales — todos los clientes">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         <KpiCard label="Clientes"        value={fmt(data.total_clientes)}  color="#1e293b" />
         <KpiCard label="Prospects"       value={fmt(data.total_prospects)} color="#3b82f6" />
         <KpiCard label="En conversación" value={fmt(data.en_conversacion)}  color={ESTADOS.en_conversacion.color} />
         <KpiCard label="Interesados"     value={fmt(data.interesados)}      color={ESTADOS.interesado.color} />
         <KpiCard label="Interesados (mes)" value={fmt(data.interesados_mes)} color="#22c55e" />
-      </div>
+            </div>
+          </Widget>
+        </div>
 
-      {/* Gastos por cliente (costo IA) */}
-      <GastosClientes />
+        <div key="gastos">
+          <Widget id="gastos" title="Gastos por cliente · costo IA" fuente="openclaw">
+            <GastosClientes />
+          </Widget>
+        </div>
 
-      {/* Barras comparativas */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <CompBarChart title="Prospects por cliente"  data={barData(c => c.total_prospects)} color="#3b82f6" onPick={pick} />
-        <CompBarChart title="Interesados por cliente" data={barData(c => c.interesados)}     color="#22c55e" onPick={pick} />
-        <CompBarChart title="Tasa de respuesta"  sub="respondieron / contactados" pct data={barData(c => c.tasa_respuesta)}  color="#8b5cf6" onPick={pick} />
-        <CompBarChart title="Tasa de conversión" sub="interesados / contactados"  pct data={barData(c => c.tasa_conversion)} color="#f59e0b" onPick={pick} />
-      </div>
+        <div key="compProspects">
+          <Widget id="compProspects" title="Prospects por cliente">
+            <CompBarChart title="Prospects por cliente" data={barData(c => c.total_prospects)} color="#3b82f6" onPick={pick} />
+          </Widget>
+        </div>
+        <div key="compInteresados">
+          <Widget id="compInteresados" title="Interesados por cliente">
+            <CompBarChart title="Interesados por cliente" data={barData(c => c.interesados)} color="#22c55e" onPick={pick} />
+          </Widget>
+        </div>
+        <div key="compResp">
+          <Widget id="compResp" title="Tasa de respuesta">
+            <CompBarChart title="Tasa de respuesta" sub="respondieron / contactados" pct data={barData(c => c.tasa_respuesta)} color="#8b5cf6" onPick={pick} />
+          </Widget>
+        </div>
+        <div key="compConv">
+          <Widget id="compConv" title="Tasa de conversión">
+            <CompBarChart title="Tasa de conversión" sub="interesados / contactados" pct data={barData(c => c.tasa_conversion)} color="#f59e0b" onPick={pick} />
+          </Widget>
+        </div>
 
-      {/* Tabla detalle por cliente */}
-      <div className="bg-card rounded-xl shadow overflow-x-auto">
+        <div key="tabla">
+          <Widget id="tabla" title="Detalle por cliente">
+            <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-line text-muted text-left">
@@ -575,7 +610,10 @@ function ComparativaDashboard() {
             ))}
           </tbody>
         </table>
-      </div>
+            </div>
+          </Widget>
+        </div>
+      </DashboardGrid>
     </div>
   )
 }

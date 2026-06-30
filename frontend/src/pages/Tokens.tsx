@@ -147,7 +147,7 @@ export default function Tokens() {
       <DashboardGrid pantalla="tokens-v2" defaultLayout={TOKENS_LAYOUT}>
         {/* Oportunidades */}
         <div key="oportunidades">
-          <Widget title="Oportunidades de ahorro de Camila" fuente="openclaw" right={<span className="text-[11px] text-muted">fijas hasta resolver</span>}>
+          <Widget id="oportunidades" title="Oportunidades de ahorro de Camila" fuente="openclaw" right={<span className="text-[11px] text-muted">fijas hasta resolver</span>}>
             {(data?.oportunidades ?? []).length === 0 ? (
               <p className="text-sm text-emerald-500">Sin oportunidades abiertas. 👌</p>
             ) : (
@@ -175,22 +175,22 @@ export default function Tokens() {
 
         {/* Costos internos — cada uno su propio widget (API Anthropic) */}
         <div key="cMes">
-          <Widget title="Resumen del mes — funciones internas" fuente="anthropic">
+          <Widget id="cMes" title="Resumen del mes — funciones internas" fuente="anthropic">
             {apiUsage ? <CostosResumenMes data={apiUsage} /> : <p className="text-sm text-muted">Cargando…</p>}
           </Widget>
         </div>
         <div key="cFuncion">
-          <Widget title="Costo por función (mes actual)" fuente="anthropic">
+          <Widget id="cFuncion" title="Costo por función (mes actual)" fuente="anthropic">
             {apiUsage ? <CostosPorFuncion data={apiUsage} /> : <p className="text-sm text-muted">Cargando…</p>}
           </Widget>
         </div>
         <div key="cParticipacion">
-          <Widget title="Participación por función (mes)" fuente="anthropic">
+          <Widget id="cParticipacion" title="Participación por función (mes)" fuente="anthropic">
             {apiUsage ? <CostosParticipacion data={apiUsage} /> : <p className="text-sm text-muted">Cargando…</p>}
           </Widget>
         </div>
         <div key="cHistorico">
-          <Widget title="Histórico mensual — funciones internas" fuente="anthropic" right={<span className="text-[11px] text-muted">apilado por función</span>}>
+          <Widget id="cHistorico" title="Histórico mensual — funciones internas" fuente="anthropic" right={<span className="text-[11px] text-muted">apilado por función</span>}>
             {apiUsage ? <CostosHistorico data={apiUsage} /> : <p className="text-sm text-muted">Cargando…</p>}
           </Widget>
         </div>
@@ -198,6 +198,7 @@ export default function Tokens() {
         {/* KPIs del día */}
         <div key="kpis">
           <Widget
+            id="kpis"
             fuente="openclaw"
             title={`Resumen del día ${det?.fecha ?? diaSel ?? ''}${verUltimo ? ' (último)' : ''}`}
             right={
@@ -225,7 +226,7 @@ export default function Tokens() {
 
         {/* Costo por día */}
         <div key="costoDia">
-          <Widget title="Costo de Camila por día · tocá un día" fuente="openclaw"
+          <Widget id="costoDia" title="Costo de Camila por día · tocá un día" fuente="openclaw"
             right={
               <span className="flex items-center gap-3 text-[11px] text-muted">
                 <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: '#F5B23D' }} />mensajes</span>
@@ -238,14 +239,14 @@ export default function Tokens() {
 
         {/* Histórico mensual */}
         <div key="historico">
-          <Widget title="Histórico mensual de Camila" fuente="openclaw" right={<span className="text-[11px] text-muted">pasá el mouse</span>}>
+          <Widget id="historico" title="Histórico mensual de Camila" fuente="openclaw" right={<span className="text-[11px] text-muted">pasá el mouse</span>}>
             {meses.length === 0 ? <p className="text-sm text-muted">Sin histórico todavía.</p> : <LineaMensual meses={meses} hover={hoverMes} setHover={setHoverMes} />}
           </Widget>
         </div>
 
         {/* Conversaciones del día */}
         <div key="convs">
-          <Widget title={`Conversaciones de Camila del día · ${convs.length}`} fuente="openclaw">
+          <Widget id="convs" title={`Conversaciones de Camila del día · ${convs.length}`} fuente="openclaw">
             {convs.length === 0 ? <p className="text-sm text-muted">{diaLoading ? 'Cargando…' : 'Sin conversaciones.'}</p> : (
               <div className="space-y-2">
                 {convs.map((c) => {
@@ -305,7 +306,7 @@ export default function Tokens() {
 
         {/* Por modelo · mes */}
         <div key="porModelo">
-          <Widget title={`Costo de Camila por modelo · mes ${data?.mes_actual ?? ''}`} fuente="openclaw">
+          <Widget id="porModelo" title={`Costo de Camila por modelo · mes ${data?.mes_actual ?? ''}`} fuente="openclaw">
             {!data || Object.keys(data.por_modelo_mes).length === 0 ? <p className="text-sm text-muted">Sin datos del mes.</p> : (
               <div className="space-y-1.5">
                 {Object.entries(data.por_modelo_mes).sort((a, b) => b[1].costo_usd - a[1].costo_usd).map(([m, v]) => (

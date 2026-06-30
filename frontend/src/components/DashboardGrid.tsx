@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useRef, useState } from 'react'
+import { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react'
 // react-grid-layout v2 movió Responsive/WidthProvider al subpath `/legacy`
 // (el entry principal ya no exporta WidthProvider). Importarlos como named
 // exports desde ahí. Si se importa del entry principal, WidthProvider queda
@@ -17,6 +17,10 @@ type Layouts = { [bp: string]: LayoutItem[] }
 const COLS = { lg: 12, md: 12, sm: 6, xs: 4, xxs: 2 }
 const BREAKPOINTS = { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }
 
+// Títulos personalizados por widget (los renombra el usuario, se guardan por usuario).
+type TitulosCtx = { get: (id: string, def: string) => string; set: (id: string, t: string) => void }
+const TitulosContext = createContext<TitulosCtx>({ get: (_i, d) => d, set: () => {} })
+
 /**
  * Tablero de widgets movibles + redimensionables + responsive.
  * Cada hijo <Widget id=…> es un cuadro con grip de 6 puntitos (se arrastra desde
@@ -33,15 +37,17 @@ export function DashboardGrid({
   children: ReactNode
 }) {
   const [layouts, setLayouts] = useState<Layouts>(defaultLayout)
+  const [titulos, setTitulos] = useState<Record<string, string>>({})
   const [ready, setReady] = useState(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     let vivo = true
-    api.get<{ layout: Layouts }>(`/me/layout?pantalla=${encodeURIComponent(pantalla)}`)
+    api.get<{ layout: Layouts; titulos?: Record<string, string> }>(`/me/layout?pantalla=${encodeURIComponent(pantalla)}`)
       .then((r) => {
         if (!vivo) return
         if (r.layout && Object.keys(r.layout).length > 0) setLayouts(mergeDefaults(r.layout, defaultLayout))
+        if (r.titulos) setTitulos(r.titulos)
         setReady(true)
       })
       .catch(() => { if (vivo) setReady(true) })
@@ -58,30 +64,45 @@ export function DashboardGrid({
     }, 800)
   }
 
+  const titCtx: TitulosCtx = {
+    get: (id, def) => titulos[id] ?? def,
+    set: (id, t) => {
+      setTitulos((prev) => {
+        const next = { ...prev }
+        if (t.trim()) next[id] = t.trim(); else delete next[id]
+        api.put('/me/layout', { pantalla, titulos: next }).catch(() => {})
+        return next
+      })
+    },
+  }
+
   function resetear() {
     setLayouts(defaultLayout)
-    api.put('/me/layout', { pantalla, layout: defaultLayout }).catch(() => {})
+    setTitulos({})
+    api.put('/me/layout', { pantalla, layout: defaultLayout, titulos: {} }).catch(() => {})
   }
 
   return (
-    <div className="relative">
-      <button onClick={resetear} title="Volver al orden original"
-        className="absolute -top-9 right-0 text-xs text-muted hover:text-ink z-10">↺ Reordenar</button>
-      <ResponsiveGrid
-        className="layout"
-        layouts={layouts}
-        breakpoints={BREAKPOINTS}
-        cols={COLS}
-        rowHeight={rowHeight}
-        margin={[16, 16]}
-        draggableHandle=".rgl-grip"
-        isResizable
-        isBounded
-        onLayoutChange={onLayoutChange}
-      >
-        {children}
-      </ResponsiveGrid>
-    </div>
+    <TitulosContext.Provider value={titCtx}>
+      <div className="relative">
+        <button onClick={resetear} title="Volver al orden y títulos originales"
+          className="absolute -top-9 right-0 text-xs text-muted hover:text-ink z-10">↺ Reordenar</button>
+        <ResponsiveGrid
+          className="layout"
+          layouts={layouts}
+          breakpoints={BREAKPOINTS}
+          cols={COLS}
+          rowHeight={rowHeight}
+          margin={[16, 16]}
+          draggableHandle=".rgl-grip"
+          isResizable
+          isBounded
+          onLayoutChange={onLayoutChange}
+        >
+          {children}
+        </ResponsiveGrid>
+      </div>
+    </TitulosContext.Provider>
   )
 }
 
@@ -98,23 +119,54 @@ function mergeDefaults(saved: Layouts, def: Layouts): Layouts {
   return out
 }
 
-/** Un widget del tablero: cuadro con grip de 6 puntitos (arrastrar) + título +
- * chip de fuente (de dónde sale el costo: API Anthropic u OpenClaw). */
-export function Widget({ title, fuente, right, children }: {
-  title?: string; fuente?: 'anthropic' | 'openclaw'; right?: ReactNode; children: ReactNode
+/** Un widget del tablero: cuadro con grip de 6 puntitos (arrastrar) + título
+ * EDITABLE (click para renombrar, se guarda por usuario) + chip de fuente. */
+export function Widget({ id, title = '', fuente, right, children }: {
+  id: string; title?: string; fuente?: 'anthropic' | 'openclaw'; right?: ReactNode; children: ReactNode
 }) {
+  const tit = useContext(TitulosContext)
+  const actual = tit.get(id, title)
+  const [editando, setEditando] = useState(false)
+  const [valor, setValor] = useState(actual)
+
+  function abrir() { setValor(actual); setEditando(true) }
+  function guardar() { setEditando(false); if (valor !== actual) tit.set(id, valor) }
+
   return (
     <div className="h-full bg-card border border-line rounded-2xl flex flex-col overflow-hidden">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-line/60">
         <span className="rgl-grip cursor-grab active:cursor-grabbing -ml-0.5 text-muted hover:text-ink shrink-0" title="Arrastrar para reordenar">
           <GripDots />
         </span>
-        {title && <h2 className="text-xs font-semibold text-ink-soft uppercase tracking-wide truncate">{title}</h2>}
+        {editando ? (
+          <input
+            autoFocus value={valor}
+            onChange={(e) => setValor(e.target.value)}
+            onBlur={guardar}
+            onKeyDown={(e) => { if (e.key === 'Enter') guardar(); if (e.key === 'Escape') setEditando(false) }}
+            className="text-xs font-semibold text-ink uppercase tracking-wide bg-app border border-primary/50 rounded px-1.5 py-0.5 min-w-0 flex-1"
+            placeholder="Título del widget"
+          />
+        ) : (
+          <button onClick={abrir} title="Click para renombrar"
+            className="group flex items-center gap-1 min-w-0 text-left">
+            <h2 className="text-xs font-semibold text-ink-soft uppercase tracking-wide truncate group-hover:text-ink">{actual}</h2>
+            <Pencil />
+          </button>
+        )}
         {fuente && <FuenteChip fuente={fuente} />}
         {right && <div className="ml-auto shrink-0">{right}</div>}
       </div>
       <div className="flex-1 min-h-0 overflow-auto p-4">{children}</div>
     </div>
+  )
+}
+
+function Pencil() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 16 16" fill="none" className="shrink-0 opacity-0 group-hover:opacity-60 text-muted" aria-hidden>
+      <path d="M11.5 2.5l2 2L6 12l-2.5.5.5-2.5 7.5-7.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+    </svg>
   )
 }
 

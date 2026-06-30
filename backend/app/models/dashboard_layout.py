@@ -20,6 +20,8 @@ class DashboardLayout(Base):
     user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     pantalla: Mapped[str] = mapped_column(String(60), nullable=False)
     layout: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    # Títulos personalizados por widget: JSON {widgetId: "título custom"}.
+    titulos: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

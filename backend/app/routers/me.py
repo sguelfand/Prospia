@@ -41,28 +41,34 @@ class InfoNegocioUpdate(BaseModel):
 
 class LayoutUpdate(BaseModel):
     pantalla: str
-    layout: dict = {}
+    layout: dict | None = None
+    titulos: dict | None = None
+
+
+def _parse(s: str) -> dict:
+    import json
+    try:
+        return json.loads(s or "{}")
+    except Exception:
+        return {}
 
 
 @router.get("/layout")
 def get_layout(pantalla: str, current: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Layout guardado de una pantalla con gráficos (tablero movible), por usuario.
-    Devuelve {} si todavía no guardó nada (la web usa el layout por defecto)."""
-    import json
+    """Layout + títulos custom de una pantalla con gráficos (tablero movible), por
+    usuario. Devuelve {} si todavía no guardó nada (la web usa los defaults)."""
     from app.models.dashboard_layout import DashboardLayout
     row = (db.query(DashboardLayout)
            .filter(DashboardLayout.user_id == current.id, DashboardLayout.pantalla == pantalla).first())
     if not row:
-        return {"pantalla": pantalla, "layout": {}}
-    try:
-        return {"pantalla": pantalla, "layout": json.loads(row.layout)}
-    except Exception:
-        return {"pantalla": pantalla, "layout": {}}
+        return {"pantalla": pantalla, "layout": {}, "titulos": {}}
+    return {"pantalla": pantalla, "layout": _parse(row.layout), "titulos": _parse(getattr(row, "titulos", "{}"))}
 
 
 @router.put("/layout")
 def put_layout(body: LayoutUpdate, current: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Guarda el layout (posición/tamaño de los widgets) de una pantalla, por usuario."""
+    """Guarda layout (posición/tamaño) y/o títulos personalizados de los widgets de
+    una pantalla, por usuario. Acepta actualizaciones parciales (solo layout o solo títulos)."""
     import json
     from app.models.dashboard_layout import DashboardLayout
     row = (db.query(DashboardLayout)
@@ -70,7 +76,10 @@ def put_layout(body: LayoutUpdate, current: User = Depends(get_current_user), db
     if not row:
         row = DashboardLayout(user_id=current.id, pantalla=body.pantalla)
         db.add(row)
-    row.layout = json.dumps(body.layout, ensure_ascii=False)
+    if body.layout is not None:
+        row.layout = json.dumps(body.layout, ensure_ascii=False)
+    if body.titulos is not None:
+        row.titulos = json.dumps(body.titulos, ensure_ascii=False)
     row.updated_at = datetime.now(timezone.utc)
     db.commit()
     return {"ok": True}

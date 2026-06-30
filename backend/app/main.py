@@ -156,6 +156,10 @@ def run_migrations():
         conn.execute(text(
             "ALTER TABLE camila_revision ADD COLUMN IF NOT EXISTS incorporada_at TIMESTAMPTZ"
         ))
+        # ── dashboard_layout: títulos personalizados de los widgets ──
+        conn.execute(text(
+            "ALTER TABLE dashboard_layout ADD COLUMN IF NOT EXISTS titulos TEXT NOT NULL DEFAULT '{}'"
+        ))
 
 
 Base.metadata.create_all(bind=engine)
