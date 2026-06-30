@@ -108,7 +108,7 @@ export default function PreguntasClaudeScreen({ navigation, route }: PreguntasCl
                 <View style={styles.body}>
                   <View style={styles.headerRow}>
                     <Text style={styles.titulo} numberOfLines={1}>
-                      {primera.header || (varias ? `${qs.length} preguntas` : "Claude pregunta")}
+                      #{p.id} · {primera.header || (varias ? `${qs.length} preguntas` : "Claude pregunta")}
                     </Text>
                     <Text style={styles.tiempo}>{tiempoRelativo(p.fecha)}</Text>
                   </View>
