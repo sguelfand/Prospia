@@ -49,4 +49,24 @@ test.describe("Prospects · acciones", () => {
     await page.getByRole("button", { name: "Chat" }).first().click();
     await expect(page.locator(".fixed.inset-0.z-50")).toBeVisible();
   });
+
+  test("abrir el popover de clasificación", async ({ page }) => {
+    await page.goto("/prospects");
+    // Badge de clasificación visible (la celda de la tabla desktop; la card mobile
+    // está oculta). Abrir el popover sin guardar (no muta el prospect).
+    await page.locator("span:visible", { hasText: /^MEDIO$/ }).first().click();
+    await expect(
+      page.locator("select", { has: page.locator('option', { hasText: "ALTO" }) }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: /^OK$/ })).toBeVisible();
+  });
+
+  test("selector de columnas oculta una columna", async ({ page }) => {
+    await page.goto("/prospects");
+    await expect(page.getByRole("columnheader", { name: "Web" })).toBeVisible();
+    await page.getByRole("button", { name: "Columnas" }).click();
+    // Destildar "Web" en el menú de columnas.
+    await page.getByRole("checkbox", { name: "Web" }).uncheck();
+    await expect(page.getByRole("columnheader", { name: "Web" })).toHaveCount(0);
+  });
 });

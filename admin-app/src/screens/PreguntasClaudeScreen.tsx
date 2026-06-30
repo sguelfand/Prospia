@@ -165,12 +165,14 @@ function DetalleModal({ pregunta, token, onClose, onResuelta }: {
   const [otra, setOtra] = useState<string[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [verCtx, setVerCtx] = useState(false);
 
   useEffect(() => {
     setSel(qs.map((q) => (q.multiselect ? [] : "")));
     setOtra(qs.map(() => ""));
     setErr(null);
     setEnviando(false);
+    setVerCtx(false);
   }, [pregunta?.id]);
 
   if (!pregunta) return null;
@@ -231,7 +233,12 @@ function DetalleModal({ pregunta, token, onClose, onResuelta }: {
             <Text style={styles.modalTitle}>{qs.length > 1 ? `${qs.length} preguntas` : "Pregunta de Claude"}</Text>
             <TouchableOpacity onPress={onClose}><Icon name="x" size={18} color={colors.textDim} /></TouchableOpacity>
           </View>
-          {pregunta.contexto ? <Text style={styles.contexto}>{pregunta.contexto}</Text> : null}
+          {pregunta.contexto ? (
+            <TouchableOpacity style={styles.ctxBtn} onPress={() => setVerCtx(true)} activeOpacity={0.7}>
+              <Icon name="info" size={14} color={colors.primary} />
+              <Text style={styles.ctxBtnText}>Ver detalle / contexto</Text>
+            </TouchableOpacity>
+          ) : null}
 
           {pendiente ? (
             <>
@@ -314,6 +321,26 @@ function DetalleModal({ pregunta, token, onClose, onResuelta }: {
             </>
           )}
         </View>
+
+        {pregunta.contexto ? (
+          <Modal visible={verCtx} transparent animationType="fade" onRequestClose={() => setVerCtx(false)}>
+            <View style={styles.ctxBackdrop}>
+              <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setVerCtx(false)} />
+              <View style={styles.ctxCard}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Detalle / contexto</Text>
+                  <TouchableOpacity onPress={() => setVerCtx(false)}><Icon name="x" size={18} color={colors.textDim} /></TouchableOpacity>
+                </View>
+                <ScrollView style={styles.ctxScroll} contentContainerStyle={{ paddingBottom: 8 }}>
+                  <Text style={styles.ctxText}>{pregunta.contexto}</Text>
+                </ScrollView>
+                <TouchableOpacity style={[styles.modalBtnGhost, { marginTop: 14 }]} onPress={() => setVerCtx(false)}>
+                  <Text style={styles.modalBtnGhostText}>Cerrar</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+        ) : null}
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -344,7 +371,12 @@ const styles = StyleSheet.create({
   modalCard: { backgroundColor: colors.card, borderRadius: 18, padding: 18, width: "100%", maxWidth: 440, maxHeight: "88%" },
   modalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6, minHeight: 22 },
   modalTitle: { color: colors.text, fontSize: 17, fontWeight: "800" },
-  contexto: { color: colors.textDim, fontSize: 13, lineHeight: 18, marginBottom: 4 },
+  ctxBtn: { flexDirection: "row", alignItems: "center", gap: 7, alignSelf: "flex-start", backgroundColor: colors.cardAlt, borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingVertical: 7, paddingHorizontal: 13, marginTop: 4, marginBottom: 4 },
+  ctxBtnText: { color: colors.primary, fontSize: 13, fontWeight: "700" },
+  ctxBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", alignItems: "center", justifyContent: "center", padding: 22 },
+  ctxCard: { backgroundColor: colors.card, borderRadius: 18, padding: 18, width: "100%", maxWidth: 440, maxHeight: "82%" },
+  ctxScroll: { marginTop: 6 },
+  ctxText: { color: colors.text, fontSize: 14, lineHeight: 21 },
   scroll: { maxHeight: 440, marginTop: 8 },
   qBlock: { marginBottom: 6 },
   qBlockSep: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: 14, paddingTop: 16 },
