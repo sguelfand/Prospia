@@ -1,5 +1,23 @@
 # Inventario de funciones de la web Prospia — base para tests visuales
 
+## Estado de cobertura (act. 2026-06-30)
+- ✅ **Login** (form, válido, inválido, ruta protegida) — `login.spec.ts`
+- ✅ **Carga/render de TODA pantalla**: N2 (dashboard, prospects, términos, config,
+  preguntas) — `navegacion.spec.ts`; N1 (dashboard comparativa, admin-clientes,
+  pendientes, errores, preguntas, monitoreo servicios/tokens/calidad) — `admin.spec.ts`
+  (con el superadmin de prueba `qa-admin`).
+- ✅ **Dashboard N2 KPIs** — `dashboard.spec.ts`. **Visual regression** de prospects/
+  términos/config — `visual.spec.ts`.
+- ⏳ **Pendiente (capa de acciones)**: cada botón/form/filtro individual (buscar,
+  filtrar, clasificar, agregar/borrar término, toggles, etc.). Se agregan por la
+  regla "feature nueva → su test" + grinding. N2 = interacción real sobre `qa-test`;
+  N1 = sin ejecutar escrituras que toquen datos reales de prod.
+
+Total a la fecha: **25 tests verdes** (corrida #2 en el Historial).
+
+---
+
+
 Fuente: relevamiento automático del frontend (`src/pages` + `src/components`) y
 backend (`app/routers`). Cada "función" = una acción de usuario con efecto
 observable. Sirve como registro de Pendientes/Realizados de la pantalla
