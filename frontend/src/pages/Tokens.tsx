@@ -1,6 +1,7 @@
 import { RefreshCw, Lightbulb, Phone } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
+import CostosInternos, { AnthUsage } from '../components/CostosInternos'
 
 type Totales = {
   total: number; llamadas: number; costo_usd: number
@@ -23,11 +24,6 @@ type DiaTrend = { fecha: string; costo_usd: number; costo_mensajes: number; cost
 type MesTrend = { mes: string; costo_usd: number; conversaciones: number; llamadas: number; costo_por_conversacion: number }
 type Oportunidad = { id: number; tipo: string; clave: string; severidad: 'alta' | 'media' | 'baja'; titulo: string; detalle: string; estado: string; primera_vez: string | null }
 type Source = { id: string; nombre: string }
-type AnthFuncion = { funcion: string; llamadas: number; tokens: number; costo_usd: number; modelos: string[] }
-type AnthUsage = {
-  dias: number; total_usd: number; tokens_total: number; llamadas_total: number
-  por_funcion: AnthFuncion[]; por_dia: { fecha: string; costo_usd: number }[]
-}
 type Audit = {
   source: string; ultimo: Ultimo | null; tendencia: DiaTrend[]
   serie_mensual: MesTrend[]; por_modelo_mes: Record<string, { tokens: number; costo_usd: number; llamadas: number }>
@@ -76,7 +72,7 @@ export default function Tokens() {
 
   const [apiUsage, setApiUsage] = useState<AnthUsage | null>(null)
   useEffect(() => { api.get<Source[]>('/admin/tokens/sources').then(setSources).catch(() => {}) }, [])
-  useEffect(() => { api.get<AnthUsage>('/admin/tokens/anthropic?dias=30').then(setApiUsage).catch(() => {}) }, [])
+  useEffect(() => { api.get<AnthUsage>('/admin/tokens/anthropic?meses=12').then(setApiUsage).catch(() => {}) }, [])
   const cargar = useCallback(async () => {
     try { setData(await api.get<Audit>(`/admin/tokens/audit?source=${source}&days=14`)); setError(null) }
     catch (e) { setError(e instanceof Error ? e.message : 'Error al cargar') }
@@ -130,7 +126,7 @@ export default function Tokens() {
         </div>
       </div>
       {error && <p className="text-sm text-red-500">{error}</p>}
-      <p className="text-xs text-muted -mt-2">Costo real = tokens reales × tarifa MyClaw (10% off el precio oficial). Tocá un día del gráfico para ver sus conversaciones.</p>
+      <p className="text-xs text-muted -mt-2">Costo real estimado a tarifa MyClaw (10% off el precio oficial). Tocá un día del gráfico para ver sus conversaciones.</p>
 
       {/* Oportunidades FIJAS */}
       <div className="bg-card border border-line rounded-2xl p-6 space-y-3">
@@ -163,28 +159,8 @@ export default function Tokens() {
 
       {/* Costos internos: API de Anthropic (funciones de Prospia, NO Camila) */}
       {apiUsage && (
-        <div className="bg-card border border-line rounded-2xl p-6 space-y-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Costos internos · API Anthropic</h2>
-            <span className="text-xs text-muted">funciones de Prospia (Especialista, intake, clasificación…) — NO Camila</span>
-            <span className="ml-auto text-sm font-semibold text-ink">{usd3(apiUsage.total_usd)} <span className="text-xs font-normal text-muted">/ {apiUsage.dias}d</span></span>
-          </div>
-          {apiUsage.por_funcion.length === 0 ? (
-            <p className="text-sm text-muted">Sin uso de la API en los últimos {apiUsage.dias} días.</p>
-          ) : (
-            <div className="divide-y divide-line">
-              {apiUsage.por_funcion.map((f) => (
-                <div key={f.funcion} className="flex items-center gap-3 py-2">
-                  <div className="min-w-0">
-                    <p className="text-sm text-ink truncate">{f.funcion}</p>
-                    <p className="text-[11px] text-muted">{f.llamadas} llamada(s) · {fmt(f.tokens)} tok · {f.modelos.join(', ')}</p>
-                  </div>
-                  <span className="ml-auto text-sm font-medium text-ink">{usd3(f.costo_usd)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          <p className="text-[11px] text-muted">Precio oficial de Anthropic (key directa, sin el 10% off de MyClaw). Camila va por MyClaw y se mide aparte.</p>
+        <div className="bg-card border border-line rounded-2xl p-6">
+          <CostosInternos data={apiUsage} />
         </div>
       )}
 
@@ -198,11 +174,10 @@ export default function Tokens() {
             {diaLoading && <RefreshCw size={12} className="animate-spin text-muted" />}
             {!verUltimo && <button onClick={() => setDiaSel(null)} className="text-xs text-primary hover:underline">← volver al último</button>}
           </div>
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[
               { l: 'Costo del día', v: usd(t?.costo_usd ?? 0), alert: false },
               { l: 'Conversaciones', v: fmt(det?.n_conversaciones ?? 0), alert: false },
-              { l: 'Llamadas', v: fmt(t?.llamadas ?? 0), alert: false },
               { l: 'Errores', v: fmt(t?.errores ?? 0), alert: (t?.errores ?? 0) > 0 },
               { l: 'Timeouts', v: fmt(t?.timeouts ?? 0), alert: (t?.timeouts ?? 0) > 0 },
             ].map((k) => (
@@ -252,8 +227,7 @@ export default function Tokens() {
                           </div>
                           {c.nombre && <p className="text-xs text-ink-soft mt-0.5 truncate">{c.nombre}</p>}
                           <div className="text-xs text-muted mt-0.5">
-                            {c.llamadas} llamadas · {fmt(c.tokens)} tok
-                            {Object.keys(c.por_modelo ?? {}).length > 0 && <span> · {Object.keys(c.por_modelo!).map((m) => m.replace('claude-', '')).join(', ')}</span>}
+                            {Object.keys(c.por_modelo ?? {}).length > 0 && <span>{Object.keys(c.por_modelo!).map((m) => m.replace('claude-', '')).join(', ')}</span>}
                             {c.timeouts > 0 && <span className="text-red-400"> · {c.timeouts} timeout</span>}
                             {c.errores > 0 && <span className="text-red-400"> · {c.errores} error</span>}
                           </div>
@@ -279,16 +253,11 @@ export default function Tokens() {
                               {Object.entries(c.por_modelo ?? {}).sort((a, b) => b[1].costo_usd - a[1].costo_usd).map(([m, v]) => (
                                 <div key={m} className="flex items-center justify-between text-xs">
                                   <span className="text-ink-soft">{m}</span>
-                                  <span className="text-muted">{usd3(v.costo_usd)} · {v.llamadas} ll</span>
+                                  <span className="text-muted">{usd3(v.costo_usd)}</span>
                                 </div>
                               ))}
                             </div>
-                            {/* tokens detallados */}
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-muted">
-                              <span>Input: <span className="text-ink-soft">{fmt(c.input ?? 0)}</span></span>
-                              <span>Output: <span className="text-ink-soft">{fmt(c.output ?? 0)}</span></span>
-                              <span>Cache read: <span className="text-ink-soft">{fmt(c.cacheRead ?? 0)}</span></span>
-                              <span>Cache write: <span className="text-ink-soft">{fmt(c.cacheWrite ?? 0)}</span></span>
+                            <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted">
                               {(c.compactaciones ?? 0) > 0 && <span>Compactaciones: <span className="text-amber-400">{c.compactaciones}</span></span>}
                               {c.primer_ts && <span>Horario: <span className="text-ink-soft">{hhmm(c.primer_ts)}–{hhmm(c.ultimo_ts)}</span></span>}
                             </div>
@@ -312,7 +281,7 @@ export default function Tokens() {
                   {Object.entries(data!.por_modelo_mes).sort((a, b) => b[1].costo_usd - a[1].costo_usd).map(([m, v]) => (
                     <div key={m} className="flex items-center justify-between text-sm">
                       <span className="text-ink-soft">{m}</span>
-                      <span className="text-muted">{usd(v.costo_usd)} · {fmt(v.tokens)} tok · {v.llamadas} ll</span>
+                      <span className="text-muted">{usd(v.costo_usd)}</span>
                     </div>
                   ))}
                 </div>
