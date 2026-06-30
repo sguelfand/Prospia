@@ -287,7 +287,7 @@ function ClienteDashboard() {
       <DashboardGrid pantalla="dashboard-cliente" defaultLayout={LAYOUT_CLIENTE}>
         <div key="mesActual">
           <Widget id="mesActual" title={`Mes actual — ${mesNombre}`}>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="grid-auto-cards">
           <KpiCard
             label="Prospects generados"
             value={fmt(mes_actual.prospects)}
@@ -473,7 +473,7 @@ function GastosClientes() {
         <button onClick={() => navigate('/monitoreo/tokens')} className="text-xs text-accent hover:underline">ver detalle →</button>
       </div>
       {/* cards del mes actual */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid-auto-cards">
         {rows.map((r, i) => (
           <div key={r.id} className="bg-card rounded-xl shadow p-4">
             <div className="text-2xl font-semibold tabular-nums" style={{ color: COSTO_COLORS[i % COSTO_COLORS.length] }}>${r.gasto_mes_actual.toFixed(2)}</div>
@@ -535,7 +535,7 @@ function ComparativaDashboard() {
       <DashboardGrid pantalla="dashboard-comparativa" defaultLayout={LAYOUT_COMPARATIVA}>
         <div key="kpisGlobal">
           <Widget id="kpisGlobal" title="Totales — todos los clientes">
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="grid-auto-cards">
         <KpiCard label="Clientes"        value={fmt(data.total_clientes)}  color="#1e293b" />
         <KpiCard label="Prospects"       value={fmt(data.total_prospects)} color="#3b82f6" />
         <KpiCard label="En conversación" value={fmt(data.en_conversacion)}  color={ESTADOS.en_conversacion.color} />

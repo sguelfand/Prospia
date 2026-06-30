@@ -208,7 +208,7 @@ export default function Tokens() {
               </span>
             }
           >
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid-auto-cards">
               {[
                 { l: 'Costo del día', v: usd(t?.costo_usd ?? 0), alert: false },
                 { l: 'Conversaciones', v: fmt(det?.n_conversaciones ?? 0), alert: false },
