@@ -150,7 +150,6 @@ export default function Calidad() {
   const [nuevoBusy, setNuevoBusy] = useState(false)
   const [audit, setAudit] = useState<AuditEstado | null>(null)
   const [auditBusy, setAuditBusy] = useState(false)
-  const [verReporte, setVerReporte] = useState(false)
 
   // Cliente inicial: el default guardado por el usuario (tilde) o Etiguel.
   useEffect(() => {
@@ -219,7 +218,7 @@ export default function Calidad() {
     setAuditBusy(true)
     try {
       const r = await api.post<AuditEstado>(`/admin/calidad/auditoria-prompt?source=${encodeURIComponent(source)}`)
-      setAudit(r); setVerReporte(true)
+      setAudit(r)
     } catch (e) {
       alert(e instanceof Error ? e.message : 'No se pudo auditar')
     } finally {
@@ -419,34 +418,11 @@ export default function Calidad() {
               {auditBusy ? 'Auditando el prompt…' : 'Auditar ahora'}
             </button>
             {(audit.hallazgos?.length || audit.reporte) && (
-              <button onClick={() => setVerReporte((v) => !v)} className="text-xs text-primary hover:underline">
-                {verReporte ? 'Ocultar' : 'Ver'} reporte
-              </button>
-            )}
-            {(audit.hallazgos?.length || audit.reporte) && (
-              <button onClick={() => abrirReporteHtml(audit, sources.find((s) => s.source === source)?.nombre ?? source)} className="text-xs text-primary hover:underline">
-                Abrir en pestaña ↗
+              <button onClick={() => abrirReporteHtml(audit, sources.find((s) => s.source === source)?.nombre ?? source)} className="text-xs font-semibold text-primary hover:underline">
+                Ver reporte ↗
               </button>
             )}
           </div>
-          {verReporte && (
-            <div className="mt-3 space-y-2">
-              {audit.hallazgos?.length ? audit.hallazgos.map((h, i) => {
-                const m = HALLAZGO_META[h.tipo] || { emoji: '•', label: h.tipo || 'Hallazgo', color: '#8294b4' }
-                return (
-                  <div key={i} className="rounded-lg border border-line bg-app/40 p-3 border-l-4" style={{ borderLeftColor: m.color }}>
-                    <div className="text-[11px] font-bold uppercase tracking-wide mb-1" style={{ color: m.color }}>{m.emoji} {m.label}</div>
-                    <p className="text-sm text-ink">{h.detalle}</p>
-                    {h.sugerencia && <p className="text-xs text-sky-400 mt-1.5"><span className="font-semibold">Sugerencia:</span> {h.sugerencia}</p>}
-                  </div>
-                )
-              }) : audit.reporte ? (
-                <pre className="text-xs text-ink whitespace-pre-wrap break-words bg-black/20 rounded-lg p-3 max-h-96 overflow-y-auto font-mono">{audit.reporte}</pre>
-              ) : (
-                <p className="text-sm text-emerald-500">✅ Sin problemas detectados.</p>
-              )}
-            </div>
-          )}
         </div>
       )}
 
