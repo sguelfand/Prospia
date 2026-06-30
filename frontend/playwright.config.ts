@@ -33,8 +33,8 @@ export default defineConfig({
   snapshotPathTemplate: "{testDir}/__screenshots__/{testFilePath}/{arg}{ext}",
 
   projects: [
-    /* Loguea una vez y guarda la sesión para el resto */
-    { name: "setup", testMatch: /auth\.setup\.ts/ },
+    /* Loguea una vez (qatest N2 + qa-admin N1) y guarda las sesiones */
+    { name: "setup", testMatch: /\.setup\.ts/ },
     {
       name: "chromium",
       use: {
