@@ -470,6 +470,7 @@ export interface TokenConv {
 export interface TokenOportunidad {
   id: number; tipo: string; clave: string; severidad: "alta" | "media" | "baja";
   titulo: string; detalle: string; estado: string; primera_vez: string | null;
+  ultima_vez: string | null;
 }
 export interface TokenAgg { tokens: number; costo_usd: number; llamadas: number }
 export interface TokenUltimo {

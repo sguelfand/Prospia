@@ -51,6 +51,14 @@ function haceDias(iso: string | null): string {
   return d <= 0 ? "hoy" : d === 1 ? "hace 1 día" : `hace ${d} días`;
 }
 const hhmm = (iso?: string | null) => (iso ? new Date(iso).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }) : "");
+// Fecha + hora absolutas, ej "28/06 14:35". Para datar la oportunidad en el
+// momento del uso de tokens (no solo "hace X días").
+const fechaHora = (iso?: string | null) =>
+  iso
+    ? new Date(iso).toLocaleString("es-AR", {
+        day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+      })
+    : "";
 
 export default function TokensScreen() {
   const { token } = useAuth();
@@ -240,7 +248,10 @@ export default function TokensScreen() {
                   <Text style={styles.opTitle}>{o.titulo}</Text>
                 </View>
                 <Text style={styles.opDetail}>{o.detalle}</Text>
-                <Text style={styles.opMeta}>detectada {haceDias(o.primera_vez)}</Text>
+                <Text style={styles.opMeta}>
+                  detectada {fechaHora(o.primera_vez)} ({haceDias(o.primera_vez)})
+                  {o.ultima_vez && o.ultima_vez !== o.primera_vez ? ` · últ. señal ${fechaHora(o.ultima_vez)}` : ""}
+                </Text>
               </View>
             );
           })
