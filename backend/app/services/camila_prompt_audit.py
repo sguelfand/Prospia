@@ -63,8 +63,9 @@ def auditar(source: str = "etiguel") -> dict:
     if not (prompt or "").strip():
         return {"ok": False, "motivo": "prompt_vacio"}
 
+    # timeout largo: el prompt completo es grande y genera bastante → la IA tarda.
     raw = _post(_system(), f"PROMPT COMPLETO DE CAMILA:\n\n{prompt}",
-                max_tokens=2000, funcion="Auditoría prompt Camila")
+                max_tokens=1600, timeout=120, funcion="Auditoría prompt Camila")
     data = _parse_json(raw)
     if data is None:
         if not raw:

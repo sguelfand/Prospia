@@ -1,4 +1,4 @@
-import { MessageSquare, Phone, Plus, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react'
+import { Loader2, MessageSquare, Phone, Plus, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { ClienteSelector, type SourceOpt } from '../components/ClienteSelector'
@@ -120,6 +120,11 @@ function fmtFecha(iso: string): string {
   const d = new Date(iso)
   if (isNaN(d.getTime())) return ''
   return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
+}
+function fmtFechaHora(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
 export default function Calidad() {
@@ -395,7 +400,7 @@ export default function Calidad() {
               <span className="text-[11px] font-bold text-amber border border-amber/50 rounded px-1.5 py-0.5">conviene re-auditar</span>
             )}
             <span className="text-[11px] text-muted ml-auto">
-              {audit.ultima_at ? `última: ${fmtFecha(audit.ultima_at)}` : 'nunca'}
+              {audit.ultima_at ? `última: ${fmtFechaHora(audit.ultima_at)}` : 'nunca'}
             </span>
           </div>
           <p className="text-xs text-muted mt-2">
@@ -405,8 +410,9 @@ export default function Calidad() {
           </p>
           {audit.resumen && <p className="text-xs text-ink mt-2">{audit.resumen}{audit.n_hallazgos ? ` · ${audit.n_hallazgos} hallazgo(s)` : ''}</p>}
           <div className="flex gap-2 mt-2 items-center flex-wrap">
-            <button disabled={auditBusy} onClick={auditarPrompt} className="text-xs font-semibold border border-primary/50 text-primary rounded-lg px-3 py-1.5 hover:bg-primary/10 disabled:opacity-50">
-              {auditBusy ? 'Auditando…' : 'Auditar ahora'}
+            <button disabled={auditBusy} onClick={auditarPrompt} className="flex items-center gap-1.5 text-xs font-semibold border border-primary/50 text-primary rounded-lg px-3 py-1.5 hover:bg-primary/10 disabled:opacity-50">
+              {auditBusy && <Loader2 size={13} className="animate-spin" />}
+              {auditBusy ? 'Auditando el prompt…' : 'Auditar ahora'}
             </button>
             {(audit.hallazgos?.length || audit.reporte) && (
               <button onClick={() => setVerReporte((v) => !v)} className="text-xs text-primary hover:underline">

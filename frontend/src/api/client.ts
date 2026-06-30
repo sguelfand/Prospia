@@ -19,7 +19,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail ?? 'Error desconocido')
+    let detail = err?.detail ?? 'Error desconocido'
+    // El backend a veces manda detail como objeto (ej. {motivo, error}); que no
+    // termine como "[object Object]" en pantalla.
+    if (typeof detail !== 'string') {
+      detail = detail?.error || detail?.motivo || detail?.detail || JSON.stringify(detail)
+    }
+    throw new Error(detail)
   }
   if (res.status === 204) return undefined as T
   return res.json()

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, FlatList, KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -31,6 +31,12 @@ function fmtFechaCorta(iso: string): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "";
   return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
+}
+
+function fmtFechaHora(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
 const SEV_COLOR: Record<string, string> = {
@@ -279,9 +285,26 @@ export default function CalidadScreen(_props: CalidadProps) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.intro}>
-        <Text style={{ fontWeight: "700", color: colors.text }}>Especialista Negocio</Text> marcó respuestas de Camila. Confirmá si estuvo bien o mal — así afina su criterio.
-      </Text>
+      <FlatList
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
+        data={visibles}
+        keyExtractor={(r) => String(r.id)}
+        ListEmptyComponent={<Text style={styles.empty}>{filtro === "nuevo" ? "Nada para revisar 🎉" : "Todavía no confirmaste ninguna."}</Text>}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />}
+        renderItem={({ item }) => (
+          <SwipeRow
+            left={{ icon: "x", color: colors.red, onTrigger: () => confirmarBorrar(item) }}
+            right={{ icon: "x", color: colors.red, onTrigger: () => confirmarBorrar(item) }}
+          >
+            {renderCard(item)}
+          </SwipeRow>
+        )}
+        ListHeaderComponent={
+          <View>
+            {error ? <ErrorBox message={error} onRetry={load} /> : null}
+            <Text style={styles.intro}>
+              <Text style={{ fontWeight: "700", color: colors.text }}>Especialista Negocio</Text> marcó respuestas de Camila. Confirmá si estuvo bien o mal — así afina su criterio.
+            </Text>
 
       {sources.length > 1 ? (
         <View style={styles.selectorWrap}>
@@ -360,7 +383,7 @@ export default function CalidadScreen(_props: CalidadProps) {
         <View style={[styles.aprCard, audit.recomendar ? styles.auditCardRec : null]}>
           <View style={styles.aprHeader}>
             <Text style={styles.aprTitle}>🧱 Auditoría del prompt</Text>
-            <Text style={styles.meta}>{audit.ultima_at ? `última: ${fmtFechaCorta(audit.ultima_at)}` : "nunca"}</Text>
+            <Text style={styles.meta}>{audit.ultima_at ? `última: ${fmtFechaHora(audit.ultima_at)}` : "nunca"}</Text>
           </View>
           <Text style={styles.aprDesc}>
             Revisa el prompt entero (duplicados, contradicciones, estructura) para que al sumar
@@ -371,7 +394,8 @@ export default function CalidadScreen(_props: CalidadProps) {
           {audit.resumen ? <Text style={styles.aprDesc}>{audit.resumen}{audit.n_hallazgos ? ` · ${audit.n_hallazgos} hallazgo(s)` : ""}</Text> : null}
           <View style={styles.aprActions}>
             <TouchableOpacity disabled={auditBusy} style={[styles.actionBtn, { borderColor: colors.primary, flex: 1 }]} onPress={auditarPrompt}>
-              <Text style={[styles.actionLabel, { color: colors.primary }]}>{auditBusy ? "Auditando…" : "Auditar ahora"}</Text>
+              {auditBusy ? <ActivityIndicator size="small" color={colors.primary} style={{ marginRight: 6 }} /> : null}
+              <Text style={[styles.actionLabel, { color: colors.primary }]}>{auditBusy ? "Auditando el prompt…" : "Auditar ahora"}</Text>
             </TouchableOpacity>
             {(audit.hallazgos?.length || audit.reporte) ? (
               <TouchableOpacity style={[styles.actionBtn, { borderColor: colors.border }]} onPress={() => setVerReporte((v) => !v)}>
@@ -407,22 +431,8 @@ export default function CalidadScreen(_props: CalidadProps) {
           </TouchableOpacity>
         ))}
       </View>
-
-      <FlatList
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
-        data={visibles}
-        keyExtractor={(r) => String(r.id)}
-        ListHeaderComponent={error ? <ErrorBox message={error} onRetry={load} /> : null}
-        ListEmptyComponent={<Text style={styles.empty}>{filtro === "nuevo" ? "Nada para revisar 🎉" : "Todavía no confirmaste ninguna."}</Text>}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />}
-        renderItem={({ item }) => (
-          <SwipeRow
-            left={{ icon: "x", color: colors.red, onTrigger: () => confirmarBorrar(item) }}
-            right={{ icon: "x", color: colors.red, onTrigger: () => confirmarBorrar(item) }}
-          >
-            {renderCard(item)}
-          </SwipeRow>
-        )}
+          </View>
+        }
       />
 
       {/* Modal: nuevo registro manual (teléfono + descripción) */}
@@ -484,7 +494,7 @@ function ActionBtn({ icon, label, color, onPress }: { icon: "flag" | "check"; la
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 12, paddingBottom: 40 },
+  content: { paddingBottom: 40 },
   empty: { color: colors.textDim, textAlign: "center", marginTop: 40 },
   intro: { color: colors.textDim, fontSize: 12, paddingHorizontal: 12, paddingTop: 12 },
 
@@ -533,13 +543,13 @@ const styles = StyleSheet.create({
   aprActions: { flexDirection: "row", gap: 8, marginTop: 10 },
   aprRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4 },
 
-  tabs: { flexDirection: "row", padding: 8, gap: 8 },
+  tabs: { flexDirection: "row", paddingHorizontal: 12, paddingVertical: 8, gap: 8, marginTop: 4 },
   tab: { flex: 1, paddingVertical: 9, borderRadius: 9, borderWidth: 1, borderColor: colors.border, alignItems: "center" },
   tabActive: { backgroundColor: colors.cardAlt, borderColor: colors.primary },
   tabText: { color: colors.textDim, fontSize: 12, fontWeight: "700" },
   tabTextActive: { color: colors.text },
 
-  card: { backgroundColor: colors.card, borderRadius: 12, padding: 14, marginBottom: 10, borderLeftColor: colors.amber, borderLeftWidth: 3 },
+  card: { backgroundColor: colors.card, borderRadius: 12, padding: 14, marginBottom: 10, marginHorizontal: 12, borderLeftColor: colors.amber, borderLeftWidth: 3 },
   cardDone: { opacity: 0.7 },
   headerRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 4, marginBottom: 6 },
   cat: { fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.4 },
