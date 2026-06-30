@@ -357,7 +357,8 @@ export default function CalidadScreen(_props: CalidadProps) {
           </View>
           <Text style={styles.aprDesc}>
             Revisa el prompt entero (duplicados, contradicciones, estructura) para que al sumar
-            correcciones nada se pise. Conviene 1×/semana.
+            correcciones nada se pise. Se corre sola 1×/semana y te avisa solo si encuentra algo;
+            también podés correrla ahora.
           </Text>
           {audit.recomendar ? <Text style={styles.auditRec}>Conviene re-auditar.</Text> : null}
           {audit.resumen ? <Text style={styles.aprDesc}>{audit.resumen}{audit.n_hallazgos ? ` · ${audit.n_hallazgos} hallazgo(s)` : ""}</Text> : null}

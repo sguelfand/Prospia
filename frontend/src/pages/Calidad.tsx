@@ -346,7 +346,8 @@ export default function Calidad() {
           </div>
           <p className="text-xs text-muted mt-2">
             Revisa el prompt entero (reglas duplicadas, contradicciones, estructura) para que al ir
-            sumando correcciones nada se pise. Conviene hacerla 1×/semana.
+            sumando correcciones nada se pise. <span className="text-ink">Se corre sola 1×/semana</span> y
+            te avisa solo si encuentra algo; también podés correrla ahora.
           </p>
           {audit.resumen && <p className="text-xs text-ink mt-2">{audit.resumen}{audit.n_hallazgos ? ` · ${audit.n_hallazgos} hallazgo(s)` : ''}</p>}
           <div className="flex gap-2 mt-2 items-center">

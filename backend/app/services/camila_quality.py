@@ -452,9 +452,9 @@ def start():
                 # Recordatorio semanal de auditoría del prompt completo (nivel 2).
                 try:
                     from app.services import camila_prompt_audit
-                    camila_prompt_audit.chequear_recordatorio("etiguel")
+                    camila_prompt_audit.correr_auto("etiguel")
                 except Exception as e:
-                    print(f"[CAMILA-QUALITY] recordatorio auditoría: {type(e).__name__}: {e}")
+                    print(f"[CAMILA-QUALITY] auditoría auto: {type(e).__name__}: {e}")
                 last_day = hoy
             time.sleep(3 * 3600)
 

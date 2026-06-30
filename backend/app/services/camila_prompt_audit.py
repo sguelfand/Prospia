@@ -116,38 +116,26 @@ def estado(source: str = "etiguel") -> dict:
         db.close()
 
 
-def chequear_recordatorio(source: str = "etiguel") -> None:
-    """Si pasó >= DIAS_RECOMENDADO desde la última auditoría (o nunca se hizo) y no
-    mandamos el recordatorio en la última semana, manda un push recomendándola.
-    Se llama desde el loop diario de camila_quality."""
-    st = estado(source)
-    if not st.get("recomendar"):
-        return
-    from app.database import SessionLocal
-    from app.models.service_health import MonitorSettings
-    ahora = datetime.now(timezone.utc)
-    db = SessionLocal()
-    try:
-        s = db.query(MonitorSettings).filter(MonitorSettings.id == 1).first()
-        ultimo = getattr(s, "audit_recordatorio_at", None) if s else None
-        if ultimo and (ahora - ultimo).days < DIAS_RECOMENDADO:
-            return  # ya recordé esta semana
-        if not s:
-            s = MonitorSettings(id=1)
-            db.add(s)
-        s.audit_recordatorio_at = ahora
-        db.commit()
-    finally:
-        db.close()
-    dias = st.get("dias_desde")
-    cuando = "todavía no la corriste nunca" if dias is None else f"hace {dias} días"
+def correr_auto(source: str = "etiguel") -> None:
+    """Corre la auditoría AUTOMÁTICAMENTE si pasó >= DIAS_RECOMENDADO desde la última
+    (o nunca se hizo). Se llama desde el loop diario de camila_quality. Como cuesta
+    centavos, se hace sola; solo manda push si encontró hallazgos (si da limpio, corre
+    callada y solo actualiza la fecha visible en la pantalla)."""
+    if not estado(source).get("recomendar"):
+        return  # corrió hace < 1 semana
+    res = auditar(source)
+    if not res.get("ok"):
+        return  # IA caída / no se pudo leer → reintenta mañana
+    n = res.get("n_hallazgos") or 0
+    if n <= 0:
+        return  # sin problemas → sin push (no molestar)
     try:
         from app.services import push
         push.notificar_global(
             "calidad_revision",
             "🧱 Auditoría del prompt de Camila",
-            f"Conviene auditar el prompt completo 1×/semana ({cuando}). Entrá a Calidad y tocá 'Auditar'.",
+            f"La auditoría semanal encontró {n} cosa(s) para revisar en el prompt. Entrá a Calidad.",
             {"tipo": "calidad", "source": source, "nav": "calidad"},
         )
     except Exception as e:
-        print(f"[CAMILA-PROMPT-AUDIT] push recordatorio: {type(e).__name__}: {e}")
+        print(f"[CAMILA-PROMPT-AUDIT] push auditoría: {type(e).__name__}: {e}")
