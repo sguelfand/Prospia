@@ -12,7 +12,7 @@ const PALETTE = ['#F5B23D', '#6CB6FF', '#5AD8A6', '#C792EA', '#FF9F7E', '#8294B4
 const usd = (n: number) => '$' + (n ?? 0).toFixed((n ?? 0) < 1 ? 3 : 2)
 const corto = (f: string) => f.split(' (')[0]
 
-export default function CostosInternos({ data }: { data: AnthUsage }) {
+export default function CostosInternos({ data, flat }: { data: AnthUsage; flat?: boolean }) {
   const [hoverMes, setHoverMes] = useState<number | null>(null)
 
   // mapa estable función → color (orden alfabético de todas las funciones vistas)
@@ -26,13 +26,17 @@ export default function CostosInternos({ data }: { data: AnthUsage }) {
   const totalMes = data.total_mes || fs.reduce((s, f) => s + f.costo_usd, 0)
   const maxFn = Math.max(0.000001, ...fs.map((f) => f.costo_usd))
   const delta = data.delta_pct
+  // Dentro de un Widget el contenedor ya es una card → `flat` evita card-en-card.
+  const box = flat ? '' : 'bg-card border border-line rounded-2xl p-5'
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2 flex-wrap">
-        <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Costos internos · API Anthropic</h2>
-        <span className="text-xs text-muted">funciones de Prospia (Especialista, intake, clasificación…) — separado de Camila</span>
-      </div>
+      {!flat && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Costos internos · API Anthropic</h2>
+          <span className="text-xs text-muted">funciones de Prospia (Especialista, intake, clasificación…) — separado de Camila</span>
+        </div>
+      )}
 
       {/* ───── Mes actual ───── */}
       <div>
@@ -46,7 +50,7 @@ export default function CostosInternos({ data }: { data: AnthUsage }) {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
           {/* barras por función */}
-          <div className="bg-card border border-line rounded-2xl p-5">
+          <div className={box}>
             <h3 className="text-xs font-semibold text-ink-soft uppercase tracking-wide mb-4">Costo por función</h3>
             {fs.length === 0 ? <p className="text-sm text-muted">Sin uso este mes todavía.</p> : fs.map((f) => (
               <div key={f.funcion} className="mb-3.5">
@@ -63,7 +67,7 @@ export default function CostosInternos({ data }: { data: AnthUsage }) {
           </div>
 
           {/* donut participación */}
-          <div className="bg-card border border-line rounded-2xl p-5">
+          <div className={box}>
             <h3 className="text-xs font-semibold text-ink-soft uppercase tracking-wide mb-2">Participación</h3>
             {fs.length === 0 ? <p className="text-sm text-muted">—</p> : (
               <div className="flex flex-col items-center">
@@ -83,7 +87,7 @@ export default function CostosInternos({ data }: { data: AnthUsage }) {
       </div>
 
       {/* ───── Histórico ───── */}
-      <div className="bg-card border border-line rounded-2xl p-5">
+      <div className={box}>
         <div className="flex items-center justify-between mb-1">
           <h3 className="text-xs font-semibold text-ink-soft uppercase tracking-wide">Histórico mensual</h3>
           <span className="text-[11px] text-muted">apilado por función · pasá el mouse</span>
