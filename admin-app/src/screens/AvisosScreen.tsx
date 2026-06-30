@@ -190,6 +190,18 @@ export default function AvisosScreen({ navigation, route }: AvisosProps) {
     }
   };
 
+  // Avisos que tienen una pantalla propia para ver el detalle (botón "Ver").
+  const PANTALLA_POR_TIPO: Record<string, { pantalla: "Calidad" | "Tokens"; icon: IconName; label: string }> = {
+    calidad_revision: { pantalla: "Calidad", icon: "star", label: "Ver" },
+    tokens_oportunidad: { pantalla: "Tokens", icon: "pulse", label: "Ver" },
+  };
+  const irAPantalla = (a: Aviso) => {
+    const dest = PANTALLA_POR_TIPO[a.tipo];
+    if (!dest) return;
+    setDetalle(null);
+    navigation.navigate(dest.pantalla);
+  };
+
   if (loading) return <Loader />;
 
   const ico = detalle ? iconoPara(detalle.tipo) : { name: "bell" as IconName, color: colors.textDim };
@@ -322,6 +334,14 @@ export default function AvisosScreen({ navigation, route }: AvisosProps) {
                 <View style={styles.modalActions}>
                   {detalle.tenant_id != null && (
                     <Accion icon="user" label="Cliente" onPress={() => irACliente(detalle)} />
+                  )}
+                  {PANTALLA_POR_TIPO[detalle.tipo] && (
+                    <Accion
+                      icon={PANTALLA_POR_TIPO[detalle.tipo].icon}
+                      label={PANTALLA_POR_TIPO[detalle.tipo].label}
+                      primary
+                      onPress={() => irAPantalla(detalle)}
+                    />
                   )}
                   {!expandido && tieneDetalle && (
                     <Accion icon="list" label="Detalle" onPress={() => setExpandido(true)} />
