@@ -8,7 +8,9 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-const BASE = process.env.PROSPIA_BASE_URL || 'https://prospia.app'
+// La API vive bajo /api (nginx proxea). El reporter postea ahí (distinto de la
+// baseURL del navegador que usa Playwright, que es la web sin /api).
+const API = process.env.PROSPIA_API_URL || 'https://prospia.app/api'
 
 function stripAnsi(s) {
   // eslint-disable-next-line no-control-regex
@@ -68,7 +70,7 @@ const duracion_ms = data.stats?.duration ? Math.round(data.stats.duration) : det
 // 3. Registrar en el historial.
 const token = getToken()
 if (!token) { console.error('Falta PROSPIA_MIRROR_TOKEN (ni en env ni en secrets.env).'); process.exit(1) }
-const r = await fetch(`${BASE}/ingest/test-run`, {
+const r = await fetch(`${API}/ingest/test-run`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json', 'X-Mirror-Token': token },
   body: JSON.stringify({ origen: 'local', total: detalle.length, pasaron, fallaron, duracion_ms, detalle }),
