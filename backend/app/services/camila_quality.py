@@ -107,6 +107,44 @@ def _post(system: str, user: str, max_tokens: int = 1200, timeout: int = 40,
         return None
 
 
+def transcribir_imagen(image_b64: str, mime: str = "image/jpeg") -> str | None:
+    """Lee UNA imagen (captura de conversación) con Haiku-visión y devuelve la
+    transcripción del intercambio. Barato (Haiku) y se usa 1 sola vez al cargar el
+    registro → la lección queda como texto. None si no hay key o falla."""
+    key = _anthropic_key()
+    if not key or not image_b64:
+        return None
+    HAIKU = "claude-haiku-4-5-20251001"
+    content = [
+        {"type": "image", "source": {"type": "base64", "media_type": mime, "data": image_b64}},
+        {"type": "text", "text": (
+            "Es una captura de una conversación de WhatsApp entre un cliente y Camila "
+            "(la agente del negocio). Transcribí el intercambio que se ve, indicando quién "
+            "dijo cada cosa (Cliente / Camila). Solo la transcripción fiel, sin opinar ni resumir.")},
+    ]
+    try:
+        resp = requests.post(
+            ANTHROPIC_API_URL,
+            headers={"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
+            json={"model": HAIKU, "max_tokens": 1500, "messages": [{"role": "user", "content": content}]},
+            timeout=60,
+        )
+    except Exception as e:
+        print(f"[CAMILA-QUALITY] transcribir HTTP: {type(e).__name__}: {e}")
+        return None
+    if resp.status_code != 200:
+        print(f"[CAMILA-QUALITY] transcribir HTTP {resp.status_code}: {resp.text[:200]}")
+        return None
+    try:
+        data = resp.json()
+        from app.services import anthropic_usage
+        anthropic_usage.registrar("Transcripción imagen (calidad)", HAIKU, data.get("usage"))
+        return (data.get("content") or [{}])[0].get("text", "").strip() or None
+    except Exception as e:
+        print(f"[CAMILA-QUALITY] transcribir parse: {e}")
+        return None
+
+
 def _parse_json(raw: str | None) -> dict | None:
     if not raw:
         return None
@@ -364,14 +402,21 @@ def borrar_revision(rev_id: int) -> bool:
 # ── reporte manual de Sebi (desde un lead) ────────────────────────────────────
 
 def crear_reporte_manual(source: str, texto: str, telefono: str | None = None,
-                         nombre: str | None = None) -> dict:
+                         nombre: str | None = None, imagen_b64: str | None = None,
+                         imagen_mime: str = "image/jpeg") -> dict:
     """Sebi reporta a mano que Camila estuvo mal en un lead. Entra YA confirmado como
     'acierto' (Sebi es la verdad → no se re-confirma) y suma directo a las lecciones
     pendientes. Si es Etiguel, linkea la conversación espejada por teléfono (para
-    poder abrirla desde Calidad). Devuelve la revisión creada."""
+    poder abrirla desde Calidad). Si viene una imagen de la conversación, la transcribe
+    1 sola vez (Haiku) y suma la transcripción al texto. Devuelve la revisión creada."""
     texto = (texto or "").strip()
-    if not texto:
+    # Si hay imagen, la transcribimos y la sumamos como contexto de la lección.
+    transcripcion = transcribir_imagen(imagen_b64, imagen_mime) if imagen_b64 else None
+    if not texto and not transcripcion:
         raise ValueError("el reporte está vacío")
+    detalle = texto
+    if transcripcion:
+        detalle = (f"{texto}\n\n" if texto else "") + f"[Conversación de la captura adjunta]:\n{transcripcion}"
     from app.database import SessionLocal
     from app.models.camila_revision import CamilaRevision
     db = SessionLocal()
@@ -388,15 +433,15 @@ def crear_reporte_manual(source: str, texto: str, telefono: str | None = None,
             except Exception:
                 pass
         ahora = datetime.now(timezone.utc)
-        titulo = texto.replace("\n", " ").strip()
-        titulo = (titulo[:107] + "…") if len(titulo) > 108 else titulo
+        base_titulo = (texto or transcripcion or "").replace("\n", " ").strip()
+        titulo = (base_titulo[:107] + "…") if len(base_titulo) > 108 else base_titulo
         r = CamilaRevision(
             source=source, mirror_id=mirror_id, telefono=telefono, nombre=nombre,
             fecha=_hoy_ba(), categoria="otro", severidad="media",
             titulo=titulo or "Reporte de calidad",
-            detalle=texto[:4000], fragmento="", sugerencia="",
+            detalle=detalle[:6000], fragmento="", sugerencia="",
             origen="sebi", estado="revisado", veredicto="acierto",
-            nota_sebi=texto[:4000], revisado_at=ahora,
+            nota_sebi=detalle[:6000], revisado_at=ahora,
         )
         db.add(r)
         db.commit()

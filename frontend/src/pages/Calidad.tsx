@@ -148,6 +148,7 @@ export default function Calidad() {
   const [nuevoTel, setNuevoTel] = useState('')
   const [nuevoTexto, setNuevoTexto] = useState('')
   const [nuevoBusy, setNuevoBusy] = useState(false)
+  const [nuevoImg, setNuevoImg] = useState<{ b64: string; mime: string; nombre: string } | null>(null)
   const [audit, setAudit] = useState<AuditEstado | null>(null)
   const [auditBusy, setAuditBusy] = useState(false)
 
@@ -193,13 +194,31 @@ export default function Calidad() {
     try { await api.put('/me/preferences', { pantalla: PANTALLA, prefs: { default_source: nuevo } }) } catch { /* noop */ }
   }
 
+  function onElegirImagen(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''  // permite re-elegir el mismo archivo
+    if (!file) return
+    if (!file.type.startsWith('image/')) { alert('Tiene que ser una imagen.'); return }
+    if (file.size > 8 * 1024 * 1024) { alert('La imagen es muy grande (máx 8MB).'); return }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '')
+      const b64 = dataUrl.split(',')[1] || ''
+      setNuevoImg({ b64, mime: file.type || 'image/jpeg', nombre: file.name })
+    }
+    reader.readAsDataURL(file)
+  }
+
   async function crearRegistro() {
     const texto = nuevoTexto.trim()
-    if (!texto || nuevoBusy) return
+    if ((!texto && !nuevoImg) || nuevoBusy) return
     setNuevoBusy(true)
     try {
-      await api.post('/admin/calidad/reportar', { source, telefono: nuevoTel.trim() || null, texto })
-      setNuevoOpen(false); setNuevoTel(''); setNuevoTexto('')
+      await api.post('/admin/calidad/reportar', {
+        source, telefono: nuevoTel.trim() || null, texto,
+        imagen_b64: nuevoImg?.b64 || null, imagen_mime: nuevoImg?.mime || 'image/jpeg',
+      })
+      setNuevoOpen(false); setNuevoTel(''); setNuevoTexto(''); setNuevoImg(null)
       await load(source)
     } catch (e) {
       alert(e instanceof Error ? e.message : 'No se pudo crear')
@@ -321,13 +340,28 @@ export default function Calidad() {
             <label className="block text-xs text-muted mb-1">¿Qué estuvo mal?</label>
             <textarea value={nuevoTexto} onChange={(e) => setNuevoTexto(e.target.value)} rows={4} autoFocus
               placeholder="Describí qué hizo mal Camila…"
-              className="w-full text-sm bg-transparent border border-line rounded-lg px-3 py-2 mb-4 text-ink placeholder:text-muted resize-none" />
+              className="w-full text-sm bg-transparent border border-line rounded-lg px-3 py-2 mb-3 text-ink placeholder:text-muted resize-none" />
+
+            <label className="block text-xs text-muted mb-1">Captura de la conversación <span className="text-muted/60">(opcional)</span></label>
+            {nuevoImg ? (
+              <div className="flex items-center gap-2 mb-4 text-sm">
+                <span className="text-ink truncate flex-1">📎 {nuevoImg.nombre}</span>
+                <button onClick={() => setNuevoImg(null)} disabled={nuevoBusy} className="text-xs text-muted hover:text-red-500">Quitar</button>
+              </div>
+            ) : (
+              <label className="flex items-center gap-1.5 mb-4 text-xs font-semibold text-primary border border-primary/50 rounded-lg px-3 py-1.5 hover:bg-primary/10 cursor-pointer w-fit">
+                <Plus size={14} /> Adjuntar imagen
+                <input type="file" accept="image/*" className="hidden" onChange={onElegirImagen} />
+              </label>
+            )}
+            <p className="text-[11px] text-muted -mt-3 mb-4">Si adjuntás una captura, la IA la lee y suma la conversación a la lección (cuesta centavos).</p>
+
             <div className="flex justify-end gap-2">
               <button onClick={() => setNuevoOpen(false)} disabled={nuevoBusy}
                 className="text-sm font-semibold text-muted rounded-lg px-3 py-1.5 hover:text-ink disabled:opacity-50">Cancelar</button>
-              <button onClick={crearRegistro} disabled={!nuevoTexto.trim() || nuevoBusy}
+              <button onClick={crearRegistro} disabled={(!nuevoTexto.trim() && !nuevoImg) || nuevoBusy}
                 className="text-sm font-semibold bg-primary text-on-primary rounded-lg px-4 py-1.5 hover:bg-primary-dark disabled:opacity-50">
-                {nuevoBusy ? 'Creando…' : 'Crear'}
+                {nuevoBusy ? (nuevoImg ? 'Analizando imagen…' : 'Creando…') : 'Crear'}
               </button>
             </div>
           </div>

@@ -20,7 +20,15 @@ Regla: si cambia el **binario nativo** → va acá. Si es solo JS/TS/estilos/ló
 
 ## Cola actual (pendiente de build)
 
-_(vacío — no hay cambios nativos sin buildear)_
+### [2026-06-30] calidad-subir-imagen
+- **Qué:** botón para adjuntar una **imagen de la conversación** al registro de calidad
+  (Nuevo registro + Reportar desde la conversación) en la APP. Al subirla, el backend la
+  transcribe con Haiku y la suma a la lección (mismo flujo que ya quedó en la WEB).
+- **Por qué necesita build:** requiere `expo-image-picker` (módulo nativo) para elegir
+  foto de la galería. Si se sube por OTA sin el módulo, la app crashea (como pasó con svg).
+- **Backend + WEB:** YA deployado (endpoint `/admin/calidad/reportar` acepta `imagen_b64`).
+- **Falta para el build:** instalar `expo-image-picker` + UI en `CalidadScreen` (modal) y
+  en `EtiguelMirrorDetailScreen`/`ProspectDetailScreen` (botón Reportar).
 
 <!--
 Formato de cada item:

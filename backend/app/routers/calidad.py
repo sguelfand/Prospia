@@ -22,7 +22,9 @@ class ConfirmarIn(BaseModel):
 class ReportarIn(BaseModel):
     source: str = "etiguel"
     telefono: str | None = None
-    texto: str
+    texto: str = ""
+    imagen_b64: str | None = None        # base64 (sin prefijo data:) de la captura, opcional
+    imagen_mime: str = "image/jpeg"
 
 
 @router.get("/sources")
@@ -51,11 +53,13 @@ def auditoria_prompt_correr(source: str = Query("etiguel")):
 @router.post("/reportar")
 def reportar(body: ReportarIn):
     """Crea a mano un registro de calidad ('Camila estuvo mal') desde la pantalla
-    Calidad: teléfono (opcional) + descripción. Igual que reportar desde un lead:
-    entra ya confirmado como 'acierto' y suma para las lecciones. Solo superadmin."""
+    Calidad: teléfono (opcional) + descripción + (opcional) una captura de la
+    conversación que se transcribe con IA y se suma a la lección. Igual que reportar
+    desde un lead: entra ya confirmado como 'acierto' y suma. Solo superadmin."""
     try:
         rev = camila_quality.crear_reporte_manual(
-            body.source, body.texto, (body.telefono or None))
+            body.source, body.texto, (body.telefono or None),
+            imagen_b64=body.imagen_b64, imagen_mime=body.imagen_mime or "image/jpeg")
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     return {"ok": True, "revision": rev}
