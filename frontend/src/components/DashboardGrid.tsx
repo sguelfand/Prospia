@@ -98,19 +98,35 @@ function mergeDefaults(saved: Layouts, def: Layouts): Layouts {
   return out
 }
 
-/** Un widget del tablero: cuadro con grip de 6 puntitos (arrastrar) + título. */
-export function Widget({ title, right, children }: { title?: string; right?: ReactNode; children: ReactNode }) {
+/** Un widget del tablero: cuadro con grip de 6 puntitos (arrastrar) + título +
+ * chip de fuente (de dónde sale el costo: API Anthropic u OpenClaw). */
+export function Widget({ title, fuente, right, children }: {
+  title?: string; fuente?: 'anthropic' | 'openclaw'; right?: ReactNode; children: ReactNode
+}) {
   return (
     <div className="h-full bg-card border border-line rounded-2xl flex flex-col overflow-hidden">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-line/60">
-        <span className="rgl-grip cursor-grab active:cursor-grabbing -ml-0.5 text-muted hover:text-ink" title="Arrastrar para reordenar">
+        <span className="rgl-grip cursor-grab active:cursor-grabbing -ml-0.5 text-muted hover:text-ink shrink-0" title="Arrastrar para reordenar">
           <GripDots />
         </span>
         {title && <h2 className="text-xs font-semibold text-ink-soft uppercase tracking-wide truncate">{title}</h2>}
-        {right && <div className="ml-auto">{right}</div>}
+        {fuente && <FuenteChip fuente={fuente} />}
+        {right && <div className="ml-auto shrink-0">{right}</div>}
       </div>
       <div className="flex-1 min-h-0 overflow-auto p-4">{children}</div>
     </div>
+  )
+}
+
+function FuenteChip({ fuente }: { fuente: 'anthropic' | 'openclaw' }) {
+  const cfg = fuente === 'anthropic'
+    ? { label: 'API Anthropic', cls: 'border-sky-500/50 text-sky-400 bg-sky-500/10' }
+    : { label: 'OpenClaw', cls: 'border-primary/50 text-primary bg-primary/10' }
+  return (
+    <span className={`shrink-0 text-[9.5px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wide ${cfg.cls}`}
+      title={fuente === 'anthropic' ? 'Funciones internas que usan la API de Anthropic directa' : 'Costo de Camila sobre OpenClaw / gateway MyClaw'}>
+      {cfg.label}
+    </span>
   )
 }
 

@@ -1,17 +1,22 @@
 import { RefreshCw, Phone } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
-import CostosInternos, { AnthUsage } from '../components/CostosInternos'
+import { AnthUsage, CostosResumenMes, CostosPorFuncion, CostosParticipacion, CostosHistorico } from '../components/CostosInternos'
 import { DashboardGrid, Widget, buildLayouts } from '../components/DashboardGrid'
 
 const TOKENS_LAYOUT = buildLayouts([
   { i: 'oportunidades', x: 0, y: 0, w: 12, h: 4 },
-  { i: 'costos', x: 0, y: 4, w: 12, h: 21 },
-  { i: 'kpis', x: 0, y: 25, w: 12, h: 3 },
-  { i: 'costoDia', x: 0, y: 28, w: 7, h: 9 },
-  { i: 'historico', x: 7, y: 28, w: 5, h: 9 },
-  { i: 'convs', x: 0, y: 37, w: 7, h: 13 },
-  { i: 'porModelo', x: 7, y: 37, w: 5, h: 7 },
+  // Costos internos (API Anthropic) — cada gráfico/tarjeta su propio widget
+  { i: 'cMes', x: 0, y: 4, w: 4, h: 4 },
+  { i: 'cFuncion', x: 4, y: 4, w: 4, h: 8 },
+  { i: 'cParticipacion', x: 8, y: 4, w: 4, h: 8 },
+  { i: 'cHistorico', x: 0, y: 12, w: 12, h: 8 },
+  // Camila (OpenClaw)
+  { i: 'kpis', x: 0, y: 20, w: 12, h: 3 },
+  { i: 'costoDia', x: 0, y: 23, w: 7, h: 9 },
+  { i: 'historico', x: 7, y: 23, w: 5, h: 9 },
+  { i: 'convs', x: 0, y: 32, w: 7, h: 13 },
+  { i: 'porModelo', x: 7, y: 32, w: 5, h: 7 },
 ])
 
 type Totales = {
@@ -139,10 +144,10 @@ export default function Tokens() {
       {error && <p className="text-sm text-red-500">{error}</p>}
       <p className="text-xs text-muted -mt-2">Costo real estimado a tarifa MyClaw (10% off el precio oficial). Tocá un día del gráfico para ver sus conversaciones.</p>
 
-      <DashboardGrid pantalla="tokens" defaultLayout={TOKENS_LAYOUT}>
+      <DashboardGrid pantalla="tokens-v2" defaultLayout={TOKENS_LAYOUT}>
         {/* Oportunidades */}
         <div key="oportunidades">
-          <Widget title="Oportunidades de mejora" right={<span className="text-[11px] text-muted">fijas hasta resolver</span>}>
+          <Widget title="Oportunidades de ahorro de Camila" fuente="openclaw" right={<span className="text-[11px] text-muted">fijas hasta resolver</span>}>
             {(data?.oportunidades ?? []).length === 0 ? (
               <p className="text-sm text-emerald-500">Sin oportunidades abiertas. 👌</p>
             ) : (
@@ -168,17 +173,33 @@ export default function Tokens() {
           </Widget>
         </div>
 
-        {/* Costos internos */}
-        <div key="costos">
-          <Widget title="Costos internos · API Anthropic">
-            {apiUsage ? <CostosInternos data={apiUsage} flat /> : <p className="text-sm text-muted">Cargando…</p>}
+        {/* Costos internos — cada uno su propio widget (API Anthropic) */}
+        <div key="cMes">
+          <Widget title="Resumen del mes — funciones internas" fuente="anthropic">
+            {apiUsage ? <CostosResumenMes data={apiUsage} /> : <p className="text-sm text-muted">Cargando…</p>}
+          </Widget>
+        </div>
+        <div key="cFuncion">
+          <Widget title="Costo por función (mes actual)" fuente="anthropic">
+            {apiUsage ? <CostosPorFuncion data={apiUsage} /> : <p className="text-sm text-muted">Cargando…</p>}
+          </Widget>
+        </div>
+        <div key="cParticipacion">
+          <Widget title="Participación por función (mes)" fuente="anthropic">
+            {apiUsage ? <CostosParticipacion data={apiUsage} /> : <p className="text-sm text-muted">Cargando…</p>}
+          </Widget>
+        </div>
+        <div key="cHistorico">
+          <Widget title="Histórico mensual — funciones internas" fuente="anthropic" right={<span className="text-[11px] text-muted">apilado por función</span>}>
+            {apiUsage ? <CostosHistorico data={apiUsage} /> : <p className="text-sm text-muted">Cargando…</p>}
           </Widget>
         </div>
 
         {/* KPIs del día */}
         <div key="kpis">
           <Widget
-            title={`Día ${det?.fecha ?? diaSel ?? ''}${verUltimo ? ' (último)' : ''}`}
+            fuente="openclaw"
+            title={`Resumen del día ${det?.fecha ?? diaSel ?? ''}${verUltimo ? ' (último)' : ''}`}
             right={
               <span className="flex items-center gap-2">
                 {diaLoading && <RefreshCw size={12} className="animate-spin text-muted" />}
@@ -204,7 +225,7 @@ export default function Tokens() {
 
         {/* Costo por día */}
         <div key="costoDia">
-          <Widget title="Costo por día · tocá un día"
+          <Widget title="Costo de Camila por día · tocá un día" fuente="openclaw"
             right={
               <span className="flex items-center gap-3 text-[11px] text-muted">
                 <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: '#F5B23D' }} />mensajes</span>
@@ -217,14 +238,14 @@ export default function Tokens() {
 
         {/* Histórico mensual */}
         <div key="historico">
-          <Widget title="Histórico mensual" right={<span className="text-[11px] text-muted">pasá el mouse</span>}>
+          <Widget title="Histórico mensual de Camila" fuente="openclaw" right={<span className="text-[11px] text-muted">pasá el mouse</span>}>
             {meses.length === 0 ? <p className="text-sm text-muted">Sin histórico todavía.</p> : <LineaMensual meses={meses} hover={hoverMes} setHover={setHoverMes} />}
           </Widget>
         </div>
 
         {/* Conversaciones del día */}
         <div key="convs">
-          <Widget title={`Conversaciones del día · ${convs.length}`}>
+          <Widget title={`Conversaciones de Camila del día · ${convs.length}`} fuente="openclaw">
             {convs.length === 0 ? <p className="text-sm text-muted">{diaLoading ? 'Cargando…' : 'Sin conversaciones.'}</p> : (
               <div className="space-y-2">
                 {convs.map((c) => {
@@ -284,7 +305,7 @@ export default function Tokens() {
 
         {/* Por modelo · mes */}
         <div key="porModelo">
-          <Widget title={`Por modelo · mes ${data?.mes_actual ?? ''}`}>
+          <Widget title={`Costo de Camila por modelo · mes ${data?.mes_actual ?? ''}`} fuente="openclaw">
             {!data || Object.keys(data.por_modelo_mes).length === 0 ? <p className="text-sm text-muted">Sin datos del mes.</p> : (
               <div className="space-y-1.5">
                 {Object.entries(data.por_modelo_mes).sort((a, b) => b[1].costo_usd - a[1].costo_usd).map(([m, v]) => (
