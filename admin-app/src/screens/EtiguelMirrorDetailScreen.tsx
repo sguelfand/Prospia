@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
-import { MensajeRow, TokenConvCosto, bloquearEtiguelMirror, desbloquearEtiguelMirror, getConversacionCosto, getEtiguelMirrorMensajes } from "../api";
+import { MensajeRow, TokenConvCosto, bloquearEtiguelMirror, desbloquearEtiguelMirror, getConversacionCosto, getEtiguelMirrorMensajes, reportarCalidadManual } from "../api";
 import { useAuth } from "../auth";
 import { CollapsibleSection, Loader } from "../components/ui";
 import { EtiguelMirrorDetailProps } from "../navigation";
@@ -19,6 +19,9 @@ export default function EtiguelMirrorDetailScreen({ route, navigation }: Etiguel
   const [bloqueado, setBloqueado] = useState(!!item.bloqueado);
   const [bloqueando, setBloqueando] = useState(false);
   const [costo, setCosto] = useState<TokenConvCosto | null>(null);
+  const [reporteOpen, setReporteOpen] = useState(false);
+  const [reporteTexto, setReporteTexto] = useState("");
+  const [reportando, setReportando] = useState(false);
 
   useEffect(() => {
     navigation.setOptions({ title: item.nombre ?? "Conversación" });
@@ -69,6 +72,22 @@ export default function EtiguelMirrorDetailScreen({ route, navigation }: Etiguel
     ]);
   }, [token, bloqueando, bloqueado, item.id, item.nombre, item.telefono]);
 
+  const enviarReporte = useCallback(async () => {
+    const texto = reporteTexto.trim();
+    if (!token || reportando || !texto) return;
+    setReportando(true);
+    try {
+      await reportarCalidadManual(token, "etiguel", texto, item.telefono ?? undefined);
+      setReporteOpen(false);
+      setReporteTexto("");
+      Alert.alert("Reportado ✓", "Lo sumé a la lista de Calidad de Camila (cuenta para las 5 lecciones).");
+    } catch (e: any) {
+      Alert.alert("No se pudo", String(e?.message ?? e));
+    } finally {
+      setReportando(false);
+    }
+  }, [token, reportando, reporteTexto, item.telefono]);
+
   const load = useCallback(async () => {
     if (!token) return;
     try {
@@ -98,23 +117,33 @@ export default function EtiguelMirrorDetailScreen({ route, navigation }: Etiguel
       }
     >
       <View style={styles.headerCard}>
-        <TouchableOpacity
-          style={[styles.blockBtn, bloqueado ? styles.blockBtnOn : styles.blockBtnOff]}
-          onPress={toggleBloqueo}
-          disabled={bloqueando}
-          activeOpacity={0.8}
-        >
-          {bloqueando ? (
-            <ActivityIndicator size="small" color={bloqueado ? colors.primary : colors.red} />
-          ) : (
-            <>
-              <Icon name="lock" size={15} color={bloqueado ? colors.primary : colors.red} />
-              <Text style={[styles.blockBtnText, { color: bloqueado ? colors.primary : colors.red }]}>
-                {bloqueado ? "Desbloquear" : "Bloquear"}
-              </Text>
-            </>
-          )}
-        </TouchableOpacity>
+        <View style={styles.accionesRow}>
+          <TouchableOpacity
+            style={[styles.accionBtn, styles.reporteBtn]}
+            onPress={() => setReporteOpen(true)}
+            activeOpacity={0.8}
+          >
+            <Icon name="flag" size={15} color={colors.amber} />
+            <Text style={[styles.blockBtnText, { color: colors.amber }]}>Reportar calidad</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.accionBtn, bloqueado ? styles.blockBtnOn : styles.blockBtnOff]}
+            onPress={toggleBloqueo}
+            disabled={bloqueando}
+            activeOpacity={0.8}
+          >
+            {bloqueando ? (
+              <ActivityIndicator size="small" color={bloqueado ? colors.primary : colors.red} />
+            ) : (
+              <>
+                <Icon name="lock" size={15} color={bloqueado ? colors.primary : colors.red} />
+                <Text style={[styles.blockBtnText, { color: bloqueado ? colors.primary : colors.red }]}>
+                  {bloqueado ? "Desbloquear" : "Bloquear"}
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.headerRow}>
           <Text style={styles.nombre}>{item.nombre ?? "(sin nombre)"}</Text>
@@ -160,6 +189,45 @@ export default function EtiguelMirrorDetailScreen({ route, navigation }: Etiguel
           mensajes.map((m) => <Burbuja key={m.id} mensaje={m} />)
         )}
       </CollapsibleSection>
+
+      {/* Modal: Reportar calidad de Camila */}
+      <Modal visible={reporteOpen} transparent animationType="fade" onRequestClose={() => setReporteOpen(false)}>
+        <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Reportar calidad</Text>
+            <Text style={styles.modalSub}>
+              Contá qué estuvo mal en lo que respondió Camila. Entra a la lista de Calidad ya
+              confirmado y suma para las 5 lecciones que la corrigen.
+            </Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Ej: le pasó un precio equivocado / cortó al cliente / no derivó a Delfina…"
+              placeholderTextColor={colors.textDim}
+              value={reporteTexto}
+              onChangeText={setReporteTexto}
+              multiline
+              autoFocus
+              textAlignVertical="top"
+            />
+            <View style={styles.modalBtns}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setReporteOpen(false)} disabled={reportando}>
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalEnviar, (!reporteTexto.trim() || reportando) && styles.modalEnviarOff]}
+                onPress={enviarReporte}
+                disabled={!reporteTexto.trim() || reportando}
+              >
+                {reportando ? (
+                  <ActivityIndicator size="small" color={colors.onPrimary} />
+                ) : (
+                  <Text style={styles.modalEnviarText}>Reportar</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </ScrollView>
   );
 }
@@ -186,14 +254,27 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 12, paddingBottom: 40 },
   headerCard: { backgroundColor: colors.card, borderRadius: 12, padding: 14 },
-  blockBtn: {
+  accionesRow: { flexDirection: "row", justifyContent: "flex-end", gap: 8, marginBottom: 10, flexWrap: "wrap" },
+  accionBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
-    alignSelf: "flex-end", borderRadius: 8, borderWidth: 1,
-    paddingHorizontal: 12, paddingVertical: 7, minWidth: 130, minHeight: 34, marginBottom: 10,
+    borderRadius: 8, borderWidth: 1,
+    paddingHorizontal: 12, paddingVertical: 7, minHeight: 34,
   },
+  reporteBtn: { borderColor: colors.amber },
   blockBtnOff: { borderColor: colors.red },
   blockBtnOn: { borderColor: colors.primary, backgroundColor: colors.primary + "1A" },
   blockBtnText: { fontSize: 13, fontWeight: "700" },
+  modalBackdrop: { flex: 1, backgroundColor: "#0008", justifyContent: "center", padding: 22 },
+  modalCard: { backgroundColor: colors.card, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: colors.border },
+  modalTitle: { color: colors.text, fontSize: 17, fontWeight: "800", marginBottom: 6 },
+  modalSub: { color: colors.textDim, fontSize: 13, lineHeight: 18, marginBottom: 12 },
+  modalInput: { backgroundColor: colors.bg, borderRadius: 10, borderWidth: 1, borderColor: colors.border, color: colors.text, fontSize: 14, padding: 12, minHeight: 110, marginBottom: 14 },
+  modalBtns: { flexDirection: "row", justifyContent: "flex-end", gap: 10, alignItems: "center" },
+  modalCancel: { paddingHorizontal: 14, paddingVertical: 9 },
+  modalCancelText: { color: colors.textDim, fontSize: 14, fontWeight: "700" },
+  modalEnviar: { backgroundColor: colors.primary, borderRadius: 9, paddingHorizontal: 18, paddingVertical: 9, minWidth: 96, alignItems: "center" },
+  modalEnviarOff: { opacity: 0.5 },
+  modalEnviarText: { color: colors.onPrimary, fontSize: 14, fontWeight: "800" },
   bloqueadoBadge: {
     flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6,
     alignSelf: "flex-start", borderRadius: 6, backgroundColor: colors.red + "1A",
