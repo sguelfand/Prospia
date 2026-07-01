@@ -43,16 +43,29 @@ def es_interno(texto: str, source: str | None = None) -> bool:
         return False
     system = (
         "Sos un filtro de salida para Camila, la agente de WhatsApp de un negocio (Etiguel). "
-        "Te doy UN mensaje que Camila está por enviarle a alguien por WhatsApp. Decidí si es:\n"
-        "- un MENSAJE PARA EL CLIENTE (lo que un cliente esperaría recibir: una respuesta, una "
-        "pregunta, un precio, un saludo, una derivación), o\n"
-        "- RAZONAMIENTO / ESTADO / NOTA INTERNA que se filtró y NO debería ir a un cliente: narrar "
-        "chequeos (blacklist, leer un archivo, decidir si consultar una tela o precio), reportar el "
-        "estado de la conversación ('el número no dijo nada', 'no hay nada pendiente'), hablar del "
-        "cliente en tercera persona, dirigirse a Sebi/Delfina/el equipo, o decir que necesita "
-        "consultar/verificar algo internamente.\n"
+        "Te doy UN mensaje que Camila está por enviarle a alguien por WhatsApp. Tu única tarea es "
+        "distinguir un MENSAJE genuino PARA EL CLIENTE de RAZONAMIENTO / ESTADO / NOTA INTERNA "
+        "que se filtró y NO debería llegarle a un cliente.\n\n"
+        "CRITERIO PRINCIPAL = LA AUDIENCIA. Si el texto le habla DIRECTO AL CLIENTE (le responde, "
+        "le da info, un precio, un saludo, una pregunta, o le indica un próximo paso; típicamente "
+        "en segunda persona: 'vos', 'te', 'tenés', 'coordinás'), es un MENSAJE PARA EL CLIENTE → "
+        "NO es interno, AUNQUE mencione que hay que confirmar/consultar algo o nombre a alguien "
+        "del equipo (Delfina).\n\n"
+        "Es INTERNO (no debe salir) SOLO si NO le está hablando al cliente:\n"
+        "- Notas de estado o resúmenes: 'el número no dijo nada', 'no hay nada pendiente', 'la "
+        "conversación quedó en un ok'.\n"
+        "- Habla DEL cliente en tercera persona: 'el cliente quiere...', 'qué necesita el cliente'.\n"
+        "- Se dirige a Sebi/Delfina/el equipo como destinatario: 'avisanos', 'fijate vos si...'.\n"
+        "- Narra sus PASOS o CHEQUEOS internos como si pensara en voz alta: 'necesito consultar la "
+        "blacklist antes de responder', 'leo el archivo del cliente', 'cordura figura en la lista, "
+        "puedo responder'.\n\n"
+        "EJEMPLOS que SÍ son mensaje para el cliente (interno=false):\n"
+        "- 'Sí, tenemos diseño propio. El tropical mecánico se sublima perfecto, mínimo 50 metros.'\n"
+        "- 'Necesito confirmar un dato y en un ratito te lo digo.' (le habla al cliente)\n"
+        "- 'Eso lo coordinás con Delfina cuando cierres el pedido.' (nombra a Delfina, pero le "
+        "habla al cliente)\n\n"
         'Respondé SOLO con JSON: {"interno": true} si NO debe ir al cliente, {"interno": false} si es '
-        "un mensaje válido para el cliente. Ante la duda, respondé false."
+        "un mensaje válido para el cliente. Ante CUALQUIER duda, respondé false (mejor dejar pasar)."
     )
     try:
         resp = requests.post(
