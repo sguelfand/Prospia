@@ -318,10 +318,13 @@ def _detectar(resumen: dict) -> list[dict]:
                     "detalle": f"Modelos: {', '.join(sorted(modelos_sistema))}. Son tareas internas "
                                "(agente 'main'), no atención a clientes. Revisar el primary del agente "
                                "de sistema en openclaw.json."})
-    if t["cacheWrite"] > max(t["cacheRead"], 1) * 0.8 and t["cacheWrite"] > 100_000:
-        ops.append({"tipo": "cache", "clave": "", "severidad": "media",
-                    "titulo": "Caché ineficiente (mucho cacheWrite)",
-                    "detalle": f"cacheWrite={t['cacheWrite']:,} vs cacheRead={t['cacheRead']:,}. El contexto cambia mucho entre llamadas."})
+    # Nota (30/6): NO se genera oportunidad por "cacheWrite alto vs cacheRead". Se
+    # investigó a fondo y el único remedio (cacheRetention=long / TTL 1h) quedó
+    # DESCARTADO: es no-op en OpenClaw 2026.4.27 y aun funcionando sale +24-38% más
+    # caro. El ratio cacheWrite≈cacheRead es ESTRUCTURAL (cadencia B2B + arranque en
+    # frío por sesión), no un bug accionable → dejó de ser una alerta perpetua sin
+    # remedio. El split de cache se sigue viendo en la pantalla Tokens. Ver
+    # camila_cost_ai._CONTEXTO_COSTO y la memoria project_prospia_costos.
     if t["compactaciones"] > 2:
         ops.append({"tipo": "compactacion", "clave": "", "severidad": "media",
                     "titulo": f"{t['compactaciones']} compactaciones de contexto",
