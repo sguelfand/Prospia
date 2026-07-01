@@ -72,6 +72,20 @@ def ingest_test_run(
     db.add(run)
     db.commit()
     db.refresh(run)
+
+    # Si algo salió ROJO, avisar por push (con el detalle de qué falló).
+    if run.fallaron > 0:
+        lineas = []
+        for d in run.detalle:
+            if d.get("estado") == "failed":
+                err = (d.get("error") or "").strip().split("\n")[0][:180]
+                lineas.append(f"✗ {d.get('archivo') or ''} :: {d.get('nombre')}\n   {err}")
+        push.notificar_aviso_async(
+            f"🔴 Tests visuales: {run.fallaron} fallaron",
+            f"{run.pasaron}/{run.total} OK · origen {run.origen}. Tocá para ver el detalle.",
+            {"tipo": "test_run", "run_id": run.id},
+            detalle="\n\n".join(lineas) or None,
+        )
     return {"id": run.id}
 
 
