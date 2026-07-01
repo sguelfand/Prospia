@@ -1,0 +1,643 @@
+"""Test LLM — servicio del banco de pruebas de motores para el rol de Camila.
+
+Piezas:
+- _build_envelope(source): reconstruye el "sobre" de OpenClaw desde el filesystem vivo
+  (systemPromptOverride del agente + archivos del workspace: SOUL/IDENTITY/USER/AGENTS/
+  TOOLS + sublimacion/etiquetas/blacklist) → el system prompt que ve el modelo. El mismo
+  sobre para todos los motores ⇒ comparación justa. La fidelidad vs OpenClaw real se mide
+  aparte con el golden set (la base harness interna de OpenClaw no es 100% reconstruible).
+- estimar(...): calcula el costo ANTES de correr (heurística de tokens × rate-card por motor).
+- correr(...): GATED. Solo corre si monitor_settings.test_llm_habilitado = true (Sebi lo
+  prende cuando da el OK). Llama a los motores por API OpenAI-compatible (OpenRouter/MyClaw),
+  registra transcript + tool_calls + tokens, y juzga con el Especialista de Negocio.
+
+NO consume tokens al importar ni al estimar. Solo `correr` gasta, y está bloqueado por default.
+"""
+from __future__ import annotations
+
+import json
+import time
+from datetime import datetime, timezone
+
+import requests
+
+from app.services.camila_audit import SOURCES, _fs_read
+
+_UA = "Mozilla/5.0 (compatible; Prospia-TestLLM/1.0)"
+_WORKSPACE = {  # archivos del sobre por source
+    "etiguel": {
+        "ws": ".openclaw/workspace-etiguel",
+        "agente": "etiguel",
+        "files": ["SOUL.md", "IDENTITY.md", "USER.md", "AGENTS.md", "TOOLS.md",
+                  "sublimacion.md", "etiquetas.md", "blacklist.md"],
+    },
+}
+
+# Herramientas de Camila expuestas como tools OpenAI-compatible: así el motor "decide"
+# llamándolas y registramos la decisión sin ejecutar nada real.
+CAMILA_TOOLS = [
+    {"type": "function", "function": {
+        "name": "interesado",
+        "description": "El cliente mostró interés real (producto+cantidad, pide cotización formal o visita). Deriva a Delfina.",
+        "parameters": {"type": "object", "properties": {"motivo": {"type": "string"}}, "required": []}}},
+    {"type": "function", "function": {
+        "name": "no_interesa",
+        "description": "El cliente rechazó claramente (ya tiene proveedor, no fabrica, tiene capacidad propia, pide no insistir).",
+        "parameters": {"type": "object", "properties": {"motivo": {"type": "string"}}, "required": []}}},
+    {"type": "function", "function": {
+        "name": "redireccionar",
+        "description": "El contacto dice que hable con otra persona/número. Pasa el contacto correcto.",
+        "parameters": {"type": "object", "properties": {"numero": {"type": "string"}, "nombre": {"type": "string"}}, "required": []}}},
+    {"type": "function", "function": {
+        "name": "agendar_contacto",
+        "description": "El cliente pide ser contactado en una fecha futura ('hablame en 2 semanas').",
+        "parameters": {"type": "object", "properties": {"fecha": {"type": "string", "description": "YYYY-MM-DD"}}, "required": ["fecha"]}}},
+    {"type": "function", "function": {
+        "name": "escalar_consulta",
+        "description": "Camila NO sabe la respuesta con certeza (precio/material/condición que no conoce). Escala a Sebi en vez de inventar.",
+        "parameters": {"type": "object", "properties": {"pregunta": {"type": "string"}}, "required": ["pregunta"]}}},
+]
+
+_envelope_cache: dict[str, tuple[float, dict]] = {}
+_ENVELOPE_TTL = 600  # 10 min
+
+
+# ── sobre (envelope) ──────────────────────────────────────────────────────────
+
+def _build_envelope(source: str = "etiguel", force: bool = False) -> dict:
+    """Lee el sobre vivo por /fs y arma el system prompt. Cacheado 10 min."""
+    now = time.time()
+    if not force and source in _envelope_cache:
+        ts, env = _envelope_cache[source]
+        if now - ts < _ENVELOPE_TTL:
+            return env
+    if source not in SOURCES or source not in _WORKSPACE:
+        raise ValueError(f"source sin sobre configurado: {source}")
+    base = SOURCES[source]["base"]
+    token = SOURCES[source]["token_fn"]()
+    if not token:
+        raise RuntimeError("sin deploy token para leer el sobre")
+    conf = _WORKSPACE[source]
+
+    # 1) systemPromptOverride del agente desde openclaw.json
+    raw = _fs_read(base, token, ".openclaw/openclaw.json")
+    cfg = json.loads(raw["content"]) if isinstance(raw, dict) and "content" in raw else raw
+    override = ""
+    modelo_actual = None
+    ag = cfg.get("agents", {})
+    modelo_actual = (ag.get("defaults", {}).get("model", {}) or {}).get("primary")
+    for a in ag.get("list", []):
+        if a.get("id") == conf["agente"]:
+            override = a.get("systemPromptOverride", "") or ""
+            if a.get("model", {}).get("primary"):
+                modelo_actual = a["model"]["primary"]
+            break
+
+    # 2) archivos del workspace (SOUL, IDENTITY, sublimacion, etc.)
+    files: dict[str, str] = {}
+    for fn in conf["files"]:
+        try:
+            r = _fs_read(base, token, f"{conf['ws']}/{fn}", max_bytes=200_000)
+            files[fn] = r.get("content", "") if isinstance(r, dict) else str(r)
+        except Exception as e:
+            files[fn] = f"[no se pudo leer {fn}: {type(e).__name__}]"
+
+    # 3) armado del system prompt (mismo orden conceptual que el agente al arrancar)
+    partes = [
+        "# Contexto de identidad y alma del agente\n" + files.get("SOUL.md", ""),
+        "\n\n# Identidad\n" + files.get("IDENTITY.md", ""),
+        "\n\n# Usuario / empresa\n" + files.get("USER.md", ""),
+        "\n\n# Instrucciones de comportamiento (systemPromptOverride)\n" + override,
+        "\n\n# Herramientas disponibles\n" + files.get("TOOLS.md", ""),
+        "\n\n# Precios de sublimación (workspace)\n" + files.get("sublimacion.md", ""),
+        "\n\n# Precios de etiquetas (workspace)\n" + files.get("etiquetas.md", ""),
+        "\n\n# Lista negra\n" + files.get("blacklist.md", ""),
+        ("\n\n# Nota para esta prueba\nEstás siendo evaluada en un banco de pruebas. "
+         "Respondé como lo harías en WhatsApp con un cliente real. Cuando corresponda tomar "
+         "una decisión de negocio (derivar, marcar no interesa, escalar, agendar, redireccionar), "
+         "usá la herramienta correspondiente EN VEZ de describirla."),
+    ]
+    system = "".join(partes)
+    env = {"source": source, "system": system, "modelo_actual": modelo_actual,
+           "archivos": list(files.keys()), "chars": len(system),
+           "generado_at": datetime.now(timezone.utc).isoformat()}
+    _envelope_cache[source] = (now, env)
+    return env
+
+
+def envelope_info(source: str = "etiguel") -> dict:
+    """Metadatos del sobre (sin el prompt entero) para mostrar en la UI."""
+    env = _build_envelope(source)
+    return {k: v for k, v in env.items() if k != "system"} | {"system_chars": env["chars"]}
+
+
+# ── estimación de costo (antes de correr) ─────────────────────────────────────
+
+def _tok(txt: str) -> int:
+    """Estimación de tokens (heurística ~4 chars/token). Suficiente para el pre-cálculo."""
+    return max(1, len(txt or "") // 4)
+
+
+def estimar(source: str, motor_ids: list[int], escenario_ids: list[int],
+            con_cache: bool = True) -> dict:
+    """Costo estimado ANTES de correr. Conservador. Devuelve total + desglose por motor.
+    con_cache=True modela el descuento de prompt-cache (system prompt cacheado entre
+    escenarios del mismo motor); False = sin descuento (tope)."""
+    from app.database import SessionLocal
+    from app.models.test_llm import TestLlmEscenario, TestLlmMotor
+    env = _build_envelope(source)
+    sys_tok = _tok(env["system"])
+    db = SessionLocal()
+    try:
+        motores = db.query(TestLlmMotor).filter(TestLlmMotor.id.in_(motor_ids)).all()
+        escs = db.query(TestLlmEscenario).filter(TestLlmEscenario.id.in_(escenario_ids)).all()
+    finally:
+        db.close()
+    OUT_POR_TURNO = 200  # tokens de salida estimados por respuesta de Camila
+    por_motor = []
+    total = 0.0
+    total_turnos = 0
+    for e in escs:
+        try:
+            turnos = len(json.loads(e.guion or "[]"))
+        except Exception:
+            turnos = 1
+        total_turnos += max(1, turnos)
+    # tokens de guion (chico) sumados
+    guion_tok = sum(_tok(e.guion) for e in escs)
+    for m in motores:
+        # input: por cada turno se re-manda system + conversación creciente.
+        # Aproximación: system × (turnos, con cache-read del 2º en adelante) + guion.
+        if con_cache and m.precio_cache_read > 0:
+            # 1er turno de cada escenario paga system full (write); resto cache-read
+            input_full = sys_tok * len(escs)
+            input_cached = sys_tok * (total_turnos - len(escs))
+            costo_in = input_full * m.precio_cache_write + input_cached * m.precio_cache_read
+        else:
+            costo_in = sys_tok * total_turnos * m.precio_in
+        costo_in += guion_tok * m.precio_in
+        costo_out = total_turnos * OUT_POR_TURNO * m.precio_out
+        c = costo_in + costo_out
+        por_motor.append({"motor_id": m.id, "nombre": m.nombre,
+                          "costo_usd": round(c, 4)})
+        total += c
+    # juez: 1 llamada Anthropic sonnet por (motor × escenario)
+    juez_calls = len(motores) * len(escs)
+    juez_in = juez_calls * (sys_tok // 3 + 500)   # contexto negocio + transcript
+    juez_out = juez_calls * 250
+    juez_costo = juez_in * 2.70e-6 + juez_out * 13.50e-6  # sonnet oficial
+    total += juez_costo
+    return {
+        "source": source, "motores": len(motores), "escenarios": len(escs),
+        "turnos_totales": total_turnos, "system_tokens": sys_tok,
+        "con_cache": con_cache,
+        "por_motor": por_motor,
+        "juez_costo_usd": round(juez_costo, 4),
+        "total_usd": round(total, 4),
+        "nota": "Estimación conservadora. El costo real se mide al correr.",
+    }
+
+
+# ── correr (GATED) ────────────────────────────────────────────────────────────
+
+def _habilitado() -> bool:
+    """Gate: correr solo si Sebi prendió el switch (después de revisar la estructura)."""
+    try:
+        from app.database import SessionLocal
+        from app.models.service_health import MonitorSettings
+        db = SessionLocal()
+        try:
+            s = db.query(MonitorSettings).filter(MonitorSettings.id == 1).first()
+            return bool(getattr(s, "test_llm_habilitado", False))
+        finally:
+            db.close()
+    except Exception:
+        return False
+
+
+def _call_model(motor, system: str, messages: list[dict], timeout: int = 90) -> dict:
+    """Una llamada OpenAI-compatible (chat/completions). Devuelve texto + tool_calls + usage."""
+    from app.services.test_llm_keys import provider_key
+    key = (motor.api_key or "").strip() or provider_key(motor.provider)
+    url = motor.base_url.rstrip("/") + "/chat/completions"
+    body = {
+        "model": motor.model_id,
+        "messages": [{"role": "system", "content": system}] + messages,
+        "tools": CAMILA_TOOLS,
+        "max_tokens": 700,
+    }
+    t0 = time.time()
+    resp = requests.post(url, headers={
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "User-Agent": _UA,
+        "HTTP-Referer": "https://prospia.app",
+        "X-Title": "Prospia Test LLM",
+    }, json=body, timeout=timeout)
+    ms = int((time.time() - t0) * 1000)
+    resp.raise_for_status()
+    data = resp.json()
+    choice = (data.get("choices") or [{}])[0].get("message", {})
+    usage = data.get("usage", {}) or {}
+    return {
+        "text": choice.get("content") or "",
+        "tool_calls": choice.get("tool_calls") or [],
+        "in": usage.get("prompt_tokens", 0),
+        "out": usage.get("completion_tokens", 0),
+        "cache_read": (usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0),
+        "ms": ms,
+    }
+
+
+def _run_escenario(motor, system: str, escenario) -> dict:
+    """Corre un escenario: cada turno del guion → respuesta del motor. Junta transcript,
+    tool_calls, tokens, latencia."""
+    guion = json.loads(escenario.guion or "[]")
+    transcript, tool_calls = [], []
+    tin = tout = tcache = 0
+    ms = 0
+    messages: list[dict] = []
+    for turno in guion:
+        messages.append({"role": "user", "content": turno})
+        transcript.append({"quien": "Cliente", "texto": turno})
+        r = _call_model(motor, system, messages)
+        tin += r["in"]; tout += r["out"]; tcache += r["cache_read"]; ms += r["ms"]
+        asst = {"role": "assistant", "content": r["text"]}
+        if r["tool_calls"]:
+            asst["tool_calls"] = r["tool_calls"]
+            for tc in r["tool_calls"]:
+                fn = (tc.get("function") or {})
+                tool_calls.append({"nombre": fn.get("name"), "args": fn.get("arguments")})
+            # cerrar el ciclo de tool para poder seguir la conversación
+            messages.append(asst)
+            for tc in r["tool_calls"]:
+                messages.append({"role": "tool", "tool_call_id": tc.get("id", ""),
+                                 "content": "ok (simulado)"})
+        else:
+            messages.append(asst)
+        transcript.append({"quien": "Camila", "texto": r["text"],
+                           "tools": [t.get("nombre") for t in tool_calls] if r["tool_calls"] else []})
+    return {"transcript": transcript, "tool_calls": tool_calls,
+            "in": tin, "out": tout, "cache": tcache, "ms": ms}
+
+
+def _costo_celda(motor, tin: int, tout: int, tcache: int) -> float:
+    treal_in = max(0, tin - tcache)
+    return (treal_in * motor.precio_in + tcache * motor.precio_cache_read
+            + tout * motor.precio_out)
+
+
+def _juzgar(escenario, transcript: list[dict], tool_calls: list[dict]) -> dict:
+    """Especialista de Negocio juzga la respuesta del motor. Devuelve
+    {veredicto: bien|mal|dudoso, categoria, detalle}."""
+    from app.services.camila_quality import _NEGOCIO, _parse_json, _post, CATEGORIAS
+    negocio = _NEGOCIO["etiguel"]
+    cats = "\n".join(f"- {k}: {v}" for k, v in CATEGORIAS.items())
+    esperado = escenario.esperado or "{}"
+    convo = "\n".join(f"[{t['quien']}] {t['texto']}" for t in transcript)
+    tools_txt = ", ".join(f"{t['nombre']}({t.get('args')})" for t in tool_calls) or "(ninguna)"
+    system = (
+        f"Sos un especialista de negocio que evalúa a la agente de WhatsApp de un negocio.\n{negocio}\n\n"
+        f"Estás evaluando cómo respondió un MOTOR candidato en un escenario de prueba controlado. "
+        f"Juzgá SOLO la calidad de negocio de la respuesta (no la infra).\n\n"
+        f"Categorías de problema posibles:\n{cats}\n\n"
+        "Respondé SOLO un JSON: {\"veredicto\": \"bien\"|\"mal\"|\"dudoso\", "
+        "\"categoria\": \"<una de las categorías o vacío si está bien>\", "
+        "\"detalle\": \"1-2 oraciones de por qué\"}."
+    )
+    user = (
+        f"ESCENARIO: {escenario.nombre}\nCASO DE USO: {escenario.caso_uso}\n"
+        f"COMPORTAMIENTO ESPERADO: {esperado}\n\n"
+        f"HERRAMIENTAS QUE USÓ EL MOTOR: {tools_txt}\n\n"
+        f"CONVERSACIÓN:\n{convo}\n\n"
+        "¿Estuvo bien o mal para el negocio? Considerá si tomó la decisión correcta "
+        "(derivar/no interesa/escalar/etc.), si cotizó bien, el tono y si no perdió el lead."
+    )
+    raw = _post(system, user, max_tokens=500, funcion="Test LLM (juez)")
+    j = _parse_json(raw) or {}
+    ver = (j.get("veredicto") or "dudoso").strip().lower()
+    if ver not in ("bien", "mal", "dudoso"):
+        ver = "dudoso"
+    return {"veredicto": ver, "categoria": (j.get("categoria") or "")[:40],
+            "detalle": (j.get("detalle") or "")[:2000]}
+
+
+def correr(corrida_id: int) -> dict:
+    """Ejecuta una corrida ya creada (estado 'estimada'). GATED por _habilitado()."""
+    if not _habilitado():
+        return {"ok": False, "bloqueado": True,
+                "detalle": "Test LLM está deshabilitado. Prendé el switch cuando quieras correr (consume tokens)."}
+    from app.database import SessionLocal
+    from app.models.test_llm import (TestLlmCorrida, TestLlmEscenario,
+                                      TestLlmMotor, TestLlmResultado)
+    db = SessionLocal()
+    try:
+        cor = db.get(TestLlmCorrida, corrida_id)
+        if not cor:
+            return {"ok": False, "detalle": "corrida no encontrada"}
+        motor_ids = json.loads(cor.motores or "[]")
+        esc_ids = json.loads(cor.escenarios or "[]")
+        motores = db.query(TestLlmMotor).filter(TestLlmMotor.id.in_(motor_ids)).all()
+        escs = (db.query(TestLlmEscenario).filter(TestLlmEscenario.id.in_(esc_ids))
+                .order_by(TestLlmEscenario.orden).all())
+        env = _build_envelope(cor.source)
+        system = env["system"]
+        cor.estado = "corriendo"
+        db.commit()
+    finally:
+        db.close()
+
+    resumen: dict = {}
+    costo_total = 0.0
+    for motor in motores:
+        agg = {"bien": 0, "mal": 0, "dudoso": 0, "costo_usd": 0.0, "por_caso": {}}
+        for esc in escs:
+            db = SessionLocal()
+            try:
+                try:
+                    r = _run_escenario(motor, system, esc)
+                    costo = _costo_celda(motor, r["in"], r["out"], r["cache"])
+                    veredicto = _juzgar(esc, r["transcript"], r["tool_calls"])
+                    err = None
+                except Exception as e:
+                    r = {"transcript": [], "tool_calls": [], "in": 0, "out": 0, "cache": 0, "ms": 0}
+                    costo = 0.0
+                    veredicto = {"veredicto": "dudoso", "categoria": "", "detalle": ""}
+                    err = f"{type(e).__name__}: {e}"
+                db.add(TestLlmResultado(
+                    corrida_id=corrida_id, motor_id=motor.id, motor_nombre=motor.nombre,
+                    escenario_slug=esc.slug, escenario_nombre=esc.nombre, caso_uso=esc.caso_uso,
+                    transcript=json.dumps(r["transcript"], ensure_ascii=False),
+                    tool_calls=json.dumps(r["tool_calls"], ensure_ascii=False),
+                    tokens_in=r["in"], tokens_out=r["out"], tokens_cache_read=r["cache"],
+                    costo_usd=round(costo, 5), latencia_ms=r["ms"],
+                    veredicto=veredicto["veredicto"], categoria=veredicto["categoria"],
+                    detalle=veredicto["detalle"], error=err,
+                ))
+                db.commit()
+            finally:
+                db.close()
+            agg[veredicto["veredicto"]] += 1
+            agg["costo_usd"] += costo
+            agg["por_caso"][esc.slug] = {"veredicto": veredicto["veredicto"], "costo_usd": round(costo, 5)}
+        n = max(1, len(escs))
+        agg["score"] = round(100 * agg["bien"] / n, 1)
+        agg["costo_usd"] = round(agg["costo_usd"], 4)
+        resumen[str(motor.id)] = {"nombre": motor.nombre} | agg
+        costo_total += agg["costo_usd"]
+
+    db = SessionLocal()
+    try:
+        cor = db.get(TestLlmCorrida, corrida_id)
+        cor.estado = "lista"
+        cor.resumen = json.dumps(resumen, ensure_ascii=False)
+        cor.costo_real_usd = round(costo_total, 4)
+        cor.finished_at = datetime.now(timezone.utc)
+        db.commit()
+    finally:
+        db.close()
+    return {"ok": True, "corrida_id": corrida_id, "resumen": resumen,
+            "costo_real_usd": round(costo_total, 4)}
+
+
+# ── seed / estado ─────────────────────────────────────────────────────────────
+
+def ensure_seed() -> dict:
+    """Crea motores + escenarios default si no hay. Idempotente."""
+    from app.database import SessionLocal
+    from app.services import test_llm_data
+    db = SessionLocal()
+    try:
+        return {"motores": test_llm_data.seed_motores(db),
+                "escenarios": test_llm_data.seed_escenarios(db)}
+    finally:
+        db.close()
+
+
+def set_habilitado(on: bool) -> bool:
+    from app.database import SessionLocal
+    from app.models.service_health import MonitorSettings
+    db = SessionLocal()
+    try:
+        s = db.query(MonitorSettings).filter(MonitorSettings.id == 1).first()
+        if not s:
+            return False
+        s.test_llm_habilitado = bool(on)
+        db.commit()
+        return True
+    finally:
+        db.close()
+
+
+def get_estado(source: str = "etiguel") -> dict:
+    """Panel de arranque: gate, sobre, keys, conteos."""
+    from app.database import SessionLocal
+    from app.models.test_llm import TestLlmEscenario, TestLlmMotor
+    from app.services.test_llm_keys import key_status
+    ensure_seed()
+    db = SessionLocal()
+    try:
+        n_mot = db.query(TestLlmMotor).count()
+        n_esc = db.query(TestLlmEscenario).count()
+    finally:
+        db.close()
+    out = {"source": source, "habilitado": _habilitado(),
+           "keys": key_status(), "motores": n_mot, "escenarios": n_esc}
+    try:
+        out["sobre"] = envelope_info(source)
+    except Exception as e:
+        out["sobre"] = {"error": f"{type(e).__name__}: {e}"}
+    return out
+
+
+# ── CRUD motores ──────────────────────────────────────────────────────────────
+
+def _motor_dict(m) -> dict:
+    return {"id": m.id, "nombre": m.nombre, "provider": m.provider, "model_id": m.model_id,
+            "base_url": m.base_url, "tiene_key": bool((m.api_key or "").strip()),
+            "precio_in": m.precio_in, "precio_out": m.precio_out,
+            "precio_cache_read": m.precio_cache_read, "precio_cache_write": m.precio_cache_write,
+            "activo": m.activo, "es_actual": m.es_actual, "notas": m.notas}
+
+
+def listar_motores() -> list[dict]:
+    from app.database import SessionLocal
+    from app.models.test_llm import TestLlmMotor
+    db = SessionLocal()
+    try:
+        return [_motor_dict(m) for m in db.query(TestLlmMotor).order_by(
+            TestLlmMotor.es_actual.desc(), TestLlmMotor.id).all()]
+    finally:
+        db.close()
+
+
+def guardar_motor(data: dict, motor_id: int | None = None) -> dict:
+    from app.database import SessionLocal
+    from app.models.test_llm import TestLlmMotor
+    db = SessionLocal()
+    try:
+        m = db.get(TestLlmMotor, motor_id) if motor_id else TestLlmMotor()
+        if motor_id and not m:
+            raise ValueError("motor no encontrado")
+        for f in ("nombre", "provider", "model_id", "base_url", "notas"):
+            if f in data:
+                setattr(m, f, data[f])
+        for f in ("precio_in", "precio_out", "precio_cache_read", "precio_cache_write"):
+            if f in data and data[f] is not None:
+                setattr(m, f, float(data[f]))
+        for f in ("activo", "es_actual"):
+            if f in data:
+                setattr(m, f, bool(data[f]))
+        if data.get("api_key") is not None:  # "" borra la key propia, None no toca
+            m.api_key = (data["api_key"] or "").strip() or None
+        if not motor_id:
+            db.add(m)
+        db.commit(); db.refresh(m)
+        return _motor_dict(m)
+    finally:
+        db.close()
+
+
+def borrar_motor(motor_id: int) -> bool:
+    from app.database import SessionLocal
+    from app.models.test_llm import TestLlmMotor
+    db = SessionLocal()
+    try:
+        m = db.get(TestLlmMotor, motor_id)
+        if not m:
+            return False
+        db.delete(m); db.commit()
+        return True
+    finally:
+        db.close()
+
+
+# ── CRUD escenarios ───────────────────────────────────────────────────────────
+
+def _esc_dict(e) -> dict:
+    return {"id": e.id, "slug": e.slug, "nombre": e.nombre, "caso_uso": e.caso_uso,
+            "descripcion": e.descripcion, "guion": json.loads(e.guion or "[]"),
+            "esperado": json.loads(e.esperado or "{}"), "activo": e.activo, "orden": e.orden}
+
+
+def listar_escenarios() -> list[dict]:
+    from app.database import SessionLocal
+    from app.models.test_llm import TestLlmEscenario
+    db = SessionLocal()
+    try:
+        return [_esc_dict(e) for e in db.query(TestLlmEscenario).order_by(
+            TestLlmEscenario.orden, TestLlmEscenario.id).all()]
+    finally:
+        db.close()
+
+
+def guardar_escenario(data: dict, esc_id: int | None = None) -> dict:
+    from app.database import SessionLocal
+    from app.models.test_llm import TestLlmEscenario
+    db = SessionLocal()
+    try:
+        e = db.get(TestLlmEscenario, esc_id) if esc_id else TestLlmEscenario()
+        if esc_id and not e:
+            raise ValueError("escenario no encontrado")
+        for f in ("slug", "nombre", "caso_uso", "descripcion"):
+            if f in data:
+                setattr(e, f, data[f])
+        if "guion" in data:
+            e.guion = json.dumps(data["guion"], ensure_ascii=False)
+        if "esperado" in data:
+            e.esperado = json.dumps(data["esperado"], ensure_ascii=False)
+        if "activo" in data:
+            e.activo = bool(data["activo"])
+        if "orden" in data:
+            e.orden = int(data["orden"])
+        if not esc_id:
+            db.add(e)
+        db.commit(); db.refresh(e)
+        return _esc_dict(e)
+    finally:
+        db.close()
+
+
+def borrar_escenario(esc_id: int) -> bool:
+    from app.database import SessionLocal
+    from app.models.test_llm import TestLlmEscenario
+    db = SessionLocal()
+    try:
+        e = db.get(TestLlmEscenario, esc_id)
+        if not e:
+            return False
+        db.delete(e); db.commit()
+        return True
+    finally:
+        db.close()
+
+
+# ── corridas ──────────────────────────────────────────────────────────────────
+
+def crear_corrida(source: str, motor_ids: list[int], escenario_ids: list[int],
+                  nombre: str = "") -> dict:
+    """Crea la corrida (estado 'estimada') con el costo estimado. NO corre."""
+    from app.database import SessionLocal
+    from app.models.test_llm import TestLlmCorrida
+    if not motor_ids or not escenario_ids:
+        raise ValueError("elegí al menos un motor y un escenario")
+    est = estimar(source, motor_ids, escenario_ids)
+    db = SessionLocal()
+    try:
+        cor = TestLlmCorrida(
+            source=source, nombre=nombre or f"Comparación {datetime.now(timezone.utc):%Y-%m-%d %H:%M}",
+            estado="estimada", motores=json.dumps(motor_ids), escenarios=json.dumps(escenario_ids),
+            costo_estimado_usd=est["total_usd"])
+        db.add(cor); db.commit(); db.refresh(cor)
+        return {"id": cor.id, "estado": cor.estado, "estimacion": est}
+    finally:
+        db.close()
+
+
+def _cor_dict(c) -> dict:
+    return {"id": c.id, "source": c.source, "nombre": c.nombre, "estado": c.estado,
+            "motores": json.loads(c.motores or "[]"), "escenarios": json.loads(c.escenarios or "[]"),
+            "costo_estimado_usd": c.costo_estimado_usd, "costo_real_usd": c.costo_real_usd,
+            "resumen": json.loads(c.resumen or "{}"),
+            "fidelidad": json.loads(c.fidelidad) if c.fidelidad else None,
+            "error": c.error,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+            "finished_at": c.finished_at.isoformat() if c.finished_at else None}
+
+
+def listar_corridas(source: str = "etiguel", limit: int = 30) -> list[dict]:
+    from app.database import SessionLocal
+    from app.models.test_llm import TestLlmCorrida
+    db = SessionLocal()
+    try:
+        rows = (db.query(TestLlmCorrida).filter(TestLlmCorrida.source == source)
+                .order_by(TestLlmCorrida.created_at.desc()).limit(limit).all())
+        return [_cor_dict(c) for c in rows]
+    finally:
+        db.close()
+
+
+def get_corrida(corrida_id: int) -> dict | None:
+    from app.database import SessionLocal
+    from app.models.test_llm import TestLlmCorrida, TestLlmResultado
+    db = SessionLocal()
+    try:
+        c = db.get(TestLlmCorrida, corrida_id)
+        if not c:
+            return None
+        res = (db.query(TestLlmResultado).filter(TestLlmResultado.corrida_id == corrida_id)
+               .order_by(TestLlmResultado.motor_id, TestLlmResultado.id).all())
+        out = _cor_dict(c)
+        out["resultados"] = [{
+            "motor_id": r.motor_id, "motor_nombre": r.motor_nombre,
+            "escenario_slug": r.escenario_slug, "escenario_nombre": r.escenario_nombre,
+            "caso_uso": r.caso_uso, "veredicto": r.veredicto, "categoria": r.categoria,
+            "detalle": r.detalle, "costo_usd": r.costo_usd, "latencia_ms": r.latencia_ms,
+            "tokens_in": r.tokens_in, "tokens_out": r.tokens_out,
+            "tool_calls": json.loads(r.tool_calls or "[]"),
+            "transcript": json.loads(r.transcript or "[]"), "error": r.error,
+        } for r in res]
+        return out
+    finally:
+        db.close()
+

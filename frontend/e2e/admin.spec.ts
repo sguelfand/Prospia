@@ -40,7 +40,7 @@ test.describe("Pantallas de superadmin (N1)", () => {
 
   test("el menú de superadmin muestra los accesos clave", async ({ page }) => {
     await page.goto("/dashboard");
-    for (const item of ["Pendientes", "Errores", "Admin clientes", "Test visuales"]) {
+    for (const item of ["Pendientes", "Errores", "Admin clientes", "Testing"]) {
       await expect(page.getByRole("link", { name: item }).first()).toBeVisible();
     }
   });

@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, BarChart2, ChevronDown, ChevronLeft, ChevronRight, Coins, Eye, FlaskConical, ListTodo, LogOut, Menu, MessageCircleQuestion, MessageSquareWarning, Search, Server, Settings, ShieldCheck, Users, X } from 'lucide-react'
+import { Activity, AlertTriangle, BarChart2, ChevronDown, ChevronLeft, ChevronRight, Coins, Cpu, Eye, FlaskConical, ListTodo, LogOut, Menu, MessageCircleQuestion, MessageSquareWarning, Search, Server, Settings, ShieldCheck, Users, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
@@ -34,6 +34,7 @@ export default function Layout() {
   const [nivel, setNivel]           = useState<number | null>(null)
   const [clientes, setClientes]     = useState<ClienteOpt[]>([])
   const [monOpen, setMonOpen]       = useState(location.pathname.startsWith('/monitoreo'))
+  const [testingOpen, setTestingOpen] = useState(location.pathname.startsWith('/testing') || location.pathname.startsWith('/test-visuales'))
 
   // Estado de impersonación ("ver como cliente"). Se persiste en localStorage;
   // como al entrar/salir hacemos reload completo, leerlo en render alcanza.
@@ -127,6 +128,41 @@ export default function Layout() {
             <Link to="/monitoreo/calidad" onClick={onNav} className={subClass(location.pathname.startsWith('/monitoreo/calidad'))}>
               <MessageSquareWarning size={14} />
               Calidad
+            </Link>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  /* Grupo "Testing" desplegable → Visuales (E2E) + Motores LLM (solo nivel 1) */
+  function renderTesting(collapsed: boolean, onNav?: () => void) {
+    const onTesting = location.pathname.startsWith('/testing') || location.pathname.startsWith('/test-visuales')
+    if (collapsed) {
+      return (
+        <Link to="/testing/visuales" title="Testing" className={navClass(onTesting, true)}>
+          <FlaskConical size={16} />
+        </Link>
+      )
+    }
+    return (
+      <div>
+        <button onClick={() => setTestingOpen((v) => !v)} className={`${navClass(onTesting)} w-full justify-between`}>
+          <span className="flex items-center gap-3">
+            <FlaskConical size={16} />
+            Testing
+          </span>
+          <ChevronDown size={14} className={`transition-transform ${testingOpen ? '' : '-rotate-90'}`} />
+        </button>
+        {testingOpen && (
+          <>
+            <Link to="/testing/visuales" onClick={onNav} className={subClass(location.pathname.startsWith('/testing/visuales') || location.pathname.startsWith('/test-visuales'))}>
+              <Eye size={14} />
+              Visuales
+            </Link>
+            <Link to="/testing/llm" onClick={onNav} className={subClass(location.pathname.startsWith('/testing/llm'))}>
+              <Cpu size={14} />
+              Motores LLM
             </Link>
           </>
         )}
@@ -236,16 +272,7 @@ export default function Layout() {
                 Admin clientes
               </Link>
             )}
-            {nivel === 1 && (
-              <Link
-                to="/test-visuales"
-                onClick={() => setMobileOpen(false)}
-                className={navClass(location.pathname.startsWith('/test-visuales'))}
-              >
-                <FlaskConical size={16} />
-                Test visuales
-              </Link>
-            )}
+            {nivel === 1 && renderTesting(false, () => setMobileOpen(false))}
             {nivel === 1 && renderMonitoreo(false, () => setMobileOpen(false))}
             <Link
               to="/configuracion"
@@ -354,16 +381,7 @@ export default function Layout() {
             {!collapsed && 'Admin clientes'}
           </Link>
         )}
-        {nivel === 1 && (
-          <Link
-            to="/test-visuales"
-            title={collapsed ? 'Test visuales' : undefined}
-            className={navClass(location.pathname.startsWith('/test-visuales'), collapsed)}
-          >
-            <FlaskConical size={16} />
-            {!collapsed && 'Test visuales'}
-          </Link>
-        )}
+        {nivel === 1 && renderTesting(collapsed)}
         {nivel === 1 && renderMonitoreo(collapsed)}
         <Link
           to="/configuracion"

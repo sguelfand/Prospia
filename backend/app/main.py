@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine
 import app.models  # noqa: F401  (registra todas las tablas para create_all)
-from app.routers import admin, auth, calidad, dashboard, etiguel_mirror, me, monitoring, prospects, public, terminos, tokens
+from app.routers import admin, auth, calidad, dashboard, etiguel_mirror, me, monitoring, prospects, public, terminos, test_llm, tokens
 
 
 def run_migrations():
@@ -191,6 +191,16 @@ def run_migrations():
         conn.execute(text(
             "ALTER TABLE dashboard_layout ADD COLUMN IF NOT EXISTS titulos TEXT NOT NULL DEFAULT '{}'"
         ))
+        # ── monitor_settings: Test LLM — gate de correr (OFF hasta el OK de Sebi) + keys por proveedor ──
+        conn.execute(text(
+            "ALTER TABLE monitor_settings ADD COLUMN IF NOT EXISTS test_llm_habilitado BOOLEAN NOT NULL DEFAULT false"
+        ))
+        conn.execute(text(
+            "ALTER TABLE monitor_settings ADD COLUMN IF NOT EXISTS openrouter_api_key VARCHAR(255)"
+        ))
+        conn.execute(text(
+            "ALTER TABLE monitor_settings ADD COLUMN IF NOT EXISTS myclaw_api_key VARCHAR(255)"
+        ))
 
 
 Base.metadata.create_all(bind=engine)
@@ -217,6 +227,7 @@ app.include_router(tokens.router)
 app.include_router(public.router)
 app.include_router(me.router)
 app.include_router(calidad.router)
+app.include_router(test_llm.router)
 
 
 from app.services import cadence

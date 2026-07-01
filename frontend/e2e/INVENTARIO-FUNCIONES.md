@@ -37,8 +37,9 @@ observable. Sirve como registro de Pendientes/Realizados de la pantalla
 ## 2. Layout / global (N1 y N2)
 - Navegar por cada item del menú (Dashboard, Prospects, Términos, Preguntas,
   Configuración; N1 además: Monitoreo/Servicios·Tokens·Calidad, Pendientes,
-  Errores, Admin clientes, Test visuales)
+  Errores, Admin clientes, Testing/Visuales·Motores LLM)
 - Desplegar/colapsar grupo "Monitoreo"
+- Desplegar/colapsar grupo "Testing" (Visuales + Motores LLM)
 - Colapsar/expandir sidebar
 - Cerrar sesión (Salir)
 - Cambiar tema light/dark
@@ -138,6 +139,24 @@ observable. Sirve como registro de Pendientes/Realizados de la pantalla
 - Por revisión: **"Es error de Camila, pero ya lo resolví"** (resuelto directo) →
   queda 'acierto' (suma a la calibración del especialista) pero NO entra a la cola
   de Aprendizajes (no re-inyecta al prompt de Camila). Test API: `calidad.spec.ts`
+
+## 15. Testing / Visuales (N1)
+- Antes "Test visuales"; ahora vive bajo el grupo desplegable **Testing**.
+- Historial de corridas Playwright (render, expandir corrida, detalle por test).
+- Ruta nueva `/testing/visuales` (la vieja `/test-visuales` redirige). Test: `testing.spec.ts`
+
+## 16. Testing / Motores LLM (N1) — banco de pruebas de motores
+- Ver estado: sobre reconstruido de OpenClaw vivo (modelo actual, tamaño del prompt,
+  archivos), keys por proveedor, switch del gate.
+- **Gate**: habilitar/bloquear "Correr" (OFF por default; correr consume tokens).
+- Motores: listar, agregar (nombre/model_id/base_url/provider/rate-card/api_key), borrar.
+- Escenarios: ver banco (los casos de uso de Camila), desplegar detalle.
+- Nueva comparación: elegir motores + escenarios, **Estimar costo** (no gasta),
+  **Correr comparación** (deshabilitado hasta habilitar el gate).
+- Resultados (tablero movible): gráfico calidad por motor, gráfico costo por motor,
+  tabla escenario×motor, modal de transcript por celda.
+- Test: `testing.spec.ts` (carga, submenú, gate: Estimar disponible / Correr bloqueado
+  = no consume tokens). ⚠️ El test NO corre comparaciones reales (respeta el gate).
 
 ---
 
