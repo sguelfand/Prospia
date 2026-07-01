@@ -1,0 +1,33 @@
+name: Tests visuales (web)
+
+# Corre la suite Playwright de la web contra prod y registra el resultado en el
+# Historial de la pantalla "Test visuales". Always-on (nube de GitHub, no depende
+# de la Mac). $0 de API (Playwright maneja un navegador, no llama IA).
+on:
+  schedule:
+    - cron: "0 10 * * *" # 07:00 America/Argentina/Buenos_Aires (UTC-3)
+  workflow_dispatch: {} # permite correrlo a mano desde la pestaña Actions
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Correr suite + registrar corrida
+        env:
+          # Token para POST /ingest/test-run (definir en Settings → Secrets → Actions)
+          PROSPIA_MIRROR_TOKEN: ${{ secrets.PROSPIA_MIRROR_TOKEN }}
+          # Superadmin de prueba para los tests N1
+          PROSPIA_QA_ADMIN_USER: qa-admin
+          PROSPIA_QA_ADMIN_PASS: ${{ secrets.PROSPIA_QA_ADMIN_PASS }}
+          # El origen queda marcado "servidor" en el Historial (vs "local")
+          PROSPIA_RUN_ORIGEN: servidor
+        run: npm run test:e2e:registrar

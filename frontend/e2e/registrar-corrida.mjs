@@ -73,7 +73,7 @@ if (!token) { console.error('Falta PROSPIA_MIRROR_TOKEN (ni en env ni en secrets
 const r = await fetch(`${API}/ingest/test-run`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json', 'X-Mirror-Token': token },
-  body: JSON.stringify({ origen: 'local', total: detalle.length, pasaron, fallaron, duracion_ms, detalle }),
+  body: JSON.stringify({ origen: process.env.PROSPIA_RUN_ORIGEN || 'local', total: detalle.length, pasaron, fallaron, duracion_ms, detalle }),
 })
 const body = await r.text()
 console.log(`Corrida registrada: ${pasaron} ✓ / ${fallaron} ✗ de ${detalle.length} · ${(duracion_ms / 1000).toFixed(1)}s · POST ${r.status} ${body}`)
