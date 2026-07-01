@@ -30,10 +30,32 @@ test.describe("Pantallas de superadmin (N1)", () => {
     });
   }
 
+  test("Tokens: los widgets muestran el chip de fuente (abajo a la derecha)", async ({ page }) => {
+    await page.goto("/monitoreo/tokens");
+    await page.waitForLoadState("networkidle");
+    // Los widgets de Camila (gateway) siempre renderizan en la vista General →
+    // el chip "OpenClaw" está presente. Es la leyenda que movimos al pie del widget.
+    await expect(page.getByText("OpenClaw", { exact: true }).first()).toBeVisible();
+  });
+
   test("el menú de superadmin muestra los accesos clave", async ({ page }) => {
     await page.goto("/dashboard");
     for (const item of ["Pendientes", "Errores", "Admin clientes", "Test visuales"]) {
       await expect(page.getByRole("link", { name: item }).first()).toBeVisible();
     }
+  });
+
+  test("ver como cliente impersona al tenant de prueba", async ({ page }) => {
+    await page.goto("/dashboard");
+    // El selector "Ver como un cliente" incluye qa-test (marcado "· test").
+    const selector = page.locator("select", {
+      has: page.locator("option", { hasText: "QA Test (automated) · test" }),
+    });
+    await selector.selectOption({ label: "QA Test (automated) · test" });
+    await expect(page).toHaveURL(/\/dashboard/);
+    // Al impersonar queda seteado viewing_as con el nombre del cliente.
+    await expect
+      .poll(() => page.evaluate(() => localStorage.getItem("viewing_as")))
+      .toContain("QA Test");
   });
 });

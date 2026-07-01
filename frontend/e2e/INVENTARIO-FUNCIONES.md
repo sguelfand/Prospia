@@ -125,6 +125,10 @@ observable. Sirve como registro de Pendientes/Realizados de la pantalla
 - Recalcular hoy (cliente)
 - Drill-down de día (click día), expandir/colapsar conversación
 - Widgets (igual que Dashboard)
+- Chip de fuente (API Anthropic / OpenClaw) **abajo a la derecha** del widget (no tapa el título)
+- Costos internos: hover discriminado por función → "Histórico mensual" (barras
+  apiladas, panel con monto por función) y "Participación por función" (donut, panel
+  con costo + % de la función)
 
 ## 14. Monitoreo / Calidad (N1)
 - Selector cliente/Etiguel + definir por defecto

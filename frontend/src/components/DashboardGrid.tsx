@@ -136,7 +136,7 @@ export function Widget({ id, title = '', fuente, right, children }: {
   function guardar() { setEditando(false); if (valor !== actual) tit.set(id, valor) }
 
   return (
-    <div className="h-full bg-card border border-line rounded-2xl flex flex-col overflow-hidden">
+    <div className="relative h-full bg-card border border-line rounded-2xl flex flex-col overflow-hidden">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-line/60">
         <span className="rgl-grip cursor-grab active:cursor-grabbing -ml-0.5 text-muted hover:text-ink shrink-0" title="Arrastrar para reordenar">
           <GripDots />
@@ -157,11 +157,16 @@ export function Widget({ id, title = '', fuente, right, children }: {
             <Pencil />
           </button>
         )}
-        {fuente && <FuenteChip fuente={fuente} />}
         {right && <div className="ml-auto shrink-0">{right}</div>}
       </div>
       {/* min-h-0 permite que un gráfico hijo con h-full llene el alto del widget */}
       <div className="flex-1 min-h-0 overflow-auto p-4 flex flex-col">{children}</div>
+      {/* chip de fuente abajo a la derecha (no tapa el título; no bloquea el hover del gráfico) */}
+      {fuente && (
+        <div className="absolute bottom-1.5 right-2 pointer-events-none z-10">
+          <FuenteChip fuente={fuente} />
+        </div>
+      )}
     </div>
   )
 }

@@ -68,15 +68,31 @@ export function CostosPorFuncion({ data }: { data: AnthUsage }) {
 // ─── Widget: participación (donut) ────────────────────────────────────────────
 export function CostosParticipacion({ data }: { data: AnthUsage }) {
   const { color } = colorMap(data)
+  const [hover, setHover] = useState<number | null>(null)
   const fs = data.por_funcion
   const total = data.total_mes || fs.reduce((s, f) => s + f.costo_usd, 0)
   if (fs.length === 0) return <p className="text-sm text-muted">—</p>
+  const hf = hover != null ? fs[hover] : null
   return (
     <div className="flex flex-col items-center">
-      <Donut fs={fs} total={total} color={color} />
+      <div className="relative">
+        {hf && (
+          <div className="absolute top-1 right-1 bg-app border border-line rounded-lg px-3 py-2 text-xs z-10 shadow whitespace-nowrap pointer-events-none">
+            <div className="flex items-center gap-1.5 font-semibold text-ink mb-0.5">
+              <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: color(hf.funcion) }} />
+              {corto(hf.funcion)}
+            </div>
+            <div className="text-muted">Costo: <span className="text-ink font-medium">{usd(hf.costo_usd)}</span></div>
+            <div className="text-muted">Participación: <span className="text-ink font-medium">{total > 0 ? (hf.costo_usd / total * 100).toFixed(1) : 0}%</span></div>
+          </div>
+        )}
+        <Donut fs={fs} total={total} color={color} hover={hover} setHover={setHover} />
+      </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3 justify-center">
-        {fs.map((f) => (
-          <span key={f.funcion} className="flex items-center gap-1.5 text-[11.5px] text-ink-soft">
+        {fs.map((f, i) => (
+          <span key={f.funcion}
+            onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}
+            className={`flex items-center gap-1.5 text-[11.5px] cursor-default ${hover === i ? 'text-ink' : 'text-ink-soft'}`}>
             <span className="w-2.5 h-2.5 rounded-sm" style={{ background: color(f.funcion) }} />
             {corto(f.funcion)} · {total > 0 ? (f.costo_usd / total * 100).toFixed(0) : 0}%
           </span>
@@ -91,9 +107,27 @@ export function CostosHistorico({ data }: { data: AnthUsage }) {
   const [hover, setHover] = useState<number | null>(null)
   const { nombres, color } = colorMap(data)
   if (data.meses.length === 0) return <p className="text-sm text-muted">Sin histórico todavía.</p>
+  const mh = hover != null ? data.meses[hover] : null
+  const filasHover = mh
+    ? nombres.filter((nm) => (mh.por_funcion[nm] ?? 0) > 0)
+        .map((nm) => ({ nm, v: mh.por_funcion[nm] }))
+        .sort((a, b) => b.v - a.v)
+    : []
   return (
     <div className="h-full flex flex-col min-h-0">
-      <div className="flex-1 min-h-0">
+      <div className="relative flex-1 min-h-0">
+        {mh && (
+          <div className="absolute top-0 right-1 bg-app border border-line rounded-lg px-3 py-2 text-xs z-10 shadow whitespace-nowrap pointer-events-none">
+            <div className="font-semibold text-ink mb-1">{mh.nombre} · <span className="text-amber-400">{usd(mh.total)}</span></div>
+            {filasHover.map(({ nm, v }) => (
+              <div key={nm} className="flex items-center gap-1.5 text-muted">
+                <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: color(nm) }} />
+                <span className="text-ink-soft">{corto(nm)}</span>
+                <span className="ml-auto pl-3 text-ink font-medium">{usd(v)}</span>
+              </div>
+            ))}
+          </div>
+        )}
         <Stacked meses={data.meses} nombres={nombres} color={color} hover={hover} setHover={setHover} />
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3 shrink-0">
@@ -118,17 +152,24 @@ function Kpi({ label, value, amber, tone }: { label: string; value: string; ambe
   )
 }
 
-function Donut({ fs, total, color }: { fs: AnthFuncion[]; total: number; color: (f: string) => string }) {
+function Donut({ fs, total, color, hover, setHover }: {
+  fs: AnthFuncion[]; total: number; color: (f: string) => string
+  hover: number | null; setHover: (i: number | null) => void
+}) {
   const R = 70, C = 2 * Math.PI * R
   let off = 0
   return (
     <svg width="180" height="180" viewBox="0 0 200 200" className="max-w-full">
-      {fs.map((f) => {
+      {fs.map((f, i) => {
         const frac = total > 0 ? f.costo_usd / total : 0
         const el = (
-          <circle key={f.funcion} cx="100" cy="100" r={R} fill="none" stroke={color(f.funcion)} strokeWidth="26"
+          <circle key={f.funcion} cx="100" cy="100" r={R} fill="none" stroke={color(f.funcion)}
+            strokeWidth={hover === i ? 32 : 26} opacity={hover == null || hover === i ? 1 : 0.4}
             strokeDasharray={`${(frac * C).toFixed(2)} ${C.toFixed(2)}`} strokeDashoffset={`${(-off * C).toFixed(2)}`}
-            transform="rotate(-90 100 100)" />
+            transform="rotate(-90 100 100)" style={{ cursor: 'pointer', transition: 'stroke-width .1s, opacity .1s' }}
+            onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
+            <title>{corto(f.funcion)}: {usd(f.costo_usd)}</title>
+          </circle>
         )
         off += frac
         return el
