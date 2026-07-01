@@ -38,6 +38,17 @@ test.describe("Pantallas de superadmin (N1)", () => {
     await expect(page.getByText("OpenClaw", { exact: true }).first()).toBeVisible();
   });
 
+  test("Servicios: la guardia semántica es un interruptor (switch)", async ({ page }) => {
+    await page.goto("/monitoreo/servicios");
+    await page.waitForLoadState("networkidle");
+    // La guardia semántica se controla con un interruptor deslizante (role=switch),
+    // no un checkbox. Verificamos que rinda como switch con su estado on/off.
+    // (Read-only: no lo togglemos para no tocar el setting real de prod.)
+    const sw = page.getByRole("switch", { name: /Guardia semántica de Camila/i });
+    await expect(sw).toBeVisible();
+    await expect(sw).toHaveAttribute("aria-checked", /true|false/);
+  });
+
   test("el menú de superadmin muestra los accesos clave", async ({ page }) => {
     await page.goto("/dashboard");
     // "Testing" es un grupo desplegable (botón), no un link → se busca por texto

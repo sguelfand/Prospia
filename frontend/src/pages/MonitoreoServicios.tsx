@@ -173,18 +173,29 @@ export default function MonitoreoServicios() {
       </div>
 
       {/* Guardia semántica de Camila (chequeo Haiku de cada saliente a clientes) */}
-      <label className="flex items-center gap-2 text-xs text-muted cursor-pointer select-none">
-        <input
-          type="checkbox"
-          checked={data?.guard_semantico ?? true}
-          onChange={(e) => toggleGuard(e.target.checked)}
-          className="accent-primary w-3.5 h-3.5"
-        />
-        <span>
-          <span className="text-ink font-semibold">Guardia semántica de Camila</span> — frena por IA (Haiku)
-          cualquier fuga de razonamiento interno a clientes. Su costo aparece en Tokens → Costos internos.
-        </span>
-      </label>
+      {(() => {
+        const on = data?.guard_semantico ?? true
+        return (
+          <div className="flex items-start gap-2.5 text-xs text-muted">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={on}
+              aria-label="Guardia semántica de Camila"
+              onClick={() => toggleGuard(!on)}
+              className={`relative shrink-0 w-9 h-5 rounded-full transition-colors mt-0.5 ${on ? 'bg-primary' : 'bg-line'}`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-4' : ''}`}
+              />
+            </button>
+            <span className="cursor-pointer select-none" onClick={() => toggleGuard(!on)}>
+              <span className="text-ink font-semibold">Guardia semántica de Camila</span> — frena por IA (Haiku)
+              cualquier fuga de razonamiento interno a clientes. Su costo aparece en Tokens → Costos internos.
+            </span>
+          </div>
+        )
+      })()}
 
       {grupos.map((grupo) => (
         <div key={grupo} className="border border-line rounded-xl overflow-hidden">

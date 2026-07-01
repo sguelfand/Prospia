@@ -120,6 +120,7 @@ observable. Sirve como registro de Pendientes/Realizados de la pantalla
 ## 12. Monitoreo / Servicios (N1)
 - Re-chequear todo / individual
 - Cambiar frecuencia de chequeo automático
+- Guardia semántica de Camila: **interruptor (switch)** on/off — `admin.spec.ts`
 
 ## 13. Monitoreo / Tokens (N1)
 - Selector cliente/General + definir por defecto
