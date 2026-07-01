@@ -65,6 +65,11 @@ class MonitorSettings(Base):
     test_llm_habilitado: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     openrouter_api_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     myclaw_api_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Número del último APK (build nativo) publicado de la app admin. La app lo lee
+    # y lo compara con su propio APK_VERSION baked: si el instalado es menor, muestra
+    # "hay un APK nuevo, instalalo". Se bumpea +1 en cada build EAS nuevo (junto con
+    # app.json version, para el runtime gating). Ver [[project_prospia_admin_app]].
+    apk_version: Mapped[int] = mapped_column(Integer, nullable=False, default=2, server_default="2")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

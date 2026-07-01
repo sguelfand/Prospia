@@ -201,6 +201,9 @@ def run_migrations():
         conn.execute(text(
             "ALTER TABLE monitor_settings ADD COLUMN IF NOT EXISTS myclaw_api_key VARCHAR(255)"
         ))
+        conn.execute(text(
+            "ALTER TABLE monitor_settings ADD COLUMN IF NOT EXISTS apk_version INTEGER NOT NULL DEFAULT 2"
+        ))
 
 
 Base.metadata.create_all(bind=engine)

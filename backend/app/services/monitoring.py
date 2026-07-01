@@ -587,6 +587,37 @@ def set_guard_semantico(on: bool) -> dict:
     return get_status()
 
 
+def get_apk_version() -> int:
+    """Número del último APK (build nativo) publicado de la app admin. La app lo
+    compara con su APK_VERSION baked para avisar si hay que instalar un APK nuevo."""
+    from app.models.service_health import MonitorSettings
+    from app.database import SessionLocal
+    db = SessionLocal()
+    try:
+        s = db.query(MonitorSettings).filter(MonitorSettings.id == 1).first()
+        return int(s.apk_version) if s and s.apk_version else 2
+    finally:
+        db.close()
+
+
+def set_apk_version(n: int) -> int:
+    """Setea el número del último APK (se bumpea al hacer un build EAS nuevo)."""
+    from app.models.service_health import MonitorSettings
+    from app.database import SessionLocal
+    db = SessionLocal()
+    try:
+        s = db.query(MonitorSettings).filter(MonitorSettings.id == 1).first()
+        if not s:
+            s = MonitorSettings(id=1)
+            db.add(s)
+        s.apk_version = int(n)
+        s.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        return int(s.apk_version)
+    finally:
+        db.close()
+
+
 # ── loop de fondo ─────────────────────────────────────────────────────────────
 
 def start():

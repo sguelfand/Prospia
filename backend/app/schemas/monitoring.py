@@ -41,3 +41,7 @@ class IntervalUpdate(BaseModel):
 
 class GuardSemanticoUpdate(BaseModel):
     on: bool
+
+
+class AppVersionUpdate(BaseModel):
+    apk_latest: int

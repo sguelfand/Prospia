@@ -296,6 +296,11 @@ export const getOverview = (token: string) => request<AdminOverview>("/admin/ove
 
 export const getClientes = (token: string) => request<ClienteResumen[]>("/admin/clientes", {}, token);
 
+// Último APK (build nativo) publicado. La app lo compara con su APK_VERSION baked
+// para avisar si hay que instalar un APK nuevo.
+export const getAppVersion = (token: string) =>
+  request<{ apk_latest: number }>("/admin/monitoring/app-version", {}, token);
+
 export const getClienteStats = (token: string, tenantId: number) =>
   request<DashboardStats>(`/admin/clientes/${tenantId}/stats`, {}, token);
 

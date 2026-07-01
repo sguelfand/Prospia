@@ -10,12 +10,12 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ClienteResumen, getClientes } from "../api";
+import { ClienteResumen, getAppVersion, getClientes } from "../api";
 import { useAuth } from "../auth";
 import { Icon, IconName } from "./Icon";
 import { ProspiaLogo } from "./Logo";
 import { colors } from "../theme";
-import { APP_VERSION } from "../version";
+import { APK_VERSION, APP_VERSION } from "../version";
 
 /** Contenido del menú lateral: Dashboard (home) + cada cliente + Avisos + salir.
  *  Los clientes se traen del backend para que el menú liste todos los tenants. */
@@ -25,6 +25,9 @@ export default function DrawerContent({ navigation, state }: DrawerContentCompon
   const [clientes, setClientes] = useState<ClienteResumen[]>([]);
   const [loading, setLoading] = useState(true);
   const [monOpen, setMonOpen] = useState(true);
+  const [apkLatest, setApkLatest] = useState<number | null>(null);
+  // El APK instalado quedó viejo si el backend conoce uno más nuevo que el baked.
+  const apkDesactualizado = apkLatest != null && APK_VERSION < apkLatest;
 
   const activeRoute = state.routes[state.index]?.name;
   const activeTenant =
@@ -40,6 +43,13 @@ export default function DrawerContent({ navigation, state }: DrawerContentCompon
       // si falla, el menú igual muestra Dashboard/Avisos
     } finally {
       setLoading(false);
+    }
+    // Chequeo del último APK (best-effort, no bloquea el menú).
+    try {
+      const { apk_latest } = await getAppVersion(token);
+      setApkLatest(apk_latest);
+    } catch {
+      /* sin señal → no mostramos el aviso */
     }
   }, [token]);
 
@@ -160,9 +170,19 @@ export default function DrawerContent({ navigation, state }: DrawerContentCompon
           active={activeRoute === "Configuracion"}
           onPress={() => navigation.navigate("Configuracion")}
         />
+        {apkDesactualizado ? (
+          <View style={styles.apkAviso}>
+            <Icon name="alert" size={14} color={colors.amber} />
+            <Text style={styles.apkAvisoText}>
+              Hay un APK nuevo (v{apkLatest}). Instalá la última versión.
+            </Text>
+          </View>
+        ) : null}
         <TouchableOpacity style={[styles.logout, { paddingBottom: insets.bottom + 12 }]} onPress={signOut}>
           <Text style={styles.logoutText}>Salir</Text>
-          <Text style={styles.version}>{APP_VERSION}</Text>
+          <Text style={[styles.version, apkDesactualizado ? styles.versionStale : null]}>
+            {APP_VERSION}
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -235,4 +255,19 @@ const styles = StyleSheet.create({
   logout: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderTopColor: colors.border, borderTopWidth: 1, paddingTop: 14, paddingHorizontal: 16, marginTop: 4 },
   logoutText: { color: colors.primary, fontSize: 15, fontWeight: "700" },
   version: { color: colors.textDim, fontSize: 13, fontWeight: "600" },
+  versionStale: { color: colors.amber },
+  apkAviso: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(245,178,61,0.12)",
+    borderColor: colors.amber,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginHorizontal: 8,
+    marginTop: 6,
+  },
+  apkAvisoText: { color: colors.amber, fontSize: 12, fontWeight: "600", flex: 1 },
 });
