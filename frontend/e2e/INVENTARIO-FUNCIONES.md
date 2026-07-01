@@ -135,6 +135,9 @@ observable. Sirve como registro de Pendientes/Realizados de la pantalla
 - Aprendizajes: consolidar, ver/ocultar bloque, aprobar, descartar
 - Tabs: Nuevas / Revisadas
 - Por revisión: expandir conversación, agregar nota, marcar bien/mal, borrar
+- Por revisión: **"Es error de Camila, pero ya lo resolví"** (resuelto directo) →
+  queda 'acierto' (suma a la calibración del especialista) pero NO entra a la cola
+  de Aprendizajes (no re-inyecta al prompt de Camila). Test API: `calidad.spec.ts`
 
 ---
 

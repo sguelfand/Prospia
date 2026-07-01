@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -62,6 +62,13 @@ class CamilaRevision(Base):
     # Cuándo esta lección (veredicto 'acierto') se incorporó al prompt de Camila.
     # Lección pendiente = veredicto 'acierto' + incorporada_at NULL.
     incorporada_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Sebi ya arregló a Camila a mano (fix directo). El especialista igual aprende
+    # (queda como 'acierto' → entra a la calibración), pero la lección NO va a la cola
+    # de Aprendizajes para re-inyectarla al prompt (ya está resuelta). Al marcarlo se
+    # setea también incorporada_at=ahora para que quede fuera de _pendientes.
+    resuelto_directo: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
 
 
 class CamilaConsolidacion(Base):

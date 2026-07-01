@@ -165,6 +165,12 @@ def run_migrations():
         conn.execute(text(
             "ALTER TABLE camila_revision ADD COLUMN IF NOT EXISTS origen VARCHAR(16) NOT NULL DEFAULT 'especialista'"
         ))
+        # ── camila_revision: Sebi ya arregló Camila a mano (fix directo) → el especialista
+        #    aprende (queda 'acierto' en la calibración) pero la lección no va a la cola de
+        #    Aprendizajes (no re-inyecta al prompt de Camila). ──
+        conn.execute(text(
+            "ALTER TABLE camila_revision ADD COLUMN IF NOT EXISTS resuelto_directo BOOLEAN NOT NULL DEFAULT false"
+        ))
         # ── monitor_settings: timestamp del último recordatorio de auditoría de prompt ──
         conn.execute(text(
             "ALTER TABLE monitor_settings ADD COLUMN IF NOT EXISTS audit_recordatorio_at TIMESTAMPTZ"

@@ -1,4 +1,4 @@
-import { Loader2, MessageSquare, Phone, Plus, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react'
+import { Loader2, MessageSquare, Phone, Plus, ThumbsDown, ThumbsUp, Trash2, Wrench } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { ClienteSelector, type SourceOpt } from '../components/ClienteSelector'
@@ -25,6 +25,7 @@ type Revision = {
   origen?: 'especialista' | 'sebi'
   estado: Estado
   veredicto: Veredicto
+  resuelto_directo?: boolean
   nota_sebi: string | null
   created_at: string | null
   revisado_at: string | null
@@ -285,12 +286,12 @@ export default function Calidad() {
     finally { setAprBusy(false) }
   }
 
-  async function confirmar(r: Revision, veredicto: 'acierto' | 'falso_positivo') {
+  async function confirmar(r: Revision, veredicto: 'acierto' | 'falso_positivo', resueltoDirecto = false) {
     const nota = notas[r.id]?.trim() || undefined
     const snap = revisiones
-    setRevisiones((prev) => prev.map((x) => (x.id === r.id ? { ...x, estado: 'revisado', veredicto, nota_sebi: nota ?? null } : x)))
+    setRevisiones((prev) => prev.map((x) => (x.id === r.id ? { ...x, estado: 'revisado', veredicto, resuelto_directo: resueltoDirecto, nota_sebi: nota ?? null } : x)))
     try {
-      await api.post(`/admin/calidad/revisiones/${r.id}/confirmar`, { veredicto, nota })
+      await api.post(`/admin/calidad/revisiones/${r.id}/confirmar`, { veredicto, nota, resuelto_directo: resueltoDirecto })
     } catch {
       setRevisiones(snap)
     }
@@ -548,7 +549,10 @@ export default function Calidad() {
                 <span className="text-[11px] font-bold text-primary border border-primary/50 rounded px-1.5 py-0.5">Reportado por vos</span>
               )}
               {r.estado === 'revisado' && r.veredicto === 'acierto' && (
-                <span className="ml-auto text-[11px] font-bold text-red-500 border border-red-500/50 rounded px-1.5 py-0.5">Camila estuvo mal</span>
+                <span className={`text-[11px] font-bold text-red-500 border border-red-500/50 rounded px-1.5 py-0.5 ${r.resuelto_directo ? '' : 'ml-auto'}`}>Camila estuvo mal</span>
+              )}
+              {r.estado === 'revisado' && r.veredicto === 'acierto' && r.resuelto_directo && (
+                <span className="ml-auto text-[11px] font-bold text-amber border border-amber/50 rounded px-1.5 py-0.5">Resuelto directo · no re-enseñado</span>
               )}
               {r.estado === 'revisado' && r.veredicto === 'falso_positivo' && (
                 <span className="ml-auto text-[11px] font-bold text-emerald-500 border border-emerald-500/50 rounded px-1.5 py-0.5">Camila estuvo bien</span>
@@ -603,6 +607,9 @@ export default function Calidad() {
                 <div className="flex gap-2 flex-wrap items-center">
                   <button onClick={() => confirmar(r, 'acierto')} className="flex items-center gap-1 text-xs font-semibold border border-red-500/50 text-red-500 rounded-lg px-2.5 py-1.5 hover:bg-red-500/10">
                     <ThumbsUp size={12} /> Camila estuvo mal (acertaste)
+                  </button>
+                  <button onClick={() => confirmar(r, 'acierto', true)} title="El especialista acertó, pero vos ya arreglaste a Camila a mano. Suma a la calibración del especialista, pero NO va a la cola de Aprendizajes (no re-inyecta al prompt)." className="flex items-center gap-1 text-xs font-semibold border border-amber/50 text-amber rounded-lg px-2.5 py-1.5 hover:bg-amber/10">
+                    <Wrench size={12} /> Es error de Camila, pero ya lo resolví
                   </button>
                   <button onClick={() => confirmar(r, 'falso_positivo')} className="flex items-center gap-1 text-xs font-semibold border border-emerald-500/50 text-emerald-500 rounded-lg px-2.5 py-1.5 hover:bg-emerald-500/10">
                     <ThumbsDown size={12} /> Camila estuvo bien (te equivocaste)

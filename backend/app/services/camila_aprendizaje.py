@@ -42,6 +42,7 @@ def _pendientes(db, source: str):
     return (db.query(CamilaRevision)
             .filter(CamilaRevision.source == source,
                     CamilaRevision.veredicto == "acierto",
+                    CamilaRevision.resuelto_directo.is_(False),
                     CamilaRevision.incorporada_at.is_(None))
             .order_by(CamilaRevision.revisado_at.asc()).all())
 

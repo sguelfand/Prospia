@@ -356,16 +356,25 @@ def _to_dict(r) -> dict:
         "detalle": r.detalle, "fragmento": r.fragmento, "sugerencia": r.sugerencia,
         "origen": getattr(r, "origen", "especialista"),
         "estado": r.estado, "veredicto": r.veredicto, "nota_sebi": r.nota_sebi,
+        "resuelto_directo": bool(getattr(r, "resuelto_directo", False)),
         "created_at": r.created_at.isoformat() if r.created_at else None,
         "revisado_at": r.revisado_at.isoformat() if r.revisado_at else None,
     }
 
 
-def confirmar_revision(rev_id: int, veredicto: str, nota: str | None = None) -> dict | None:
+def confirmar_revision(rev_id: int, veredicto: str, nota: str | None = None,
+                       resuelto_directo: bool = False) -> dict | None:
     """Sebi confirma: 'acierto' (Camila mal) | 'falso_positivo' (Camila bien).
-    Esto alimenta el loop de aprendizaje. Devuelve la revisión actualizada."""
+    Esto alimenta el loop de aprendizaje. Devuelve la revisión actualizada.
+
+    Si `resuelto_directo` (solo válido con 'acierto'): Sebi ya arregló a Camila a
+    mano. La revisión queda como 'acierto' (el especialista la sigue tomando como
+    caso a detectar → calibración), pero se marca incorporada_at=ahora para que NO
+    entre a la cola de Aprendizajes (el prompt de Camila ya está corregido)."""
     if veredicto not in ("acierto", "falso_positivo"):
         raise ValueError("veredicto inválido")
+    if resuelto_directo and veredicto != "acierto":
+        raise ValueError("resuelto_directo solo aplica a 'acierto'")
     from app.database import SessionLocal
     from app.models.camila_revision import CamilaRevision
     db = SessionLocal()
@@ -373,10 +382,14 @@ def confirmar_revision(rev_id: int, veredicto: str, nota: str | None = None) -> 
         r = db.get(CamilaRevision, rev_id)
         if not r:
             return None
+        ahora = datetime.now(timezone.utc)
         r.veredicto = veredicto
         r.estado = "revisado"
         r.nota_sebi = (nota or None)
-        r.revisado_at = datetime.now(timezone.utc)
+        r.revisado_at = ahora
+        if resuelto_directo:
+            r.resuelto_directo = True
+            r.incorporada_at = ahora   # fuera de la cola de Aprendizajes (ya resuelto)
         db.commit()
         db.refresh(r)
         return _to_dict(r)

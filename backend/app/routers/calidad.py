@@ -17,6 +17,9 @@ router = APIRouter(prefix="/admin/calidad", tags=["calidad"],
 class ConfirmarIn(BaseModel):
     veredicto: str            # 'acierto' | 'falso_positivo'
     nota: str | None = None
+    # True: Sebi ya arregló Camila a mano. Queda 'acierto' (el especialista lo sigue
+    # detectando vía calibración) pero NO va a la cola de Aprendizajes (no re-inyecta).
+    resuelto_directo: bool = False
 
 
 class ReportarIn(BaseModel):
@@ -77,12 +80,14 @@ def confirmar(rev_id: int, body: ConfirmarIn):
     'falso_positivo' (Camila estuvo bien, el agente se equivocó). Alimenta el loop.
     Si fue 'acierto' y se juntó el umbral de lecciones, dispara la consolidación."""
     try:
-        out = camila_quality.confirmar_revision(rev_id, body.veredicto, body.nota)
+        out = camila_quality.confirmar_revision(
+            rev_id, body.veredicto, body.nota, resuelto_directo=body.resuelto_directo)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     if out is None:
         raise HTTPException(status_code=404, detail="revisión no encontrada")
-    if body.veredicto == "acierto":
+    # Un acierto ya resuelto a mano NO entra a la cola → no dispara la consolidación.
+    if body.veredicto == "acierto" and not body.resuelto_directo:
         camila_aprendizaje.maybe_proponer(out.get("source", "etiguel"))
     return out
 
