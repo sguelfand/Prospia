@@ -40,8 +40,10 @@ test.describe("Pantallas de superadmin (N1)", () => {
 
   test("el menú de superadmin muestra los accesos clave", async ({ page }) => {
     await page.goto("/dashboard");
+    // "Testing" es un grupo desplegable (botón), no un link → se busca por texto
+    // para cubrir links y grupos por igual.
     for (const item of ["Pendientes", "Errores", "Admin clientes", "Testing"]) {
-      await expect(page.getByRole("link", { name: item }).first()).toBeVisible();
+      await expect(page.getByText(item, { exact: true }).first()).toBeVisible();
     }
   });
 

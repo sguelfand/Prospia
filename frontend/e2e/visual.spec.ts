@@ -19,6 +19,11 @@ const PANTALLAS = [
 ];
 
 test.describe("Visual regression", () => {
+  // Los baselines se generan en macOS (local). En CI (Linux) las fuentes renderizan
+  // distinto → siempre habría diff. La regresión visual se corre en local; en CI
+  // (corrida diaria) se saltea. Los tests funcionales cubren el CI.
+  test.skip(!!process.env.CI, "visual regression: solo local (baselines macOS)");
+
   for (const { ruta, nombre } of PANTALLAS) {
     test(`captura ${ruta}`, async ({ page }) => {
       await page.goto(ruta);
