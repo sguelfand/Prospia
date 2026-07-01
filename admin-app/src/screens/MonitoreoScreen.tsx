@@ -4,6 +4,7 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -122,9 +123,8 @@ export default function MonitoreoScreen() {
     }
   };
 
-  const toggleGuard = async () => {
+  const toggleGuard = async (on: boolean) => {
     if (!token) return;
-    const on = !(data?.guard_semantico ?? true);
     try {
       setData(await setGuardSemantico(token, on));
     } catch (e) {
@@ -193,13 +193,18 @@ export default function MonitoreoScreen() {
       </View>
 
       {/* Guardia semántica de Camila */}
-      <TouchableOpacity style={styles.guardRow} onPress={toggleGuard} activeOpacity={0.7}>
-        <Icon name="check" size={14} color={(data?.guard_semantico ?? true) ? colors.primary : colors.textDim} strokeWidth={2.5} />
+      <View style={styles.guardRow}>
         <Text style={styles.guardText}>
-          <Text style={{ color: colors.text, fontWeight: "700" }}>Guardia semántica de Camila</Text>{"  "}
-          {(data?.guard_semantico ?? true) ? "ON" : "OFF"} — frena por IA fugas de razonamiento a clientes (costo en Tokens).
+          <Text style={{ color: colors.text, fontWeight: "700" }}>Guardia semántica de Camila</Text>
+          {" — "}frena por IA fugas de razonamiento a clientes (costo en Tokens).
         </Text>
-      </TouchableOpacity>
+        <Switch
+          value={data?.guard_semantico ?? true}
+          onValueChange={toggleGuard}
+          trackColor={{ false: colors.cardAlt, true: colors.primary }}
+          thumbColor="#fff"
+        />
+      </View>
 
       {grupos.map((grupo) => {
         const items = servicios.filter((s) => s.grupo === grupo);
@@ -296,7 +301,7 @@ const styles = StyleSheet.create({
   btnTodoText: { color: colors.onPrimary, fontSize: 13, fontWeight: "700" },
   freqTitle: { color: colors.textDim, fontSize: 12, marginTop: 18, marginBottom: 8 },
   freqRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  guardRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginTop: 16, paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  guardRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 16, paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   guardText: { color: colors.textDim, fontSize: 12, flex: 1, lineHeight: 17 },
   freqPill: {
     borderWidth: 1,
