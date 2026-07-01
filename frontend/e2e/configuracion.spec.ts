@@ -18,3 +18,18 @@ test("cambiar contraseña: avisa si no coinciden", async ({ page }) => {
   await page.getByRole("button", { name: /Cambiar contraseña/ }).click();
   await expect(page.getByText("Las contraseñas no coinciden")).toBeVisible();
 });
+
+test("editar info del negocio auto-guarda", async ({ page }) => {
+  await page.goto("/configuracion");
+  await page.getByText("Información del negocio", { exact: true }).click();
+  // Editar el primer campo de la sección (sobre qa-test, aislado) y esperar el
+  // indicador de auto-guardado.
+  const campo = page.locator('input[type="text"]:visible').first();
+  // Valor único cada corrida: si se rellena con el mismo valor no hay cambio → no
+  // dispara el auto-guardado. Con un valor nuevo, siempre guarda.
+  await campo.fill(`QA Test Negocio ${Date.now()}`);
+  // Hay un indicador de auto-guardado por sección; se apunta al VISIBLE (el de
+  // Perfil, colapsado, tiene su span oculto).
+  await expect(page.locator("span:visible", { hasText: /guardado/i }).first())
+    .toBeVisible({ timeout: 12_000 });
+});

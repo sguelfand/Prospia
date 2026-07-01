@@ -17,8 +17,10 @@ test.describe("Dashboard", () => {
     await page.goto("/dashboard");
     // El label del KPI es un <p> (las leyendas del gráfico son <span>).
     await page.locator("p").filter({ hasText: /^Interesados$/ }).click();
+    // El KPI navega a Prospects con el filtro por estado (y el mes actual). No se
+    // asertan prospects puntuales: el filtro incluye mes actual y los datos
+    // sembrados pueden ser de otro mes. El contenido filtrado ya lo cubre el test
+    // "filtrar por estado" de prospects.spec.ts.
     await expect(page).toHaveURL(/\/prospects\?.*estado=interesado/);
-    // El listado ya filtrado muestra el prospect interesado sembrado.
-    await expect(page.getByRole("cell", { name: "Construcciones Epsilon" })).toBeVisible();
   });
 });
