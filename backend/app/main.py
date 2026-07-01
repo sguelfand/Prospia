@@ -177,6 +177,10 @@ def run_migrations():
         conn.execute(text(
             "ALTER TABLE monitor_settings ADD COLUMN IF NOT EXISTS guard_semantico BOOLEAN NOT NULL DEFAULT true"
         ))
+        # ── anthropic_usage: atribuir el gasto interno por cliente (source) ──
+        conn.execute(text(
+            "ALTER TABLE anthropic_usage ADD COLUMN IF NOT EXISTS source VARCHAR(60)"
+        ))
         # ── dashboard_layout: títulos personalizados de los widgets ──
         conn.execute(text(
             "ALTER TABLE dashboard_layout ADD COLUMN IF NOT EXISTS titulos TEXT NOT NULL DEFAULT '{}'"

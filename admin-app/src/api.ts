@@ -501,8 +501,8 @@ export interface AnthUsage {
   total_mes: number; prev_total: number; delta_pct: number | null;
   por_funcion: AnthFuncion[]; meses: AnthMes[];
 }
-export const getAnthropicUsage = (token: string, meses = 12) =>
-  request<AnthUsage>(`/admin/tokens/anthropic?meses=${meses}`, {}, token);
+export const getAnthropicUsage = (token: string, meses = 12, source?: string) =>
+  request<AnthUsage>(`/admin/tokens/anthropic?meses=${meses}${source ? `&source=${encodeURIComponent(source)}` : ""}`, {}, token);
 
 export const getTokenSources = (token: string) =>
   request<TokenSource[]>("/admin/tokens/sources", {}, token);

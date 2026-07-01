@@ -181,7 +181,7 @@ def proponer(source: str = "etiguel", notify: bool = True) -> dict:
             + f"BLOQUE VIGENTE (esto SÍ lo reemplazás):\n{vigente or '(vacío, es la primera vez)'}\n\n"
             + f"LECCIONES NUEVAS ({len(pend)}):\n{lecciones_txt}"
         )
-        bloque = (_post(system, user, max_tokens=1800, funcion="Consolidación aprendizajes") or "").strip()
+        bloque = (_post(system, user, max_tokens=1800, funcion="Consolidación aprendizajes", source=source) or "").strip()
         if not bloque:
             return {"source": source, "ok": False, "motivo": "ia_no_disponible"}
 

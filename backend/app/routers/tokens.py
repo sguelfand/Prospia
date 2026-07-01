@@ -105,11 +105,11 @@ def diagnostico_ia(source: str = Query("etiguel"), fecha: str | None = Query(Non
 
 
 @router.get("/anthropic")
-def anthropic(meses: int = Query(12, ge=1, le=36)):
+def anthropic(meses: int = Query(12, ge=1, le=36), source: str | None = Query(None)):
     """Costo (solo plata) del uso de la API de Anthropic por las funciones internas
     de Prospia: mes actual por función + serie mensual con desglose. Separado del
-    costo de Camila (que va por MyClaw)."""
-    return anthropic_usage.resumen(meses)
+    costo de Camila (que va por MyClaw). Con `source` = solo ese cliente; sin él = todos."""
+    return anthropic_usage.resumen(meses, source or None)
 
 
 @router.post("/oportunidades/{op_id}/resolver")

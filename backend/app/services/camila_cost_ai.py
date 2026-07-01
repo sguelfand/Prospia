@@ -105,7 +105,7 @@ def diagnosticar(source: str = "etiguel", fecha: str | None = None, notify: bool
 
     user = (f"Consumo del {fecha} de {camila_audit.SOURCES[source]['nombre']}:\n\n"
             f"{_resumen_compacto(data)}{bloque_track}")
-    parsed = _parse_json(_post(system, user, max_tokens=1200, funcion="Diagnóstico de costos (IA)"))
+    parsed = _parse_json(_post(system, user, max_tokens=1200, funcion="Diagnóstico de costos (IA)", source=source))
     ops_raw = (parsed or {}).get("oportunidades") or []
 
     ops = []

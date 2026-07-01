@@ -476,11 +476,12 @@ def asistir_cliente_info_negocio(
     tenant_id: int, body: AsistirBody, db: Session = Depends(get_db)
 ):
     """IA que reparte el texto libre en los casilleros. No guarda: devuelve propuesta."""
-    _tenant_prospia(db, tenant_id)
+    tnt = _tenant_prospia(db, tenant_id)
     cfg = _config_de(db, tenant_id)
     db.commit()
     valores = (cfg.info_negocio or {}).get("values", {})
-    return intake_ai.clasificar_texto(body.texto, secciones_config(), valores)
+    return intake_ai.clasificar_texto(body.texto, secciones_config(), valores,
+                                      source=getattr(tnt, "slug", None))
 
 
 @router.get("/clientes/{tenant_id}/archivo/{archivo_id}")

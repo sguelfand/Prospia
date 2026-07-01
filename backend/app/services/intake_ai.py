@@ -42,7 +42,7 @@ def _anthropic_key() -> str:
 
 
 def _post(system: str, messages: list[dict], max_tokens: int, timeout: int = 30,
-          funcion: str = "Relevamiento (intake)") -> str | None:
+          funcion: str = "Relevamiento (intake)", source: str | None = None) -> str | None:
     key = _anthropic_key()
     if not key:
         return None
@@ -66,7 +66,7 @@ def _post(system: str, messages: list[dict], max_tokens: int, timeout: int = 30,
     try:
         data = resp.json()
         from app.services import anthropic_usage
-        anthropic_usage.registrar(funcion, MODEL, data.get("usage"))
+        anthropic_usage.registrar(funcion, MODEL, data.get("usage"), source)
         return (data.get("content") or [{}])[0].get("text", "")
     except Exception as e:
         print(f"[INTAKE_AI ERROR] parse: {e}")
@@ -87,7 +87,7 @@ def _catalogo_campos(secciones: list) -> tuple[list[dict], dict]:
     return campos, idx
 
 
-def clasificar_texto(texto: str, secciones: list, valores_actuales: dict) -> dict:
+def clasificar_texto(texto: str, secciones: list, valores_actuales: dict, source: str | None = None) -> dict:
     """Reparte `texto` (lo que el cliente escribió libre) en los campos del
     negocio. Devuelve:
       {"asignaciones": [{campo, label, tipo, valor, accion, valor_actual}],
@@ -121,7 +121,7 @@ def clasificar_texto(texto: str, secciones: list, valores_actuales: dict) -> dic
         '{"asignaciones": [{"campo": "<id>", "valor": "<texto>", "accion": "completar"|"agregar"}], "nota_libre": "<texto o vacío>"}'
     )
     raw = _post(system, [{"role": "user", "content": texto[:4000]}], max_tokens=1500,
-                funcion="Relevamiento: clasificar texto")
+                funcion="Relevamiento: clasificar texto", source=source)
     if not raw:
         return {"asignaciones": [], "nota_libre": texto, "error": "ia_no_disponible"}
 
@@ -186,7 +186,7 @@ def _resumen_secciones(secciones: list) -> str:
     return "\n".join(partes)
 
 
-def ayuda_chat(mensajes: list[dict], secciones: list, empresa: str = "") -> str | None:
+def ayuda_chat(mensajes: list[dict], secciones: list, empresa: str = "", source: str | None = None) -> str | None:
     """Responde una duda del cliente mientras completa el formulario. Acotado a
     ayudar con ESE formulario; no responde otra cosa. `mensajes` = historial
     [{role: 'user'|'assistant', content}]."""
@@ -213,4 +213,4 @@ def ayuda_chat(mensajes: list[dict], secciones: list, empresa: str = "") -> str 
             msgs.append({"role": role, "content": content})
     if not msgs or msgs[-1]["role"] != "user":
         return None
-    return _post(system, msgs, max_tokens=600, funcion="Relevamiento: chat de ayuda")
+    return _post(system, msgs, max_tokens=600, funcion="Relevamiento: chat de ayuda", source=source)

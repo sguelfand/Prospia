@@ -37,7 +37,7 @@ def _historial(mensajes: list[dict]) -> list[dict]:
 
 # ── 1) Chat de ayuda contextual ───────────────────────────────────────────────
 
-def ayuda_chat(mensajes: list[dict], pantalla_titulo: str, pantalla_funciones: str) -> str | None:
+def ayuda_chat(mensajes: list[dict], pantalla_titulo: str, pantalla_funciones: str, source: str | None = None) -> str | None:
     """Responde una duda de uso del cliente, acotada a cómo usar Prospia y a las
     funciones de la pantalla donde está. `pantalla_funciones` = descripción en
     castellano simple de qué botones/acciones tiene esa pantalla."""
@@ -66,12 +66,12 @@ def ayuda_chat(mensajes: list[dict], pantalla_titulo: str, pantalla_funciones: s
     msgs = _historial(mensajes)
     if not msgs or msgs[-1]["role"] != "user":
         return None
-    return _post(system, msgs, max_tokens=600, funcion="Asistente de ayuda (cliente)")
+    return _post(system, msgs, max_tokens=600, funcion="Asistente de ayuda (cliente)", source=source)
 
 
 # ── 2) Chat de reporte de error → ticket ──────────────────────────────────────
 
-def reporte_chat(mensajes: list[dict], pantalla_titulo: str = "") -> dict:
+def reporte_chat(mensajes: list[dict], pantalla_titulo: str = "", source: str | None = None) -> dict:
     """Conversa para juntar el detalle de un error que reporta el cliente. Cuando
     Haiku considera que ya tiene lo necesario, emite REPORTE_LISTO + un JSON. Esta
     función devuelve:
@@ -103,7 +103,7 @@ def reporte_chat(mensajes: list[dict], pantalla_titulo: str = "") -> dict:
     msgs = _historial(mensajes)
     if not msgs or msgs[-1]["role"] != "user":
         return {"listo": False, "respuesta": "Contame qué fue lo que no funcionó."}
-    raw = _post(system, msgs, max_tokens=700, funcion="Reporte de error (asistente)") or ""
+    raw = _post(system, msgs, max_tokens=700, funcion="Reporte de error (asistente)", source=source) or ""
     if REPORTE_MARKER not in raw:
         return {"listo": False, "respuesta": raw.strip() or "¿Me das un poco más de detalle?"}
     # Extraer el bloque JSON que sigue al marcador.

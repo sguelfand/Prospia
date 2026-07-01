@@ -8,7 +8,7 @@ import { DashboardGrid, Widget, buildLayouts } from '../components/DashboardGrid
 const PANTALLA = 'tokens'
 const GENERAL = '__general__'
 
-// Vista de UN cliente: solo Camila (los costos internos de API son globales → van en General).
+// Vista de UN cliente: Camila (OpenClaw) + SUS costos internos de API (Anthropic).
 const CLIENTE_LAYOUT = buildLayouts([
   { i: 'oportunidades', x: 0, y: 0, w: 12, h: 4 },
   { i: 'kpis', x: 0, y: 4, w: 12, h: 3 },
@@ -16,6 +16,11 @@ const CLIENTE_LAYOUT = buildLayouts([
   { i: 'historico', x: 7, y: 7, w: 5, h: 9 },
   { i: 'convs', x: 0, y: 16, w: 7, h: 13 },
   { i: 'porModelo', x: 7, y: 16, w: 5, h: 7 },
+  // Costos internos (API Anthropic) de ESTE cliente
+  { i: 'cMes', x: 0, y: 29, w: 4, h: 4 },
+  { i: 'cFuncion', x: 4, y: 29, w: 4, h: 8 },
+  { i: 'cParticipacion', x: 8, y: 29, w: 4, h: 8 },
+  { i: 'cHistorico', x: 0, y: 37, w: 12, h: 8 },
 ])
 
 // Vista General: comparativa entre clientes + costos internos (API Anthropic, globales).
@@ -127,7 +132,11 @@ export default function Tokens() {
       } catch { /* usa el fallback General */ }
     })()
   }, [])
-  useEffect(() => { api.get<AnthUsage>('/admin/tokens/anthropic?meses=12').then(setApiUsage).catch(() => {}) }, [])
+  // Costos internos: en General todos; con un cliente seleccionado, solo los suyos.
+  useEffect(() => {
+    const q = source === GENERAL ? '' : `&source=${encodeURIComponent(source)}`
+    api.get<AnthUsage>(`/admin/tokens/anthropic?meses=12${q}`).then(setApiUsage).catch(() => {})
+  }, [source])
   useEffect(() => { api.get<GeneralData>('/admin/tokens/general').then(setGeneral).catch(() => {}) }, [])
   const cargar = useCallback(async () => {
     if (source === GENERAL) {
@@ -426,6 +435,28 @@ export default function Tokens() {
                 ))}
               </div>
             )}
+          </Widget>
+        </div>
+
+        {/* Costos internos (API Anthropic) — SOLO de este cliente */}
+        <div key="cMes">
+          <Widget id="cMes" title="Costos internos del cliente — mes" fuente="anthropic">
+            {apiUsage ? <CostosResumenMes data={apiUsage} /> : <p className="text-sm text-muted">Cargando…</p>}
+          </Widget>
+        </div>
+        <div key="cFuncion">
+          <Widget id="cFuncion" title="Costo interno por función (mes)" fuente="anthropic">
+            {apiUsage ? <CostosPorFuncion data={apiUsage} /> : <p className="text-sm text-muted">Cargando…</p>}
+          </Widget>
+        </div>
+        <div key="cParticipacion">
+          <Widget id="cParticipacion" title="Participación por función (mes)" fuente="anthropic">
+            {apiUsage ? <CostosParticipacion data={apiUsage} /> : <p className="text-sm text-muted">Cargando…</p>}
+          </Widget>
+        </div>
+        <div key="cHistorico">
+          <Widget id="cHistorico" title="Histórico interno mensual" fuente="anthropic" right={<span className="text-[11px] text-muted">apilado por función</span>}>
+            {apiUsage ? <CostosHistorico data={apiUsage} /> : <p className="text-sm text-muted">Cargando…</p>}
           </Widget>
         </div>
       </DashboardGrid>

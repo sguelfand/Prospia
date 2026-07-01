@@ -112,7 +112,7 @@ def auditar(source: str = "etiguel") -> dict:
 
     # timeout largo: el prompt completo es grande y genera bastante → la IA tarda.
     raw = _post(_system(), f"PROMPT COMPLETO DE CAMILA:\n\n{prompt}",
-                max_tokens=3000, timeout=120, funcion="Auditoría prompt Camila")
+                max_tokens=3000, timeout=120, funcion="Auditoría prompt Camila", source=source)
     if not raw:
         return {"ok": False, "motivo": "ia_no_disponible"}
     data = _parse_audit(raw)

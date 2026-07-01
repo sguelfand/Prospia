@@ -106,7 +106,8 @@ export default function TokensScreen() {
       } catch { /* usa el fallback General */ }
     })();
   }, [token]);
-  useEffect(() => { if (token) getAnthropicUsage(token, 30).then(setApiUsage).catch(() => {}); }, [token]);
+  // Costos internos: en General todos; con un cliente, solo los suyos.
+  useEffect(() => { if (token) getAnthropicUsage(token, 30, source === GENERAL ? undefined : source).then(setApiUsage).catch(() => {}); }, [token, source]);
   useEffect(() => { setDiaSel(null); setDiaData(null); setConvAbierta(null); }, [source]);
 
   const setDefault = async () => {
@@ -386,6 +387,9 @@ export default function TokensScreen() {
                 <View key={m} style={styles.kv}><Text style={styles.kvK}>{m}</Text><Text style={styles.kvV}>{usd(v.costo_usd)}</Text></View>
               ))}
           </View>
+
+          {/* Costos internos (API Anthropic) — SOLO de este cliente */}
+          {apiUsage ? <CostosInternos data={apiUsage} /> : null}
         </>
       )}
       </>

@@ -31,7 +31,7 @@ def habilitado() -> bool:
         db.close()
 
 
-def es_interno(texto: str) -> bool:
+def es_interno(texto: str, source: str | None = None) -> bool:
     """True si el texto parece razonamiento/estado/nota interna en vez de un mensaje
     genuino para el cliente. Ante cualquier duda o error, devuelve False (no bloquea:
     el guard por patrones ya cubre lo conocido; no queremos frenar mensajes válidos)."""
@@ -71,7 +71,7 @@ def es_interno(texto: str) -> bool:
     try:
         data = resp.json()
         from app.services import anthropic_usage
-        anthropic_usage.registrar(FUNCION, HAIKU, data.get("usage"))
+        anthropic_usage.registrar(FUNCION, HAIKU, data.get("usage"), source)
         txt = (data.get("content") or [{}])[0].get("text", "").lower()
         return '"interno": true' in txt or '"interno":true' in txt
     except Exception as e:

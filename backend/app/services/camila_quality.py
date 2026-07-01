@@ -78,7 +78,7 @@ def _anthropic_key() -> str:
 
 
 def _post(system: str, user: str, max_tokens: int = 1200, timeout: int = 40,
-          funcion: str = "Especialista Negocio (calidad)") -> str | None:
+          funcion: str = "Especialista Negocio (calidad)", source: str | None = None) -> str | None:
     key = _anthropic_key()
     if not key:
         return None
@@ -100,14 +100,14 @@ def _post(system: str, user: str, max_tokens: int = 1200, timeout: int = 40,
     try:
         data = resp.json()
         from app.services import anthropic_usage
-        anthropic_usage.registrar(funcion, MODEL, data.get("usage"))
+        anthropic_usage.registrar(funcion, MODEL, data.get("usage"), source)
         return (data.get("content") or [{}])[0].get("text", "")
     except Exception as e:
         print(f"[CAMILA-QUALITY] parse: {e}")
         return None
 
 
-def transcribir_imagen(image_b64: str, mime: str = "image/jpeg") -> str | None:
+def transcribir_imagen(image_b64: str, mime: str = "image/jpeg", source: str | None = None) -> str | None:
     """Lee UNA imagen (captura de conversación) con Haiku-visión y devuelve la
     transcripción del intercambio. Barato (Haiku) y se usa 1 sola vez al cargar el
     registro → la lección queda como texto. None si no hay key o falla."""
@@ -138,7 +138,7 @@ def transcribir_imagen(image_b64: str, mime: str = "image/jpeg") -> str | None:
     try:
         data = resp.json()
         from app.services import anthropic_usage
-        anthropic_usage.registrar("Transcripción imagen (calidad)", HAIKU, data.get("usage"))
+        anthropic_usage.registrar("Transcripción imagen (calidad)", HAIKU, data.get("usage"), source)
         return (data.get("content") or [{}])[0].get("text", "").strip() or None
     except Exception as e:
         print(f"[CAMILA-QUALITY] transcribir parse: {e}")
@@ -289,7 +289,7 @@ def revisar_dia(source: str = "etiguel", fecha: str | None = None, notify: bool 
             revisadas += 1
             user = (f"Conversación de Camila con {c.get('nombre') or 'un cliente'} "
                     f"(tel {c.get('telefono') or '?'}), del {fecha}:\n\n{c['transcript']}")
-            data = _parse_json(_post(system, user))
+            data = _parse_json(_post(system, user, source=source))
             if not data or not data.get("revisar"):
                 continue
             categoria = (data.get("categoria") or "otro").strip()
@@ -411,7 +411,7 @@ def crear_reporte_manual(source: str, texto: str, telefono: str | None = None,
     1 sola vez (Haiku) y suma la transcripción al texto. Devuelve la revisión creada."""
     texto = (texto or "").strip()
     # Si hay imagen, la transcribimos y la sumamos como contexto de la lección.
-    transcripcion = transcribir_imagen(imagen_b64, imagen_mime) if imagen_b64 else None
+    transcripcion = transcribir_imagen(imagen_b64, imagen_mime, source) if imagen_b64 else None
     if not texto and not transcripcion:
         raise ValueError("el reporte está vacío")
     detalle = texto

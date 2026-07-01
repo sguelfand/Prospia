@@ -372,7 +372,7 @@ def intake_ayuda(slug: str, body: AyudaBody, request: Request, db: Session = Dep
         )
 
     mensajes = [{"role": m.role, "content": m.content} for m in body.mensajes]
-    respuesta = intake_ai.ayuda_chat(mensajes, secciones_config(), empresa=tenant.nombre)
+    respuesta = intake_ai.ayuda_chat(mensajes, secciones_config(), empresa=tenant.nombre, source=tenant.slug)
     if respuesta is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

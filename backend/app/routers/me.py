@@ -221,6 +221,12 @@ def eliminar_mis_consultas(
         db.commit()
 
 
+def _source_usuario(db: Session, user: User) -> str | None:
+    """Slug del tenant del usuario, para atribuir el costo interno (Tokens por cliente)."""
+    t = db.get(Tenant, user.tenant_id)
+    return t.slug if t else None
+
+
 def _config_del_usuario(db: Session, user: User) -> TenantConfig:
     cfg = db.query(TenantConfig).filter(TenantConfig.tenant_id == user.tenant_id).first()
     if not cfg:
@@ -263,7 +269,7 @@ def asistir_info_negocio(
     la propuesta para que el cliente la revise/confirme antes de guardar."""
     cfg = _config_del_usuario(db, user)
     valores = (cfg.info_negocio or {}).get("values", {})
-    return intake_ai.clasificar_texto(body.texto, secciones_config(), valores)
+    return intake_ai.clasificar_texto(body.texto, secciones_config(), valores, source=_source_usuario(db, user))
 
 
 @router.get("/archivo/{archivo_id}")
@@ -309,11 +315,12 @@ class ReporteBody(BaseModel):
 @router.post("/ayuda")
 def ayuda_uso(
     body: AyudaBody,
+    db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     """Chat de ayuda contextual ("¿cómo uso esto?"). Acotado a cómo usar Prospia y
     a las funciones de la pantalla donde está el cliente."""
-    resp = ayuda_ai.ayuda_chat(body.mensajes, body.pantalla_titulo, body.pantalla_funciones)
+    resp = ayuda_ai.ayuda_chat(body.mensajes, body.pantalla_titulo, body.pantalla_funciones, source=_source_usuario(db, user))
     if resp is None:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                             detail="La ayuda no está disponible en este momento.")
@@ -330,7 +337,7 @@ def reportar_error(
     info necesaria, carga el ticket en la cola de errores (AgentError, fuente =
     slug del tenant, estado 'reportado') y le confirma al cliente. Devuelve la
     respuesta para el chat y, si se cargó, el id del ticket."""
-    out = ayuda_ai.reporte_chat(body.mensajes, body.pantalla_titulo)
+    out = ayuda_ai.reporte_chat(body.mensajes, body.pantalla_titulo, source=_source_usuario(db, user))
     if not out.get("listo"):
         return {"respuesta": out.get("respuesta", ""), "cargado": False}
 

@@ -39,8 +39,9 @@ def _costo(modelo: str, u: dict) -> float:
             + u.get("cache_creation_input_tokens", 0) * pcw)
 
 
-def registrar(funcion: str, modelo: str, usage: dict | None) -> None:
-    """Guarda un llamado a Anthropic. Best-effort: nunca rompe al llamador."""
+def registrar(funcion: str, modelo: str, usage: dict | None, source: str | None = None) -> None:
+    """Guarda un llamado a Anthropic. Best-effort: nunca rompe al llamador.
+    `source` = cliente al que se atribuye ('etiguel' / slug del tenant), o None si es global."""
     if not usage:
         return
     try:
@@ -49,7 +50,7 @@ def registrar(funcion: str, modelo: str, usage: dict | None) -> None:
         db = SessionLocal()
         try:
             db.add(AnthropicUsage(
-                funcion=funcion[:80], modelo=(modelo or "")[:60],
+                source=(source or None), funcion=funcion[:80], modelo=(modelo or "")[:60],
                 fecha=datetime.now(_BA).strftime("%Y-%m-%d"),
                 input_tokens=usage.get("input_tokens", 0),
                 output_tokens=usage.get("output_tokens", 0),
@@ -70,16 +71,20 @@ _MES_NOMBRE = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
                "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
 
 
-def resumen(meses: int = 12) -> dict:
+def resumen(meses: int = 12, source: str | None = None) -> dict:
     """Estadísticas de costo (solo plata) de las funciones internas:
       - mes_actual: costo por función del mes corriente + total + delta vs anterior.
-      - meses: serie mensual con desglose por función (para el gráfico apilado)."""
+      - meses: serie mensual con desglose por función (para el gráfico apilado).
+    Si `source` viene, filtra SOLO ese cliente; si es None, todos (vista General)."""
     from app.database import SessionLocal
     from app.models.anthropic_usage import AnthropicUsage
     ahora = datetime.now(_BA)
     db = SessionLocal()
     try:
-        rows = db.query(AnthropicUsage).all()
+        q = db.query(AnthropicUsage)
+        if source:
+            q = q.filter(AnthropicUsage.source == source)
+        rows = q.all()
         por_mes: dict[str, dict[str, float]] = {}  # 'YYYY-MM' -> funcion -> costo
         for r in rows:
             mes = (r.fecha or "")[:7]

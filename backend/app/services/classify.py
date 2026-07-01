@@ -22,6 +22,7 @@ def clasificar(
     tld: str = "",
     pais: str = "Argentina",
     exclusiones: list[str] | None = None,
+    source: str | None = None,
 ) -> str:
     """Clasifica una empresa en uno de los rubros configurados por el tenant,
     más 'no_aplica' si no corresponde a ninguno. Retorna el nombre del rubro
@@ -85,7 +86,7 @@ def clasificar(
     try:
         data = resp.json()
         from app.services import anthropic_usage
-        anthropic_usage.registrar("Clasificación de prospectos", ANTHROPIC_MODEL, data.get("usage"))
+        anthropic_usage.registrar("Clasificación de prospectos", ANTHROPIC_MODEL, data.get("usage"), source)
         text = (data.get("content") or [{}])[0].get("text", "").strip().lower()
         text = re.sub(r'[^a-z_\s]', '', text).strip()
     except Exception as e:

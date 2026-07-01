@@ -265,6 +265,11 @@ def run_scraper(termino_id: int):
         config = db.query(TenantConfig).filter(TenantConfig.tenant_id == termino.tenant_id).first()
         apify_token = config.apify_token if config else ""
         anthropic_key = config.anthropic_api_key if config else ""
+        # source para atribuir el costo interno (clasificación) a este cliente.
+        from app.models.tenant import Tenant as _Tenant
+        from app.services.etiguel_monday import ETIGUEL_TENANT_ID as _ETG
+        _tnt = db.get(_Tenant, termino.tenant_id)
+        source_tenant = "etiguel" if termino.tenant_id == _ETG else (_tnt.slug if _tnt else None)
         pais_tenant = (config.pais if config else None) or "Argentina"
         excl_tenant = (config.clasif_exclusiones if config else None) or None
 
@@ -316,6 +321,7 @@ def run_scraper(termino_id: int):
                     tld=tld,
                     pais=pais_tenant,
                     exclusiones=excl_tenant,
+                    source=source_tenant,
                 )
             except Exception as e:
                 print(f"[SCRAPER] Error clasificando {url}: {e}")

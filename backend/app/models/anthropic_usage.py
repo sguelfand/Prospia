@@ -19,6 +19,9 @@ class AnthropicUsage(Base):
     __tablename__ = "anthropic_usage"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Cliente al que se le atribuye el gasto ('etiguel' o slug del tenant). NULL =
+    # global/sin atribuir (funciones que no son de un cliente puntual).
+    source: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
     funcion: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     modelo: Mapped[str] = mapped_column(String(60), nullable=False, default="")
     fecha: Mapped[str] = mapped_column(String(10), nullable=False, index=True)  # YYYY-MM-DD (BA)

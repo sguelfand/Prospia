@@ -425,4 +425,5 @@ def guard_check(body: GuardCheckIn, x_mirror_token: str | None = Header(None)):
     from app.services import camila_guard
     if not camila_guard.habilitado():
         return {"block": False, "enabled": False}
-    return {"block": camila_guard.es_interno(body.content), "enabled": True}
+    # Hoy sólo el bot de Etiguel llega acá (token global) → el costo se atribuye a 'etiguel'.
+    return {"block": camila_guard.es_interno(body.content, source="etiguel"), "enabled": True}
