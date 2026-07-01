@@ -6,6 +6,7 @@ entrar a Monday. Autenticado con un token compartido (no JWT: es server→server
 por eso vive fuera del router /admin (que exige superadmin)."""
 from datetime import datetime, timezone
 
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -409,3 +410,19 @@ def poll_pregunta_claude(
         "respuestas": _parse_json_list(p.respuestas) if p.respuestas else None,
         "preguntas": _preguntas_de(p),
     }
+
+
+class GuardCheckIn(BaseModel):
+    content: str = ""
+
+
+@router.post("/guard-check")
+def guard_check(body: GuardCheckIn, x_mirror_token: str | None = Header(None)):
+    """Guardia semántica de salida de Camila. El outbound-guard del bot manda acá cada
+    mensaje que está por enviar (que pasó los patrones); devolvemos {block: bool}. Si el
+    switch está apagado, no llama a la IA (block=false). Auth: token global de ingest."""
+    _check_token(x_mirror_token)
+    from app.services import camila_guard
+    if not camila_guard.habilitado():
+        return {"block": False, "enabled": False}
+    return {"block": camila_guard.es_interno(body.content), "enabled": True}

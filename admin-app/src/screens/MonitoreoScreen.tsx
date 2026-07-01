@@ -18,6 +18,7 @@ import {
   rechequearServicio,
   rechequearTodo,
   setMonitoreoIntervalo,
+  setGuardSemantico,
 } from "../api";
 import { useAuth } from "../auth";
 import { Icon } from "../components/Icon";
@@ -121,6 +122,16 @@ export default function MonitoreoScreen() {
     }
   };
 
+  const toggleGuard = async () => {
+    if (!token) return;
+    const on = !(data?.guard_semantico ?? true);
+    try {
+      setData(await setGuardSemantico(token, on));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al cambiar la guardia semántica.");
+    }
+  };
+
   if (loading) return <Loader />;
 
   const servicios = data?.servicios ?? [];
@@ -180,6 +191,15 @@ export default function MonitoreoScreen() {
           );
         })}
       </View>
+
+      {/* Guardia semántica de Camila */}
+      <TouchableOpacity style={styles.guardRow} onPress={toggleGuard} activeOpacity={0.7}>
+        <Icon name="check" size={14} color={(data?.guard_semantico ?? true) ? colors.primary : colors.textDim} strokeWidth={2.5} />
+        <Text style={styles.guardText}>
+          <Text style={{ color: colors.text, fontWeight: "700" }}>Guardia semántica de Camila</Text>{"  "}
+          {(data?.guard_semantico ?? true) ? "ON" : "OFF"} — frena por IA fugas de razonamiento a clientes (costo en Tokens).
+        </Text>
+      </TouchableOpacity>
 
       {grupos.map((grupo) => {
         const items = servicios.filter((s) => s.grupo === grupo);
@@ -276,6 +296,8 @@ const styles = StyleSheet.create({
   btnTodoText: { color: colors.onPrimary, fontSize: 13, fontWeight: "700" },
   freqTitle: { color: colors.textDim, fontSize: 12, marginTop: 18, marginBottom: 8 },
   freqRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  guardRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginTop: 16, paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  guardText: { color: colors.textDim, fontSize: 12, flex: 1, lineHeight: 17 },
   freqPill: {
     borderWidth: 1,
     borderColor: colors.border,

@@ -173,6 +173,10 @@ def run_migrations():
         conn.execute(text(
             "ALTER TABLE camila_prompt_audit ADD COLUMN IF NOT EXISTS hallazgos TEXT NOT NULL DEFAULT '[]'"
         ))
+        # ── monitor_settings: switch de la guardia semántica de Camila (ON default) ──
+        conn.execute(text(
+            "ALTER TABLE monitor_settings ADD COLUMN IF NOT EXISTS guard_semantico BOOLEAN NOT NULL DEFAULT true"
+        ))
         # ── dashboard_layout: títulos personalizados de los widgets ──
         conn.execute(text(
             "ALTER TABLE dashboard_layout ADD COLUMN IF NOT EXISTS titulos TEXT NOT NULL DEFAULT '{}'"

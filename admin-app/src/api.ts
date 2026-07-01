@@ -430,6 +430,7 @@ export interface MonitoreoResumen {
 export interface MonitoreoStatus {
   servicios: ServicioSalud[];
   interval_seconds: number;
+  guard_semantico?: boolean;
   last_run: string | null;
   resumen: MonitoreoResumen;
 }
@@ -447,6 +448,13 @@ export const setMonitoreoIntervalo = (token: string, intervalSeconds: number) =>
   request<MonitoreoStatus>(
     "/admin/monitoring/settings",
     { method: "PUT", body: JSON.stringify({ interval_seconds: intervalSeconds }) },
+    token,
+  );
+
+export const setGuardSemantico = (token: string, on: boolean) =>
+  request<MonitoreoStatus>(
+    "/admin/monitoring/guard-semantico",
+    { method: "PUT", body: JSON.stringify({ on }) },
     token,
   );
 

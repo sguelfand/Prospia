@@ -523,6 +523,9 @@ def get_status() -> dict:
         rows = db.query(ServiceHealth).order_by(ServiceHealth.orden, ServiceHealth.id).all()
         servicios = [_service_dict(r) for r in rows]
         interval = _get_interval(db)
+        from app.models.service_health import MonitorSettings
+        _ms = db.query(MonitorSettings).filter(MonitorSettings.id == 1).first()
+        guard_semantico = bool(getattr(_ms, "guard_semantico", True)) if _ms else True
         last_run = max((r.last_check for r in rows if r.last_check), default=None)
         resumen = {
             "up": sum(1 for r in rows if r.estado == "up"),
@@ -532,6 +535,7 @@ def get_status() -> dict:
             "total": len(rows),
         }
         return {"servicios": servicios, "interval_seconds": interval,
+                "guard_semantico": guard_semantico,
                 "last_run": last_run, "resumen": resumen}
     finally:
         db.close()
@@ -559,6 +563,23 @@ def set_interval(seconds: int) -> dict:
             s = MonitorSettings(id=1)
             db.add(s)
         s.interval_seconds = seconds
+        s.updated_at = datetime.now(timezone.utc)
+        db.commit()
+    finally:
+        db.close()
+    return get_status()
+
+
+def set_guard_semantico(on: bool) -> dict:
+    from app.models.service_health import MonitorSettings
+    from app.database import SessionLocal
+    db = SessionLocal()
+    try:
+        s = db.query(MonitorSettings).filter(MonitorSettings.id == 1).first()
+        if not s:
+            s = MonitorSettings(id=1)
+            db.add(s)
+        s.guard_semantico = bool(on)
         s.updated_at = datetime.now(timezone.utc)
         db.commit()
     finally:

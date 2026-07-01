@@ -53,6 +53,10 @@ class MonitorSettings(Base):
     # de la terminal. Lo prende/apaga Sebi desde la app; lo lee el MCP local antes
     # de cada pregunta. Default OFF = comportamiento normal en la compu.
     preguntas_al_cel: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    # Guardia semántica de salida de Camila: Haiku decide si un mensaje saliente es
+    # interno (razonamiento/estado) y lo bloquea. ON por default; se apaga desde la
+    # app/web si molesta la latencia/costo. La lee el endpoint /ingest/guard-check.
+    guard_semantico: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     # Última vez que se mandó el recordatorio semanal de auditoría del prompt de Camila
     # (para no repetir el push más de 1×/semana). Lo setea el loop de camila_quality.
     audit_recordatorio_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

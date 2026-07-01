@@ -30,9 +30,14 @@ class MonitorResumen(BaseModel):
 class MonitoringStatusOut(BaseModel):
     servicios: list[ServiceHealthOut]
     interval_seconds: int
+    guard_semantico: bool = True
     last_run: datetime | None = None
     resumen: MonitorResumen
 
 
 class IntervalUpdate(BaseModel):
     interval_seconds: int
+
+
+class GuardSemanticoUpdate(BaseModel):
+    on: bool

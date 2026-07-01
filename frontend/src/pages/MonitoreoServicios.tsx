@@ -23,6 +23,7 @@ type Resumen = { up: number; down: number; warn: number; unknown: number; total:
 type Status = {
   servicios: Servicio[]
   interval_seconds: number
+  guard_semantico?: boolean
   last_run: string | null
   resumen: Resumen
 }
@@ -114,6 +115,14 @@ export default function MonitoreoServicios() {
     }
   }
 
+  async function toggleGuard(on: boolean) {
+    try {
+      setData(await api.put<Status>('/admin/monitoring/guard-semantico', { on }))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al cambiar la guardia semántica')
+    }
+  }
+
   const servicios = data?.servicios ?? []
   const grupos = Array.from(new Set(servicios.map((s) => s.grupo)))
   const r = data?.resumen
@@ -162,6 +171,20 @@ export default function MonitoreoServicios() {
           ))}
         </select>
       </div>
+
+      {/* Guardia semántica de Camila (chequeo Haiku de cada saliente a clientes) */}
+      <label className="flex items-center gap-2 text-xs text-muted cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={data?.guard_semantico ?? true}
+          onChange={(e) => toggleGuard(e.target.checked)}
+          className="accent-primary w-3.5 h-3.5"
+        />
+        <span>
+          <span className="text-ink font-semibold">Guardia semántica de Camila</span> — frena por IA (Haiku)
+          cualquier fuga de razonamiento interno a clientes. Su costo aparece en Tokens → Costos internos.
+        </span>
+      </label>
 
       {grupos.map((grupo) => (
         <div key={grupo} className="border border-line rounded-xl overflow-hidden">
