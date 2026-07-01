@@ -159,8 +159,10 @@ export function Widget({ id, title = '', fuente, right, children }: {
         )}
         {right && <div className="ml-auto shrink-0">{right}</div>}
       </div>
-      {/* min-h-0 permite que un gráfico hijo con h-full llene el alto del widget */}
-      <div className="flex-1 min-h-0 overflow-auto p-4 flex flex-col">{children}</div>
+      {/* min-h-0 permite que un gráfico hijo con h-full llene el alto del widget.
+          Con chip de fuente reservamos pb extra al pie: el contenido que llega
+          hasta abajo (gráficos, tablas, leyendas) despeja el chip y no lo toca. */}
+      <div className={`flex-1 min-h-0 overflow-auto p-4 flex flex-col ${fuente ? 'pb-8' : ''}`}>{children}</div>
       {/* chip de fuente abajo a la derecha (no tapa el título; no bloquea el hover del gráfico) */}
       {fuente && (
         <div className="absolute bottom-1.5 right-2 pointer-events-none z-10">
