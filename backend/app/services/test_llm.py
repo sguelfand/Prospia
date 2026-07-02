@@ -186,29 +186,36 @@ def estimar(source: str, motor_ids: list[int], escenario_ids: list[int],
     finally:
         db.close()
     por_motor = []
-    total = 0.0
     total_turnos, guion_tok = _turnos_de(escs)
     n_esc = len(escs)
+    # costo por bolsillo: quién factura cada cosa (openrouter / myclaw / anthropic-juez)
+    por_proveedor: dict[str, float] = {}
     for m in motores:
         c = _costo_para_prices(sys_tok, guion_tok, total_turnos, n_esc,
                                m.precio_in, m.precio_out, m.precio_cache_read,
                                m.precio_cache_write, con_cache)
-        por_motor.append({"motor_id": m.id, "nombre": m.nombre, "costo_usd": round(c, 4)})
-        total += c
-    # juez: 1 llamada Anthropic sonnet por (motor × escenario)
+        prov = (m.provider or "otro").lower()
+        por_motor.append({"motor_id": m.id, "nombre": m.nombre,
+                          "provider": prov, "costo_usd": round(c, 4)})
+        por_proveedor[prov] = por_proveedor.get(prov, 0.0) + c
+    # juez (Especialista de Negocio): 1 llamada por (motor × escenario), Anthropic DIRECTO
+    # (no OpenRouter ni MyClaw). Input ≈ contexto de negocio + calibración + transcript.
     juez_calls = len(motores) * len(escs)
-    juez_in = juez_calls * (sys_tok // 3 + 500)   # contexto negocio + transcript
-    juez_out = juez_calls * 250
-    juez_costo = juez_in * 2.70e-6 + juez_out * 13.50e-6  # sonnet oficial
-    total += juez_costo
+    juez_in = juez_calls * 2000
+    juez_out = juez_calls * 300
+    juez_costo = juez_in * 3.0e-6 + juez_out * 15.0e-6   # Sonnet 4.6 tarifa oficial Anthropic
+    por_proveedor["anthropic (juez)"] = juez_costo
+    total = sum(por_proveedor.values())
     return {
         "source": source, "motores": len(motores), "escenarios": len(escs),
         "turnos_totales": total_turnos, "system_tokens": sys_tok,
         "con_cache": con_cache,
         "por_motor": por_motor,
+        "por_proveedor": {k: round(v, 4) for k, v in por_proveedor.items()},
+        "costo_openrouter_usd": round(por_proveedor.get("openrouter", 0.0), 4),
         "juez_costo_usd": round(juez_costo, 4),
         "total_usd": round(total, 4),
-        "nota": "Estimación conservadora. El costo real se mide al correr.",
+        "nota": "Estimación conservadora. OpenRouter, MyClaw y el juez (Anthropic) se facturan por separado.",
     }
 
 
@@ -506,8 +513,29 @@ def set_habilitado(on: bool) -> bool:
         db.close()
 
 
+def saldo_openrouter() -> dict | None:
+    """Saldo de OpenRouter (metadata, NO consume tokens). {total, usado, disponible}.
+    None si no hay key o falla."""
+    from app.services.test_llm_keys import provider_key
+    key = provider_key("openrouter")
+    if not key:
+        return None
+    try:
+        r = requests.get("https://openrouter.ai/api/v1/credits",
+                         headers={"Authorization": f"Bearer {key}", "User-Agent": _UA}, timeout=15)
+        r.raise_for_status()
+        d = r.json().get("data", {})
+        total = float(d.get("total_credits") or 0)
+        usado = float(d.get("total_usage") or 0)
+        return {"total": round(total, 4), "usado": round(usado, 4),
+                "disponible": round(total - usado, 4)}
+    except Exception as e:
+        print(f"[TEST-LLM] saldo openrouter: {type(e).__name__}: {e}")
+        return None
+
+
 def get_estado(source: str = "etiguel") -> dict:
-    """Panel de arranque: gate, sobre, keys, conteos."""
+    """Panel de arranque: gate, sobre, keys, conteos, saldo OpenRouter."""
     from app.database import SessionLocal
     from app.models.test_llm import TestLlmEscenario, TestLlmMotor
     from app.services.test_llm_keys import key_status
@@ -519,7 +547,8 @@ def get_estado(source: str = "etiguel") -> dict:
     finally:
         db.close()
     out = {"source": source, "habilitado": _habilitado(),
-           "keys": key_status(), "motores": n_mot, "escenarios": n_esc}
+           "keys": key_status(), "motores": n_mot, "escenarios": n_esc,
+           "saldo_openrouter": saldo_openrouter()}
     try:
         out["sobre"] = envelope_info(source)
     except Exception as e:

@@ -6,12 +6,14 @@ import { DashboardGrid, Widget, buildLayouts } from '../components/DashboardGrid
 const SOURCE = 'etiguel'
 
 type Sobre = { system_chars?: number; modelo_actual?: string | null; archivos?: string[]; error?: string }
+type Saldo = { total: number; usado: number; disponible: number }
 type Estado = {
   habilitado: boolean
   keys: Record<string, boolean>
   motores: number
   escenarios: number
   sobre: Sobre
+  saldo_openrouter: Saldo | null
 }
 type Motor = {
   id: number; nombre: string; provider: string; model_id: string; base_url: string
@@ -24,7 +26,9 @@ type Escenario = {
 }
 type Estimacion = {
   motores: number; escenarios: number; turnos_totales: number; system_tokens: number
-  por_motor: { motor_id: number; nombre: string; costo_usd: number }[]
+  por_motor: { motor_id: number; nombre: string; provider: string; costo_usd: number }[]
+  por_proveedor: Record<string, number>
+  costo_openrouter_usd: number
   juez_costo_usd: number; total_usd: number; nota: string
 }
 type Resultado = {
@@ -146,6 +150,8 @@ export default function TestLlm() {
   }
 
   const costoTotalSel = useMemo(() => estimacion?.total_usd ?? 0, [estimacion])
+  const saldoOR = estado?.saldo_openrouter?.disponible ?? null
+  const sobrepasaSaldo = !!(estimacion && saldoOR != null && estimacion.costo_openrouter_usd > saldoOR)
 
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
@@ -194,6 +200,16 @@ export default function TestLlm() {
                   </span>
                 ))}
               </div>
+            </div>
+            {/* Saldo OpenRouter */}
+            <div className="min-w-[150px]">
+              <div className="text-[11px] uppercase tracking-wide text-muted font-semibold mb-1">Saldo OpenRouter</div>
+              {estado.saldo_openrouter ? (
+                <div className="text-xs">
+                  <div className="text-emerald-500 font-bold text-base">{money(estado.saldo_openrouter.disponible)}</div>
+                  <div className="text-muted">de {money(estado.saldo_openrouter.total)} · usado {money(estado.saldo_openrouter.usado)}</div>
+                </div>
+              ) : <div className="text-xs text-muted">sin key / —</div>}
             </div>
             {/* Gate */}
             <div className="ml-auto">
@@ -282,21 +298,35 @@ export default function TestLlm() {
             <div className="text-xs text-ink flex items-center gap-3 flex-wrap">
               <span className="font-bold text-base text-primary">{money(costoTotalSel)}</span>
               <span className="text-muted">
-                {estimacion.motores} motores × {estimacion.escenarios} escenarios · {estimacion.turnos_totales} turnos ·
-                juez {money(estimacion.juez_costo_usd)}
+                {estimacion.motores} motores × {estimacion.escenarios} escenarios · {estimacion.turnos_totales} turnos
+              </span>
+              <span className="flex items-center gap-2">
+                {Object.entries(estimacion.por_proveedor).map(([prov, c]) => (
+                  <span key={prov} className={`text-[11px] rounded px-1.5 py-0.5 border ${prov === 'openrouter' ? 'border-primary/40 text-primary' : 'border-line text-muted'}`}>
+                    {prov}: {money(c)}
+                  </span>
+                ))}
               </span>
             </div>
           )}
           <button
             onClick={crearYCorrer}
-            disabled={busy || runId != null || selMot.size === 0 || selEsc.size === 0 || !estado?.habilitado}
-            title={!estado?.habilitado ? 'Habilitá "Correr" arriba (consume tokens)' : undefined}
+            disabled={busy || runId != null || selMot.size === 0 || selEsc.size === 0 || !estado?.habilitado || sobrepasaSaldo}
+            title={sobrepasaSaldo ? 'El estimado de OpenRouter supera tu saldo' : (!estado?.habilitado ? 'Habilitá "Correr" arriba (consume tokens)' : undefined)}
             className="ml-auto flex items-center gap-1.5 text-sm font-semibold bg-emerald-500 text-white rounded-lg px-4 py-2 hover:bg-emerald-600 disabled:opacity-40"
           >
             {(busy || runId != null) ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />}
             {runId != null ? 'Corriendo…' : 'Correr comparación'}
           </button>
         </div>
+        {sobrepasaSaldo && estimacion && estado?.saldo_openrouter && (
+          <div className="text-xs bg-red-500/10 text-red-500 border border-red-500/40 rounded-lg px-3 py-2 flex items-center gap-2">
+            <AlertTriangle size={14} className="shrink-0" />
+            El estimado de OpenRouter (<b>{money(estimacion.costo_openrouter_usd)}</b>) supera tu saldo disponible
+            (<b>{money(estado.saldo_openrouter.disponible)}</b>). Sacá algún motor de OpenRouter, achicá la selección, o cargá créditos.
+            {' '}(MyClaw y el juez se facturan aparte y no dependen de este saldo.)
+          </div>
+        )}
         {runId != null
           ? <CorridaEnVivo vivo={vivo} onVerTranscript={setTranscript} />
           : !estado?.habilitado && (
