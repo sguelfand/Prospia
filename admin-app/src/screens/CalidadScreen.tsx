@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Alert, Animated, FlatList, KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -80,6 +80,21 @@ export default function CalidadScreen(_props: CalidadProps) {
   const [audit, setAudit] = useState<AuditEstado | null>(null);
   const [auditBusy, setAuditBusy] = useState(false);
   const [verReporte, setVerReporte] = useState(false);
+  const [saving, setSaving] = useState<Record<number, boolean>>({});   // botón tocado, esperando API
+  const [flash, setFlash] = useState<Record<number, string>>({});      // cartel "✓ Registrado · …" antes de mover
+  const pulses = useRef<Record<number, Animated.Value>>({}).current;
+
+  const getPulse = (id: number) => {
+    if (!pulses[id]) pulses[id] = new Animated.Value(1);
+    return pulses[id];
+  };
+  const animarTap = (id: number) => {
+    const v = getPulse(id);
+    Animated.sequence([
+      Animated.timing(v, { toValue: 0.97, duration: 80, useNativeDriver: true }),
+      Animated.spring(v, { toValue: 1, friction: 4, useNativeDriver: true }),
+    ]).start();
+  };
 
   // Cliente inicial: el default guardado por el usuario (tilde) o Etiguel.
   useEffect(() => {
@@ -197,14 +212,24 @@ export default function CalidadScreen(_props: CalidadProps) {
   useEffect(() => { load(); }, [load]);
 
   const confirmar = async (r: RevisionCalidad, veredicto: "acierto" | "falso_positivo", resueltoDirecto = false) => {
-    if (!token) return;
+    if (!token || saving[r.id]) return;
     const nota = notas[r.id]?.trim() || undefined;
-    const snap = revisiones;
-    setRevisiones((prev) => prev.map((x) => (x.id === r.id ? { ...x, estado: "revisado", veredicto, resuelto_directo: resueltoDirecto, nota_sebi: nota ?? null } : x)));
+    const label = veredicto === "falso_positivo" ? "Camila estuvo bien"
+      : resueltoDirecto ? "Error, pero ya resuelto" : "Camila estuvo mal";
+    animarTap(r.id);
+    setSaving((p) => ({ ...p, [r.id]: true }));
     try {
       await confirmarRevision(token, r.id, veredicto, nota, resueltoDirecto);
-    } catch {
-      setRevisiones(snap);
+      // Cartel "✓ Registrado" un instante antes de mover la card a Revisadas.
+      setSaving((p) => { const n = { ...p }; delete n[r.id]; return n; });
+      setFlash((p) => ({ ...p, [r.id]: label }));
+      setTimeout(() => {
+        setRevisiones((prev) => prev.map((x) => (x.id === r.id ? { ...x, estado: "revisado", veredicto, resuelto_directo: resueltoDirecto, nota_sebi: nota ?? null } : x)));
+        setFlash((p) => { const n = { ...p }; delete n[r.id]; return n; });
+      }, 950);
+    } catch (e) {
+      setSaving((p) => { const n = { ...p }; delete n[r.id]; return n; });
+      Alert.alert("No se pudo", e instanceof Error ? e.message : "Error");
     }
   };
 
@@ -251,7 +276,7 @@ export default function CalidadScreen(_props: CalidadProps) {
     const sevColor = SEV_COLOR[r.severidad] ?? colors.primary;
     const c = conv[r.id];
     return (
-      <View style={[styles.card, { borderLeftColor: sevColor }, r.estado === "revisado" ? styles.cardDone : null]}>
+      <Animated.View style={[styles.card, { borderLeftColor: sevColor }, r.estado === "revisado" ? styles.cardDone : null, { transform: [{ scale: getPulse(r.id) }] }]}>
         <View style={styles.headerRow}>
           <Text style={[styles.cat, { color: colors.amber }]}>{CAT_LABEL[r.categoria] || r.categoria}</Text>
           <Text style={styles.meta}>· {r.severidad}</Text>
@@ -289,6 +314,15 @@ export default function CalidadScreen(_props: CalidadProps) {
         ) : null}
 
         {r.estado === "nuevo" ? (
+          flash[r.id] ? (
+            <View style={styles.flashBox}>
+              <View style={styles.flashCirc}><Icon name="check" size={20} color={colors.green} /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.flashTitle}>Registrado</Text>
+                <Text style={styles.flashSub}>{flash[r.id]}</Text>
+              </View>
+            </View>
+          ) : (
           <View style={styles.actionsWrap}>
             <TextInput
               value={notas[r.id] || ""}
@@ -296,24 +330,29 @@ export default function CalidadScreen(_props: CalidadProps) {
               placeholder="Nota opcional (por qué) — ayuda a que aprenda"
               placeholderTextColor={colors.textDim}
               style={styles.notaInput}
+              editable={!saving[r.id]}
             />
             <View style={styles.actionsRow}>
-              <ActionBtn icon="flag" label="Camila mal (acertaste)" color={colors.red} onPress={() => confirmar(r, "acierto")} />
-              <ActionBtn icon="check" label="Camila bien (erraste)" color={colors.green} onPress={() => confirmar(r, "falso_positivo")} />
+              <ActionBtn icon="flag" label="Camila mal (acertaste)" color={colors.red} onPress={() => confirmar(r, "acierto")} busy={saving[r.id]} />
+              <ActionBtn icon="check" label="Camila bien (erraste)" color={colors.green} onPress={() => confirmar(r, "falso_positivo")} busy={saving[r.id]} />
             </View>
             <ActionBtn
               icon="settings"
               label="Es error de Camila, pero ya lo resolví"
               color={colors.amber}
               onPress={() => confirmar(r, "acierto", true)}
+              busy={saving[r.id]}
               full
             />
-            <Text style={styles.resueltoHint}>Suma a la calibración del Especialista, pero no se re-inyecta al prompt.</Text>
+            {saving[r.id]
+              ? <Text style={styles.savingHint}>Guardando…</Text>
+              : <Text style={styles.resueltoHint}>Suma a la calibración del Especialista, pero no se re-inyecta al prompt.</Text>}
           </View>
+          )
         ) : (
           !!r.nota_sebi && <Text style={styles.notaSebi}>"{r.nota_sebi}"</Text>
         )}
-      </View>
+      </Animated.View>
     );
   };
 
@@ -565,9 +604,9 @@ export default function CalidadScreen(_props: CalidadProps) {
   );
 }
 
-function ActionBtn({ icon, label, color, onPress, full }: { icon: "flag" | "check" | "settings"; label: string; color: string; onPress: () => void; full?: boolean }) {
+function ActionBtn({ icon, label, color, onPress, full, busy }: { icon: "flag" | "check" | "settings"; label: string; color: string; onPress: () => void; full?: boolean; busy?: boolean }) {
   return (
-    <TouchableOpacity style={[styles.actionBtn, { borderColor: color }, full ? styles.actionBtnFull : null]} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={[styles.actionBtn, { borderColor: color }, full ? styles.actionBtnFull : null, busy ? { opacity: 0.5 } : null]} onPress={onPress} activeOpacity={0.7} disabled={busy}>
       <Icon name={icon} size={14} color={color} strokeWidth={2} />
       <Text style={[styles.actionLabel, { color }]}>{label}</Text>
     </TouchableOpacity>
@@ -673,5 +712,10 @@ const styles = StyleSheet.create({
   actionBtnFull: { flex: 0, marginTop: 8, alignSelf: "stretch" },
   actionLabel: { fontSize: 12, fontWeight: "700" },
   resueltoHint: { color: colors.textDim, fontSize: 11, marginTop: 6, fontStyle: "italic" },
+  savingHint: { color: colors.primary, fontSize: 12, fontWeight: "700", marginTop: 8, textAlign: "center" },
+  flashBox: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 12, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  flashCirc: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.green + "22", alignItems: "center", justifyContent: "center" },
+  flashTitle: { color: colors.text, fontSize: 15, fontWeight: "800" },
+  flashSub: { color: colors.textDim, fontSize: 13, fontWeight: "600", marginTop: 1 },
   notaSebi: { color: colors.textDim, fontSize: 12, fontStyle: "italic", marginTop: 8 },
 });
