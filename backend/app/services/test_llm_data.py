@@ -6,27 +6,20 @@ decida. Editable después desde la UI; esto es solo el arranque."""
 from __future__ import annotations
 import json
 
-# rate-card MyClaw (10% off oficial) en $/token: (in, out, cache_read, cache_write)
-_MYCLAW = {
-    "sonnet": (2.70e-6, 13.50e-6, 0.27e-6, 3.38e-6),
-    "opus":   (4.50e-6, 22.50e-6, 0.45e-6, 5.63e-6),
-    "gpt":    (2.25e-6, 13.50e-6, 0.23e-6, 0.0),
-    "haiku":  (0.90e-6,  4.50e-6, 0.90e-6, 1.13e-6),
-}
-_MYCLAW_BASE = "https://api.myclaw.ai/v1"
+# Motores default por OpenRouter (MyClaw está bloqueado por IP desde el backend).
+# Precio oficial en $/token: (in, out, cache_read, cache_write). NO se incluye Opus:
+# es más caro que Sonnet y Sonnet ya funciona bien → no aporta como candidato.
+_OR_BASE = "https://openrouter.ai/api/v1"
 
 MOTORES_DEFAULT = [
-    {"nombre": "Sonnet 4.6 (MyClaw) — actual", "provider": "myclaw", "model_id": "claude-sonnet-4.6",
-     "base_url": _MYCLAW_BASE, "rate": _MYCLAW["sonnet"], "es_actual": True,
-     "notas": "El motor que usa Camila hoy. Baseline de comparación."},
-    {"nombre": "Haiku 4.5 (MyClaw)", "provider": "myclaw", "model_id": "claude-haiku-4.5",
-     "base_url": _MYCLAW_BASE, "rate": _MYCLAW["haiku"], "es_actual": False,
+    {"nombre": "Sonnet 4.6 — actual", "provider": "openrouter", "model_id": "anthropic/claude-sonnet-4.6",
+     "base_url": _OR_BASE, "rate": (3.0e-6, 15.0e-6, 0.30e-6, 3.75e-6), "es_actual": True,
+     "notas": "El modelo que usa Camila hoy. Baseline de comparación."},
+    {"nombre": "Haiku 4.5", "provider": "openrouter", "model_id": "anthropic/claude-haiku-4.5",
+     "base_url": _OR_BASE, "rate": (1.0e-6, 5.0e-6, 0.10e-6, 1.25e-6), "es_actual": False,
      "notas": "3× más barato que Sonnet. Candidato para casos simples."},
-    {"nombre": "Opus 4.8 (MyClaw)", "provider": "myclaw", "model_id": "claude-opus-4.8",
-     "base_url": _MYCLAW_BASE, "rate": _MYCLAW["opus"], "es_actual": False,
-     "notas": "Más caro. Techo de calidad."},
-    {"nombre": "GPT-5.4 (MyClaw)", "provider": "myclaw", "model_id": "gpt-5.4",
-     "base_url": _MYCLAW_BASE, "rate": _MYCLAW["gpt"], "es_actual": False,
+    {"nombre": "GPT-5.4", "provider": "openrouter", "model_id": "openai/gpt-5.4",
+     "base_url": _OR_BASE, "rate": (2.50e-6, 15.0e-6, 0.0, 0.0), "es_actual": False,
      "notas": "Fallback actual de Camila. Comparación cross-proveedor."},
 ]
 
@@ -117,13 +110,12 @@ ESCENARIOS: list[tuple] = [
 
 def seed_motores(db) -> int:
     from app.models.test_llm import TestLlmMotor
+    # Solo sembrar si NO hay ningún motor (primer arranque). Si el usuario borró alguno
+    # NO se re-crea (antes se re-seedeaba y los borrados reaparecían).
+    if db.query(TestLlmMotor).count() > 0:
+        return 0
     creados = 0
     for m in MOTORES_DEFAULT:
-        exists = db.query(TestLlmMotor).filter(
-            TestLlmMotor.model_id == m["model_id"],
-            TestLlmMotor.base_url == m["base_url"]).first()
-        if exists:
-            continue
         pin, pout, pcr, pcw = m["rate"]
         db.add(TestLlmMotor(
             nombre=m["nombre"], provider=m["provider"], model_id=m["model_id"],
@@ -137,10 +129,11 @@ def seed_motores(db) -> int:
 
 def seed_escenarios(db) -> int:
     from app.models.test_llm import TestLlmEscenario
+    # Igual que motores: solo si la tabla está vacía (respeta borrados/ediciones del usuario).
+    if db.query(TestLlmEscenario).count() > 0:
+        return 0
     creados = 0
     for i, (slug, nombre, caso, desc, guion, esperado) in enumerate(ESCENARIOS):
-        if db.query(TestLlmEscenario).filter(TestLlmEscenario.slug == slug).first():
-            continue
         db.add(TestLlmEscenario(
             slug=slug, nombre=nombre, caso_uso=caso, descripcion=desc,
             guion=json.dumps(guion, ensure_ascii=False),
