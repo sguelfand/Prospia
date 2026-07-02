@@ -327,8 +327,9 @@ def _check_camila_contexto():
 
 
 def _check_camila_modelo():
-    """modelo.esperado_ok==True → up; False → down (algo cambió el modelo de
-    Camila respecto del esperado)."""
+    """modelo.esperado_ok==True → up; False → down (el config no coincide con el
+    modelo que corresponde al modo actual). El detalle muestra el modelo activo y,
+    si está en failover, que corre por Anthropic."""
     data, err = _fetch_camila_health()
     if data is None:
         return "unknown", None, err
@@ -336,12 +337,31 @@ def _check_camila_modelo():
     esperado_ok = mod.get("esperado_ok")
     actual = mod.get("actual") or {}
     primary = actual.get("primary") or actual.get("model") or actual.get("name") or "?"
-    detalle = str(primary)[:120]
+    modo = (data.get("failover") or {}).get("modo") or "myclaw"
+    detalle = str(primary)[:100] + (" · failover activo (Anthropic)" if modo == "anthropic" else "")
     if esperado_ok is True:
         return "up", None, detalle
     if esperado_ok is False:
         return "down", None, f"modelo inesperado: {detalle}"
     return "unknown", None, "modelo sin datos"
+
+
+def _check_camila_myclaw_modelo():
+    """Salud REAL del modelo de MyClaw (el guardián lo pinga con un completion
+    mínimo, no solo mira la config). up = responde; down = caído (Camila ya pasó
+    sola a Anthropic y sigue atendiendo); unknown = sin datos / failover off. NO
+    pushea (el guardián del failover ya manda sus avisos)."""
+    data, err = _fetch_camila_health()
+    if data is None:
+        return "unknown", None, err
+    fo = data.get("failover") or {}
+    alive = fo.get("myclaw_alive")
+    modo = fo.get("modo") or "myclaw"
+    if alive is True:
+        return "up", None, "MyClaw respondiendo"
+    if alive is False:
+        return "down", None, f"MyClaw no responde → Camila en {modo} (respaldo Anthropic)"
+    return "unknown", None, "sin datos (¿failover deshabilitado?)"
 
 
 # slug, nombre (= proveedor, para identificar rápido), descripcion (etiqueta corta
@@ -353,7 +373,8 @@ CHECKS: list[dict] = [
     {"slug": "camila_outbound", "nombre": "Camila envía", "descripcion": "Outbound", "tooltip": "Verifica que el webhook pueda MANDAR vía el gateway (token presente y aceptado). Si falla, Camila puede recibir pero no contesta ni inicia contactos — pasó el 25/6 y no avisaba nada. Solo avisa si la caída persiste ~12 min, para no alarmar por un blip al desarrollar.", "grupo": "Etiguel (MyClaw)", "critico": True, "sostener": True, "fn": _check_camila_gateway_outbound},
     {"slug": "camila_memoria", "nombre": "Memoria del servidor de Camila", "descripcion": "RAM", "tooltip": "Si se llena, se caen los servicios de Camila (lo que pasó el 25/6: se quedó sin memoria y tiró el túnel y el webhook). Avisa antes.", "grupo": "Etiguel (MyClaw)", "critico": True, "alerta_warn": True, "fn": _check_camila_memoria},
     {"slug": "camila_contexto", "nombre": "Contexto de Camila", "descripcion": "Conversación", "tooltip": "Cuánto contexto acumuló la conversación de Camila. Si se llena, deja de responder. Avisa antes de que reviente.", "grupo": "Etiguel (MyClaw)", "critico": True, "alerta_warn": True, "fn": _check_camila_contexto},
-    {"slug": "camila_modelo", "nombre": "Modelo de Camila", "descripcion": "Modelo IA", "tooltip": "Verifica que Camila siga en su modelo correcto (sonnet-4.6 + fallbacks). Si algo lo cambia, se avisa. Solo avisa si persiste ~12 min, para no alarmar por una lectura puntual al reiniciar el gateway.", "grupo": "Etiguel (MyClaw)", "critico": True, "sostener": True, "fn": _check_camila_modelo},
+    {"slug": "camila_modelo", "nombre": "Modelo de Camila", "descripcion": "Modelo IA", "tooltip": "Verifica que Camila siga en el modelo que corresponde (MyClaw normal, o Anthropic si está en failover). Si el config no coincide, se avisa. Solo avisa si persiste ~12 min, para no alarmar por una lectura puntual al reiniciar el gateway.", "grupo": "Etiguel (MyClaw)", "critico": True, "sostener": True, "fn": _check_camila_modelo},
+    {"slug": "camila_myclaw_modelo", "nombre": "MyClaw modelo", "descripcion": "IA respondiendo", "tooltip": "Verifica que el modelo de MyClaw REALMENTE responda (el guardián le manda un completion mínimo, no solo mira la config). Si MyClaw se cae, Camila pasa sola a Anthropic directo y sigue atendiendo; este check te muestra el estado real de MyClaw. No pushea por sí mismo — el failover ya te avisa con sus propios mensajes.", "grupo": "Etiguel (MyClaw)", "critico": False, "fn": _check_camila_myclaw_modelo},
     {"slug": "prospia_web", "nombre": "Coolify", "descripcion": "prospia.app (web)", "tooltip": "La web de Prospia (prospia.app) que ves en el navegador. Servida por Coolify en el server de Hetzner. Solo avisa si la caída persiste ~12 min, para no alarmar por un redeploy.", "grupo": "Prospia (Hetzner)", "critico": True, "sostener": True, "fn": _check_prospia_web},
     {"slug": "prospia_api", "nombre": "Coolify", "descripcion": "API Prospia", "tooltip": "La API del backend de Prospia. Si se cae, la web y la app móvil dejan de funcionar. Solo avisa si la caída persiste ~12 min, para no alarmar por un redeploy.", "grupo": "Prospia (Hetzner)", "critico": True, "sostener": True, "fn": _check_prospia_api},
     {"slug": "varen_app", "nombre": "Coolify", "descripcion": "varen.prospia.app", "tooltip": "La app interna de Varen Home (varen.prospia.app), corre en el mismo server de Prospia. Solo avisa si la caída persiste ~12 min, para no alarmar por un redeploy.", "grupo": "Prospia (Hetzner)", "critico": True, "sostener": True, "fn": _check_varen_app},
