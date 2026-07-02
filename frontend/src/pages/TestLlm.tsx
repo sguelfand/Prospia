@@ -84,6 +84,10 @@ export default function TestLlm() {
       setEstado(e); setMotores(m); setEscenarios(s); setCorridas(c)
       if (selMot.size === 0) setSelMot(new Set(m.filter(x => x.activo).map(x => x.id)))
       if (selEsc.size === 0) setSelEsc(new Set(s.filter(x => x.activo).map(x => x.id)))
+      // Si hay una corrida corriendo (arrancó en otra pestaña o antes de irte), reengancha
+      // la vista en vivo al volver a la pantalla.
+      const running = c.find(x => x.estado === 'corriendo')
+      if (running) setRunId(prev => prev ?? running.id)
     } catch (err) { setMsg((err as Error).message) }
   }
   useEffect(() => { cargar() }, [])  // eslint-disable-line react-hooks/exhaustive-deps
