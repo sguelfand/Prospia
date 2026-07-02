@@ -1699,6 +1699,18 @@ def responder_pregunta_claude(pregunta_id: int, body: PreguntaClaudeResponder, d
     return pregunta_to_dict(p)
 
 
+@router.delete("/preguntas-claude/{pregunta_id}", status_code=status.HTTP_204_NO_CONTENT)
+def eliminar_pregunta_claude(pregunta_id: int, db: Session = Depends(get_db)):
+    """Borra una pregunta de Claude desde el cel (swipe para eliminar). Idempotente:
+    si ya no existe, devuelve 204 igual."""
+    from app.models.pregunta_claude import PreguntaClaude
+    p = db.get(PreguntaClaude, pregunta_id)
+    if p:
+        db.delete(p)
+        db.commit()
+    return None
+
+
 @router.get("/eventos", response_model=list[EventoOut])
 def listar_eventos(db: Session = Depends(get_db), limit: int = 100):
     """Feed de avisos: primeras respuestas e interesados de todos los clientes,

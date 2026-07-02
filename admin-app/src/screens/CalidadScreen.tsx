@@ -196,13 +196,13 @@ export default function CalidadScreen(_props: CalidadProps) {
 
   useEffect(() => { load(); }, [load]);
 
-  const confirmar = async (r: RevisionCalidad, veredicto: "acierto" | "falso_positivo") => {
+  const confirmar = async (r: RevisionCalidad, veredicto: "acierto" | "falso_positivo", resueltoDirecto = false) => {
     if (!token) return;
     const nota = notas[r.id]?.trim() || undefined;
     const snap = revisiones;
-    setRevisiones((prev) => prev.map((x) => (x.id === r.id ? { ...x, estado: "revisado", veredicto, nota_sebi: nota ?? null } : x)));
+    setRevisiones((prev) => prev.map((x) => (x.id === r.id ? { ...x, estado: "revisado", veredicto, resuelto_directo: resueltoDirecto, nota_sebi: nota ?? null } : x)));
     try {
-      await confirmarRevision(token, r.id, veredicto, nota);
+      await confirmarRevision(token, r.id, veredicto, nota, resueltoDirecto);
     } catch {
       setRevisiones(snap);
     }
@@ -257,7 +257,8 @@ export default function CalidadScreen(_props: CalidadProps) {
           <Text style={styles.meta}>· {r.severidad}</Text>
           <Text style={styles.meta}>· {r.fecha}</Text>
           {r.origen === "sebi" && <Text style={styles.badgeReporte}>Reportado por vos</Text>}
-          {r.estado === "revisado" && r.veredicto === "acierto" && <Text style={styles.badgeMal}>Camila mal</Text>}
+          {r.estado === "revisado" && r.veredicto === "acierto" && <Text style={[styles.badgeMal, r.resuelto_directo ? { marginLeft: 0 } : null]}>Camila mal</Text>}
+          {r.estado === "revisado" && r.veredicto === "acierto" && r.resuelto_directo && <Text style={styles.badgeResuelto}>Resuelto directo · no re-enseñado</Text>}
           {r.estado === "revisado" && r.veredicto === "falso_positivo" && <Text style={styles.badgeBien}>Camila bien</Text>}
         </View>
 
@@ -300,6 +301,14 @@ export default function CalidadScreen(_props: CalidadProps) {
               <ActionBtn icon="flag" label="Camila mal (acertaste)" color={colors.red} onPress={() => confirmar(r, "acierto")} />
               <ActionBtn icon="check" label="Camila bien (erraste)" color={colors.green} onPress={() => confirmar(r, "falso_positivo")} />
             </View>
+            <ActionBtn
+              icon="settings"
+              label="Es error de Camila, pero ya lo resolví"
+              color={colors.amber}
+              onPress={() => confirmar(r, "acierto", true)}
+              full
+            />
+            <Text style={styles.resueltoHint}>Suma a la calibración del Especialista, pero no se re-inyecta al prompt.</Text>
           </View>
         ) : (
           !!r.nota_sebi && <Text style={styles.notaSebi}>"{r.nota_sebi}"</Text>
@@ -556,9 +565,9 @@ export default function CalidadScreen(_props: CalidadProps) {
   );
 }
 
-function ActionBtn({ icon, label, color, onPress }: { icon: "flag" | "check"; label: string; color: string; onPress: () => void }) {
+function ActionBtn({ icon, label, color, onPress, full }: { icon: "flag" | "check" | "settings"; label: string; color: string; onPress: () => void; full?: boolean }) {
   return (
-    <TouchableOpacity style={[styles.actionBtn, { borderColor: color }]} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={[styles.actionBtn, { borderColor: color }, full ? styles.actionBtnFull : null]} onPress={onPress} activeOpacity={0.7}>
       <Icon name={icon} size={14} color={color} strokeWidth={2} />
       <Text style={[styles.actionLabel, { color }]}>{label}</Text>
     </TouchableOpacity>
@@ -641,6 +650,7 @@ const styles = StyleSheet.create({
   badgeReporte: { color: colors.primary, fontSize: 11, fontWeight: "700", borderColor: colors.primary, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   badgeMal: { marginLeft: "auto", color: colors.red, fontSize: 11, fontWeight: "700", borderColor: colors.red, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   badgeBien: { marginLeft: "auto", color: colors.green, fontSize: 11, fontWeight: "700", borderColor: colors.green, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  badgeResuelto: { marginLeft: "auto", color: colors.amber, fontSize: 11, fontWeight: "700", borderColor: colors.amber, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   titulo: { color: colors.text, fontSize: 14, fontWeight: "700", marginBottom: 3 },
   detalle: { color: colors.text, fontSize: 13, marginBottom: 6 },
   fragmento: { color: colors.textDim, fontSize: 12, fontStyle: "italic", borderLeftColor: colors.border, borderLeftWidth: 2, paddingLeft: 10, marginBottom: 6 },
@@ -660,6 +670,8 @@ const styles = StyleSheet.create({
   notaInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 8, color: colors.text, fontSize: 12, marginBottom: 8 },
   actionsRow: { flexDirection: "row", gap: 8 },
   actionBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, borderWidth: 1, borderRadius: 9, paddingHorizontal: 8, paddingVertical: 9 },
+  actionBtnFull: { flex: 0, marginTop: 8, alignSelf: "stretch" },
   actionLabel: { fontSize: 12, fontWeight: "700" },
+  resueltoHint: { color: colors.textDim, fontSize: 11, marginTop: 6, fontStyle: "italic" },
   notaSebi: { color: colors.textDim, fontSize: 12, fontStyle: "italic", marginTop: 8 },
 });

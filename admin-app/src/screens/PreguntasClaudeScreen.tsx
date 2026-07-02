@@ -1,16 +1,17 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView,
+  Alert, Animated, KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView,
   StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
-  OpcionPregunta, PreguntaClaude, PreguntaItem, getPreguntaClaude, getPreguntasClaude, responderPreguntaClaude,
+  OpcionPregunta, PreguntaClaude, PreguntaItem, eliminarPreguntaClaude, getPreguntaClaude, getPreguntasClaude, responderPreguntaClaude,
 } from "../api";
 import { useAuth } from "../auth";
 import { ErrorBox, Loader } from "../components/ui";
 import { Icon } from "../components/Icon";
+import { SwipeRow } from "../components/SwipeRow";
 import { PreguntasClaudeProps } from "../navigation";
 import { colors } from "../theme";
 
@@ -75,6 +76,25 @@ export default function PreguntasClaudeScreen({ navigation, route }: PreguntasCl
     setAbierta(null);
   };
 
+  const borrar = async (p: PreguntaClaude) => {
+    if (!token) return;
+    const snap = items;
+    setItems((prev) => prev.filter((x) => x.id !== p.id));
+    if (abierta?.id === p.id) setAbierta(null);
+    try {
+      await eliminarPreguntaClaude(token, p.id);
+    } catch {
+      setItems(snap);
+    }
+  };
+
+  const confirmarBorrar = (p: PreguntaClaude) => {
+    Alert.alert("Borrar pregunta", "¿Seguro? No se puede deshacer.", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Borrar", style: "destructive", onPress: () => borrar(p) },
+    ]);
+  };
+
   if (loading) return <Loader />;
 
   const visibles = items.filter((p) => p.estado === filtro);
@@ -102,7 +122,12 @@ export default function PreguntasClaudeScreen({ navigation, route }: PreguntasCl
           const primera = qs[0];
           const varias = qs.length > 1;
           return (
-            <TouchableOpacity key={p.id} style={[styles.card, { borderLeftColor: borderColor }]} onPress={() => setAbierta(p)} activeOpacity={0.7}>
+            <SwipeRow
+              key={p.id}
+              left={{ icon: "trash", color: colors.red, onTrigger: () => confirmarBorrar(p) }}
+              right={{ icon: "trash", color: colors.red, onTrigger: () => confirmarBorrar(p) }}
+            >
+            <TouchableOpacity style={[styles.card, { borderLeftColor: borderColor }]} onPress={() => setAbierta(p)} activeOpacity={0.7}>
               <View style={styles.row}>
                 <View style={styles.emoji}><Icon name="flag" size={18} color={borderColor} /></View>
                 <View style={styles.body}>
@@ -125,6 +150,7 @@ export default function PreguntasClaudeScreen({ navigation, route }: PreguntasCl
                 </View>
               </View>
             </TouchableOpacity>
+            </SwipeRow>
           );
         })}
 
@@ -166,6 +192,8 @@ function DetalleModal({ pregunta, token, onClose, onResuelta }: {
   const [enviando, setEnviando] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [verCtx, setVerCtx] = useState(false);
+  const [exito, setExito] = useState<string | null>(null);   // muestra el cartel "Respuesta enviada"
+  const pulse = useRef(new Animated.Value(1)).current;       // rebote al tocar una opción
 
   useEffect(() => {
     setSel(qs.map((q) => (q.multiselect ? [] : "")));
@@ -173,6 +201,7 @@ function DetalleModal({ pregunta, token, onClose, onResuelta }: {
     setErr(null);
     setEnviando(false);
     setVerCtx(false);
+    setExito(null);
   }, [pregunta?.id]);
 
   if (!pregunta) return null;
@@ -198,7 +227,13 @@ function DetalleModal({ pregunta, token, onClose, onResuelta }: {
         return arr.includes(label) ? arr.filter((x) => x !== label) : [...arr, label];
       }));
     } else if (unaSingle) {
-      enviar([label]);                 // 1 sola pregunta single-select → enviar directo
+      // 1 sola pregunta single-select → marcar (feedback visible) + rebote + enviar directo.
+      setSel((p) => p.map((s, j) => (j === i ? label : s)));
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 0.96, duration: 80, useNativeDriver: true }),
+        Animated.spring(pulse, { toValue: 1, friction: 4, useNativeDriver: true }),
+      ]).start();
+      enviar([label]);
     } else {
       setSel((p) => p.map((s, j) => (j === i ? label : s)));
     }
@@ -212,7 +247,10 @@ function DetalleModal({ pregunta, token, onClose, onResuelta }: {
     setErr(null);
     try {
       const actualizada = await responderPreguntaClaude(token, pregunta.id, respuestas);
-      onResuelta(actualizada);
+      // Cartel de "respuesta enviada" antes de cerrar (que se note que se registró).
+      setEnviando(false);
+      setExito(respuestas.join(", "));
+      setTimeout(() => onResuelta(actualizada), 1100);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "No se pudo enviar la respuesta.");
       setEnviando(false);
@@ -240,17 +278,24 @@ function DetalleModal({ pregunta, token, onClose, onResuelta }: {
             </TouchableOpacity>
           ) : null}
 
-          {pendiente ? (
+          {exito ? (
+            <View style={styles.exitoBox}>
+              <View style={styles.exitoCirc}><Icon name="check" size={34} color={colors.green} /></View>
+              <Text style={styles.exitoTitle}>Respuesta enviada</Text>
+              <Text style={styles.exitoSel} numberOfLines={2}>{exito}</Text>
+            </View>
+          ) : pendiente ? (
             <>
               <ScrollView style={styles.scroll}>
                 {qs.map((q, i) => (
-                  <View key={i} style={[styles.qBlock, i > 0 && styles.qBlockSep]}>
+                  <Animated.View key={i} style={[styles.qBlock, i > 0 && styles.qBlockSep, unaSingle ? { transform: [{ scale: pulse }] } : null]}>
                     {q.header ? <Text style={styles.chip}>{q.header}</Text> : null}
                     <Text style={styles.pregunta}>{q.pregunta}</Text>
                     {q.multiselect ? <Text style={styles.hint}>Podés elegir varias</Text> : null}
 
                     {q.opciones.map((o: OpcionPregunta, k) => {
                       const on = selectedEn(i, o.label);
+                      const enviandoEsta = enviando && on;
                       return (
                         <TouchableOpacity
                           key={`${o.label}-${k}`}
@@ -264,7 +309,7 @@ function DetalleModal({ pregunta, token, onClose, onResuelta }: {
                             <Text style={styles.optLabel}>{o.label}</Text>
                             {o.description ? <Text style={styles.optDesc}>{o.description}</Text> : null}
                           </View>
-                          {on ? <Icon name="check" size={16} color={colors.primary} /> : null}
+                          {enviandoEsta ? <Text style={styles.optEnviando}>Enviando…</Text> : on ? <Icon name="check" size={16} color={colors.primary} /> : null}
                         </TouchableOpacity>
                       );
                     })}
@@ -277,7 +322,7 @@ function DetalleModal({ pregunta, token, onClose, onResuelta }: {
                       placeholderTextColor={colors.textDim}
                       multiline
                     />
-                  </View>
+                  </Animated.View>
                 ))}
               </ScrollView>
 
@@ -399,6 +444,11 @@ const styles = StyleSheet.create({
   modalBtnPrimary: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 11, paddingHorizontal: 16, borderRadius: 10, backgroundColor: colors.primary, flex: 1 },
   modalBtnPrimaryText: { color: colors.bg, fontSize: 14, fontWeight: "800" },
   btnOff: { opacity: 0.5 },
+  optEnviando: { color: colors.primary, fontSize: 12, fontWeight: "700" },
+  exitoBox: { alignItems: "center", justifyContent: "center", paddingVertical: 34, paddingHorizontal: 16 },
+  exitoCirc: { width: 66, height: 66, borderRadius: 33, backgroundColor: colors.green + "22", alignItems: "center", justifyContent: "center", marginBottom: 14 },
+  exitoTitle: { color: colors.text, fontSize: 18, fontWeight: "800", marginBottom: 6 },
+  exitoSel: { color: colors.textDim, fontSize: 14, fontWeight: "600", textAlign: "center" },
   elegidaBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.cardAlt, borderRadius: 10, padding: 14 },
   elegidaText: { color: colors.text, fontSize: 15, fontWeight: "600", flex: 1 },
 });

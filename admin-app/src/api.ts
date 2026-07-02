@@ -393,6 +393,9 @@ export const getPreguntaClaude = (token: string, id: number) =>
 export const responderPreguntaClaude = (token: string, id: number, respuestas: string[]) =>
   request<PreguntaClaude>(`/admin/preguntas-claude/${id}/responder`, { method: "POST", body: JSON.stringify({ respuestas }) }, token);
 
+export const eliminarPreguntaClaude = (token: string, id: number) =>
+  request<void>(`/admin/preguntas-claude/${id}`, { method: "DELETE" }, token);
+
 // ── Inicializar prueba: borra todo rastro de un número de prueba del cliente ───
 // Etiguel y los tenants usan endpoints distintos; el campo del webhook también
 // difiere (webhook_ok vs webhook_estado) → la screen normaliza al leer.
@@ -687,6 +690,7 @@ export interface RevisionCalidad {
   titulo: string; detalle: string; fragmento: string; sugerencia: string;
   origen?: "especialista" | "sebi";
   estado: EstadoRevision; veredicto: VeredictoRevision; nota_sebi: string | null;
+  resuelto_directo?: boolean;
   created_at: string | null; revisado_at: string | null;
 }
 
@@ -726,10 +730,10 @@ export const putPreferences = (token: string, pantalla: string, prefs: Record<st
 export const getRevisiones = (token: string, source = "etiguel") =>
   request<RevisionCalidad[]>(`/admin/calidad/revisiones?source=${encodeURIComponent(source)}`, {}, token);
 
-export const confirmarRevision = (token: string, id: number, veredicto: "acierto" | "falso_positivo", nota?: string) =>
+export const confirmarRevision = (token: string, id: number, veredicto: "acierto" | "falso_positivo", nota?: string, resuelto_directo = false) =>
   request<RevisionCalidad>(`/admin/calidad/revisiones/${id}/confirmar`, {
     method: "POST",
-    body: JSON.stringify({ veredicto, nota }),
+    body: JSON.stringify({ veredicto, nota, resuelto_directo }),
   }, token);
 
 export const deleteRevision = (token: string, id: number) =>
