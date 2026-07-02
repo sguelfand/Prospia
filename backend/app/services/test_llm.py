@@ -354,8 +354,37 @@ def _juzgar(escenario, transcript: list[dict], tool_calls: list[dict],
             "detalle": (j.get("detalle") or "")[:2000]}
 
 
+def lanzar(corrida_id: int) -> dict:
+    """Lanza la corrida en un thread y devuelve al toque (estado 'corriendo'), así la
+    UI puede hacer polling y mostrar el progreso en vivo. GATED igual que correr."""
+    if not _habilitado():
+        return {"ok": False, "bloqueado": True,
+                "detalle": "Test LLM está deshabilitado. Prendé el switch cuando quieras correr (consume tokens)."}
+    import threading
+
+    def _run():
+        try:
+            correr(corrida_id)
+        except Exception as e:
+            from app.database import SessionLocal
+            from app.models.test_llm import TestLlmCorrida
+            db = SessionLocal()
+            try:
+                c = db.get(TestLlmCorrida, corrida_id)
+                if c:
+                    c.estado = "error"
+                    c.error = f"{type(e).__name__}: {e}"
+                    db.commit()
+            finally:
+                db.close()
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {"ok": True, "estado": "corriendo", "corrida_id": corrida_id}
+
+
 def correr(corrida_id: int) -> dict:
-    """Ejecuta una corrida ya creada (estado 'estimada'). GATED por _habilitado()."""
+    """Ejecuta una corrida ya creada (estado 'estimada'). GATED por _habilitado().
+    Corre sincrónico; para la UI se llama vía lanzar() (en thread)."""
     if not _habilitado():
         return {"ok": False, "bloqueado": True,
                 "detalle": "Test LLM está deshabilitado. Prendé el switch cuando quieras correr (consume tokens)."}

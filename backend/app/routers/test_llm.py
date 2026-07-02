@@ -197,9 +197,11 @@ def crear_corrida(body: CorridaIn):
 
 @router.post("/corridas/{corrida_id}/correr")
 def correr(corrida_id: int):
-    """Ejecuta la corrida. GATED: si el switch está OFF, devuelve bloqueado sin gastar."""
+    """Lanza la corrida en segundo plano y devuelve al toque (estado 'corriendo').
+    La UI hace polling de GET /corridas/{id} para el progreso en vivo. GATED: si el
+    switch está OFF, devuelve 423 sin gastar."""
     try:
-        r = test_llm.correr(corrida_id)
+        r = test_llm.lanzar(corrida_id)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"{type(e).__name__}: {e}")
     if r.get("bloqueado"):

@@ -65,6 +65,8 @@ export default function TestLlm() {
   const [showMotorForm, setShowMotorForm] = useState(false)
   const [showEsc, setShowEsc] = useState(false)
   const [transcript, setTranscript] = useState<Resultado | null>(null)
+  const [runId, setRunId] = useState<number | null>(null)   // corrida en curso (polling en vivo)
+  const [vivo, setVivo] = useState<Corrida | null>(null)    // último snapshot polleado
 
   async function cargar() {
     try {
@@ -107,16 +109,36 @@ export default function TestLlm() {
       const cor = await api.post<{ id: number }>('/admin/test-llm/corridas', {
         source: SOURCE, motor_ids: [...selMot], escenario_ids: [...selEsc],
       })
-      // Correr está GATED en el backend: si el switch está OFF devuelve 423 (bloqueado).
+      // Lanza en segundo plano (GATED: si el switch está OFF devuelve 423). Vuelve al toque.
       await api.post(`/admin/test-llm/corridas/${cor.id}/correr`)
-      await cargar()
-      const det = await api.get<Corrida>(`/admin/test-llm/corridas/${cor.id}`)
-      setAbierta(det)
+      setAbierta(null); setVivo(null); setRunId(cor.id)   // arranca el polling en vivo
     } catch (err) {
       setMsg((err as Error).message)
-      await cargar()  // la corrida quedó creada aunque no se corriera
+      await cargar()  // la corrida quedó creada aunque no se lanzara
     } finally { setBusy(false) }
   }
+
+  // Polling en vivo mientras corre: refresca cada 3s hasta 'lista'/'error'.
+  useEffect(() => {
+    if (runId == null) return
+    let stop = false
+    const tick = async () => {
+      try {
+        const d = await api.get<Corrida>(`/admin/test-llm/corridas/${runId}`)
+        if (stop) return
+        setVivo(d)
+        if (d.estado === 'lista' || d.estado === 'error') {
+          setRunId(null)
+          if (d.estado === 'lista') setAbierta(d)
+          cargar()
+          return
+        }
+      } catch { /* reintenta */ }
+      if (!stop) setTimeout(tick, 3000)
+    }
+    tick()
+    return () => { stop = true }
+  }, [runId])  // eslint-disable-line react-hooks/exhaustive-deps
 
   async function abrirCorrida(id: number) {
     try { setAbierta(await api.get<Corrida>(`/admin/test-llm/corridas/${id}`)) }
@@ -195,9 +217,12 @@ export default function TestLlm() {
       )}
 
       {/* Nueva comparación */}
-      <section className="bg-card border border-line rounded-2xl p-6 space-y-4">
+      <section className={`rounded-2xl p-6 space-y-4 transition-colors ${runId != null ? 'bg-amber/5 border-2 border-amber/60 shadow-[0_0_0_3px_rgba(245,158,11,0.12)]' : 'bg-card border border-line'}`}>
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-ink">Nueva comparación</h2>
+          <h2 className="text-sm font-bold text-ink flex items-center gap-2">
+            {runId != null && <Loader2 size={15} className="animate-spin text-amber" />}
+            {runId != null ? 'Comparación en proceso…' : 'Nueva comparación'}
+          </h2>
           <button onClick={() => setShowMotorForm(v => !v)} className="flex items-center gap-1 text-xs font-semibold border border-primary/50 text-primary rounded-lg px-2.5 py-1.5 hover:bg-primary/10">
             <Plus size={13} /> Motor
           </button>
@@ -264,16 +289,19 @@ export default function TestLlm() {
           )}
           <button
             onClick={crearYCorrer}
-            disabled={busy || selMot.size === 0 || selEsc.size === 0 || !estado?.habilitado}
+            disabled={busy || runId != null || selMot.size === 0 || selEsc.size === 0 || !estado?.habilitado}
             title={!estado?.habilitado ? 'Habilitá "Correr" arriba (consume tokens)' : undefined}
             className="ml-auto flex items-center gap-1.5 text-sm font-semibold bg-emerald-500 text-white rounded-lg px-4 py-2 hover:bg-emerald-600 disabled:opacity-40"
           >
-            {busy ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />} Correr comparación
+            {(busy || runId != null) ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />}
+            {runId != null ? 'Corriendo…' : 'Correr comparación'}
           </button>
         </div>
-        {!estado?.habilitado && (
-          <p className="text-[11px] text-muted flex items-center gap-1"><ShieldAlert size={12} /> "Correr" está bloqueado hasta que habilites el switch. Podés estimar el costo sin gastar nada.</p>
-        )}
+        {runId != null
+          ? <CorridaEnVivo vivo={vivo} onVerTranscript={setTranscript} />
+          : !estado?.habilitado && (
+            <p className="text-[11px] text-muted flex items-center gap-1"><ShieldAlert size={12} /> "Correr" está bloqueado hasta que habilites el switch. Podés estimar el costo sin gastar nada.</p>
+          )}
       </section>
 
       {/* Catálogo OpenRouter: ranking + precios + costo de testear */}
@@ -588,5 +616,58 @@ function CatalogoOpenRouter({ selEsc, onAdded }: { selEsc: number[]; onAdded: ()
         </>
       )}
     </section>
+  )
+}
+
+/* ── Progreso en vivo de una corrida (mientras corre) ── */
+function CorridaEnVivo({ vivo, onVerTranscript }: { vivo: Corrida | null; onVerTranscript: (r: Resultado) => void }) {
+  if (!vivo) return (
+    <div className="text-xs text-muted flex items-center gap-2 border-t border-amber/30 pt-3">
+      <Loader2 size={13} className="animate-spin text-amber" /> Iniciando la corrida…
+    </div>
+  )
+  const total = (vivo.motores?.length || 0) * (vivo.escenarios?.length || 0)
+  const res = vivo.resultados || []
+  const hechas = res.length
+  const pct = total ? Math.round((100 * hechas) / total) : 0
+  const ultimo = res[res.length - 1]
+  const escTot = vivo.escenarios?.length || 0
+  const porMotor = new Map<number, { nombre: string; bien: number; mal: number; dudoso: number; res: Resultado[] }>()
+  for (const r of res) {
+    const g = porMotor.get(r.motor_id) || { nombre: r.motor_nombre, bien: 0, mal: 0, dudoso: 0, res: [] }
+    g[r.veredicto]++; g.res.push(r); porMotor.set(r.motor_id, g)
+  }
+  return (
+    <div className="space-y-3 border-t border-amber/30 pt-3">
+      <div>
+        <div className="flex items-center justify-between text-[11px] mb-1">
+          <span className="text-ink font-medium flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-amber animate-pulse" />
+            {ultimo ? <>Procesando: <b>{ultimo.motor_nombre}</b> · {ultimo.escenario_nombre}</> : 'Arrancando…'}
+          </span>
+          <span className="text-muted">{hechas} / {total} celdas · {pct}%</span>
+        </div>
+        <div className="h-2 rounded-full bg-black/20 overflow-hidden">
+          <div className="h-full bg-amber transition-all duration-500" style={{ width: `${pct}%` }} />
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        {[...porMotor.entries()].map(([id, g]) => (
+          <div key={id} className="flex items-center gap-2 text-[11px]">
+            <span className="text-ink font-medium w-40 truncate shrink-0">{g.nombre}</span>
+            <span className="text-muted shrink-0 w-12">{g.res.length}/{escTot}</span>
+            <div className="flex gap-0.5 flex-wrap flex-1">
+              {g.res.map((r, i) => (
+                <button key={i} onClick={() => onVerTranscript(r)} title={`${r.escenario_nombre}: ${r.veredicto}`}
+                  className={`w-2.5 h-2.5 rounded-full ${VER_BG[r.veredicto]}`} />
+              ))}
+            </div>
+            <span className="text-emerald-500 shrink-0">{g.bien}✓</span>
+            {g.mal > 0 && <span className="text-red-500 shrink-0">{g.mal}✗</span>}
+          </div>
+        ))}
+      </div>
+      <p className="text-[10px] text-muted">Se actualiza cada 3 s. Tocá un punto para ver la conversación. Cuando termine, aparece el tablero completo abajo.</p>
+    </div>
   )
 }
