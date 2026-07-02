@@ -436,11 +436,19 @@ def correr(corrida_id: int, juzgar: bool = True) -> dict:
     # calibración del Especialista (feedback real de Sebi) — 1 vez por corrida
     calib = _calibracion(src) if juzgar else ""
 
-    resumen: dict = {}
-    costo_total = 0.0
     for motor in motores:
-        agg = {"bien": 0, "mal": 0, "dudoso": 0, "costo_usd": 0.0, "por_caso": {}}
         for esc in escs:
+            # Reanudación: si la celda ya existe (corrida cortada y relanzada), saltear.
+            db = SessionLocal()
+            try:
+                ya = db.query(TestLlmResultado).filter(
+                    TestLlmResultado.corrida_id == corrida_id,
+                    TestLlmResultado.motor_id == motor.id,
+                    TestLlmResultado.escenario_slug == esc.slug).first() is not None
+            finally:
+                db.close()
+            if ya:
+                continue
             db = SessionLocal()
             try:
                 try:
@@ -467,27 +475,101 @@ def correr(corrida_id: int, juzgar: bool = True) -> dict:
                 db.commit()
             finally:
                 db.close()
-            agg[veredicto["veredicto"]] = agg.get(veredicto["veredicto"], 0) + 1
-            agg["costo_usd"] += costo
-            agg["por_caso"][esc.slug] = {"veredicto": veredicto["veredicto"], "costo_usd": round(costo, 5)}
-        n = max(1, len(escs))
-        agg["score"] = round(100 * agg["bien"] / n, 1) if juzgar else None
-        agg["costo_usd"] = round(agg["costo_usd"], 4)
-        resumen[str(motor.id)] = {"nombre": motor.nombre} | agg
-        costo_total += agg["costo_usd"]
 
+    # Resumen desde la DB (cuenta también las celdas que ya estaban al reanudar).
+    resumen, costo_total, juzgada_full = _recompute_resumen(corrida_id)
     db = SessionLocal()
     try:
         cor = db.get(TestLlmCorrida, corrida_id)
-        cor.estado = "lista" if juzgar else "sin_juzgar"
+        cor.estado = "lista" if juzgada_full else "sin_juzgar"
         cor.resumen = json.dumps(resumen, ensure_ascii=False)
-        cor.costo_real_usd = round(costo_total, 4)
+        cor.costo_real_usd = costo_total
         cor.finished_at = datetime.now(timezone.utc)
         db.commit()
     finally:
         db.close()
     return {"ok": True, "corrida_id": corrida_id, "juzgado": juzgar,
-            "resumen": resumen, "costo_real_usd": round(costo_total, 4)}
+            "resumen": resumen, "costo_real_usd": costo_total}
+
+
+def _recompute_resumen(corrida_id: int) -> tuple[dict, float, bool]:
+    """Arma el resumen (por motor: bien/mal/dudoso/pendiente + score + costo + por_caso)
+    desde los resultados guardados. Devuelve (resumen, costo_total, juzgada_full)."""
+    from app.database import SessionLocal
+    from app.models.test_llm import TestLlmResultado
+    db = SessionLocal()
+    try:
+        rows = db.query(TestLlmResultado).filter(TestLlmResultado.corrida_id == corrida_id).all()
+    finally:
+        db.close()
+    agg: dict = {}
+    for r in rows:
+        a = agg.setdefault(r.motor_id, {"nombre": r.motor_nombre, "bien": 0, "mal": 0,
+                                        "dudoso": 0, "pendiente": 0, "costo_usd": 0.0, "por_caso": {}})
+        ver = r.veredicto if r.veredicto in ("bien", "mal", "dudoso", "pendiente") else "dudoso"
+        a[ver] = a.get(ver, 0) + 1
+        a["costo_usd"] += r.costo_usd
+        a["por_caso"][r.escenario_slug] = {"veredicto": r.veredicto, "costo_usd": r.costo_usd}
+    resumen: dict = {}
+    costo_total = 0.0
+    juzgada_full = len(rows) > 0
+    for mid, a in agg.items():
+        n = max(1, len(a["por_caso"]))
+        judged = a["pendiente"] == 0
+        a["score"] = round(100 * a["bien"] / n, 1) if judged else None
+        a["costo_usd"] = round(a["costo_usd"], 4)
+        resumen[str(mid)] = a
+        costo_total += a["costo_usd"]
+        if not judged:
+            juzgada_full = False
+    return resumen, round(costo_total, 4), juzgada_full
+
+
+def _infer_juzgar(corrida_id: int) -> bool:
+    """¿La corrida venía corriendo CON juez? (algún resultado con veredicto ≠ pendiente)."""
+    from app.database import SessionLocal
+    from app.models.test_llm import TestLlmResultado
+    db = SessionLocal()
+    try:
+        return db.query(TestLlmResultado).filter(
+            TestLlmResultado.corrida_id == corrida_id,
+            TestLlmResultado.veredicto != "pendiente").first() is not None
+    finally:
+        db.close()
+
+
+def reanudar_pendientes() -> dict:
+    """Al arrancar el backend: detecta corridas que quedaron 'corriendo' (cortadas por un
+    reinicio) y las relanza en thread. `correr` saltea las celdas ya hechas → continúan
+    desde donde quedaron. Automático, sin botón."""
+    from app.database import SessionLocal
+    from app.models.test_llm import TestLlmCorrida
+    db = SessionLocal()
+    try:
+        ids = [c.id for c in db.query(TestLlmCorrida).filter(TestLlmCorrida.estado == "corriendo").all()]
+    finally:
+        db.close()
+    import threading
+
+    def _run(cid: int):
+        try:
+            correr(cid, juzgar=_infer_juzgar(cid))
+        except Exception as e:
+            dbx = SessionLocal()
+            try:
+                cc = dbx.get(TestLlmCorrida, cid)
+                if cc:
+                    cc.estado = "error"
+                    cc.error = f"reanudar: {type(e).__name__}: {e}"
+                    dbx.commit()
+            finally:
+                dbx.close()
+
+    for cid in ids:
+        threading.Thread(target=_run, args=(cid,), daemon=True).start()
+    if ids:
+        print(f"[TEST-LLM] reanudando corridas cortadas: {ids}")
+    return {"reanudadas": ids}
 
 
 def aplicar_veredictos(corrida_id: int, veredictos: list[dict]) -> dict:

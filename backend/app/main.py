@@ -253,6 +253,14 @@ cadence.start()
 from app.services import queue
 queue.start()
 
+# Auto-reanudar corridas del Test LLM cortadas por un reinicio del server (continúan
+# desde la última celda hecha; no re-corre lo ya guardado).
+try:
+    from app.services import test_llm as _test_llm_svc
+    _test_llm_svc.reanudar_pendientes()
+except Exception as _e:
+    print(f"[TEST-LLM] reanudar al arranque: {type(_e).__name__}: {_e}")
+
 from app.services import monitoring as monitoring_service
 monitoring_service.start()
 
