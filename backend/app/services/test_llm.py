@@ -359,6 +359,8 @@ def correr(corrida_id: int) -> dict:
     if not _habilitado():
         return {"ok": False, "bloqueado": True,
                 "detalle": "Test LLM está deshabilitado. Prendé el switch cuando quieras correr (consume tokens)."}
+    from types import SimpleNamespace
+
     from app.database import SessionLocal
     from app.models.test_llm import (TestLlmCorrida, TestLlmEscenario,
                                       TestLlmMotor, TestLlmResultado)
@@ -369,9 +371,19 @@ def correr(corrida_id: int) -> dict:
             return {"ok": False, "detalle": "corrida no encontrada"}
         motor_ids = json.loads(cor.motores or "[]")
         esc_ids = json.loads(cor.escenarios or "[]")
-        motores = db.query(TestLlmMotor).filter(TestLlmMotor.id.in_(motor_ids)).all()
-        escs = (db.query(TestLlmEscenario).filter(TestLlmEscenario.id.in_(esc_ids))
-                .order_by(TestLlmEscenario.orden).all())
+        # Copiar a objetos livianos ANTES del commit/close: el commit expira las
+        # instancias ORM y usarlas fuera de la sesión da DetachedInstanceError.
+        motores = [SimpleNamespace(
+            id=m.id, nombre=m.nombre, provider=m.provider, model_id=m.model_id,
+            base_url=m.base_url, api_key=m.api_key, precio_in=m.precio_in,
+            precio_out=m.precio_out, precio_cache_read=m.precio_cache_read,
+            precio_cache_write=m.precio_cache_write)
+            for m in db.query(TestLlmMotor).filter(TestLlmMotor.id.in_(motor_ids)).all()]
+        escs = [SimpleNamespace(
+            id=e.id, slug=e.slug, nombre=e.nombre, caso_uso=e.caso_uso,
+            guion=e.guion, esperado=e.esperado, orden=e.orden)
+            for e in db.query(TestLlmEscenario).filter(TestLlmEscenario.id.in_(esc_ids))
+                       .order_by(TestLlmEscenario.orden).all()]
         src = cor.source
         env = _build_envelope(src)
         system = env["system"]
