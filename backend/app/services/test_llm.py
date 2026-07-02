@@ -214,7 +214,8 @@ def estimar(source: str, motor_ids: list[int], escenario_ids: list[int],
         "por_proveedor": {k: round(v, 4) for k, v in por_proveedor.items()},
         "costo_openrouter_usd": round(por_proveedor.get("openrouter", 0.0), 4),
         "juez_costo_usd": round(juez_costo, 4),
-        "total_usd": round(total, 4),
+        "total_usd": round(total, 4),                              # con juez automático (API)
+        "total_sin_juez_usd": round(total - juez_costo, 4),        # juez lo aplicás en sesión (plan Pro)
         "nota": "Estimación conservadora. OpenRouter, MyClaw y el juez (Anthropic) se facturan por separado.",
     }
 
@@ -361,9 +362,11 @@ def _juzgar(escenario, transcript: list[dict], tool_calls: list[dict],
             "detalle": (j.get("detalle") or "")[:2000]}
 
 
-def lanzar(corrida_id: int) -> dict:
+def lanzar(corrida_id: int, juzgar: bool = False) -> dict:
     """Lanza la corrida en un thread y devuelve al toque (estado 'corriendo'), así la
-    UI puede hacer polling y mostrar el progreso en vivo. GATED igual que correr."""
+    UI puede hacer polling y mostrar el progreso en vivo. GATED igual que correr.
+    juzgar=False (default) → corre solo motores; el juez lo aplica después una sesión de
+    Claude con el plan Pro. juzgar=True → juez automático por la API (Sonnet)."""
     if not _habilitado():
         return {"ok": False, "bloqueado": True,
                 "detalle": "Test LLM está deshabilitado. Prendé el switch cuando quieras correr (consume tokens)."}
@@ -371,7 +374,7 @@ def lanzar(corrida_id: int) -> dict:
 
     def _run():
         try:
-            correr(corrida_id)
+            correr(corrida_id, juzgar=juzgar)
         except Exception as e:
             from app.database import SessionLocal
             from app.models.test_llm import TestLlmCorrida
@@ -389,9 +392,11 @@ def lanzar(corrida_id: int) -> dict:
     return {"ok": True, "estado": "corriendo", "corrida_id": corrida_id}
 
 
-def correr(corrida_id: int) -> dict:
+def correr(corrida_id: int, juzgar: bool = True) -> dict:
     """Ejecuta una corrida ya creada (estado 'estimada'). GATED por _habilitado().
-    Corre sincrónico; para la UI se llama vía lanzar() (en thread)."""
+    Corre sincrónico; para la UI se llama vía lanzar() (en thread).
+    juzgar=False → corre solo los motores y deja los veredictos 'pendiente' (estado
+    'sin_juzgar'), para juzgar después en una sesión de Claude con el plan Pro (gratis)."""
     if not _habilitado():
         return {"ok": False, "bloqueado": True,
                 "detalle": "Test LLM está deshabilitado. Prendé el switch cuando quieras correr (consume tokens)."}
@@ -429,7 +434,7 @@ def correr(corrida_id: int) -> dict:
         db.close()
 
     # calibración del Especialista (feedback real de Sebi) — 1 vez por corrida
-    calib = _calibracion(src)
+    calib = _calibracion(src) if juzgar else ""
 
     resumen: dict = {}
     costo_total = 0.0
@@ -441,7 +446,8 @@ def correr(corrida_id: int) -> dict:
                 try:
                     r = _run_escenario(motor, system, esc)
                     costo = _costo_celda(motor, r["in"], r["out"], r["cache"])
-                    veredicto = _juzgar(esc, r["transcript"], r["tool_calls"], calib)
+                    veredicto = (_juzgar(esc, r["transcript"], r["tool_calls"], calib)
+                                 if juzgar else {"veredicto": "pendiente", "categoria": "", "detalle": ""})
                     err = None
                 except Exception as e:
                     r = {"transcript": [], "tool_calls": [], "in": 0, "out": 0, "cache": 0, "ms": 0}
@@ -461,11 +467,11 @@ def correr(corrida_id: int) -> dict:
                 db.commit()
             finally:
                 db.close()
-            agg[veredicto["veredicto"]] += 1
+            agg[veredicto["veredicto"]] = agg.get(veredicto["veredicto"], 0) + 1
             agg["costo_usd"] += costo
             agg["por_caso"][esc.slug] = {"veredicto": veredicto["veredicto"], "costo_usd": round(costo, 5)}
         n = max(1, len(escs))
-        agg["score"] = round(100 * agg["bien"] / n, 1)
+        agg["score"] = round(100 * agg["bien"] / n, 1) if juzgar else None
         agg["costo_usd"] = round(agg["costo_usd"], 4)
         resumen[str(motor.id)] = {"nombre": motor.nombre} | agg
         costo_total += agg["costo_usd"]
@@ -473,15 +479,63 @@ def correr(corrida_id: int) -> dict:
     db = SessionLocal()
     try:
         cor = db.get(TestLlmCorrida, corrida_id)
-        cor.estado = "lista"
+        cor.estado = "lista" if juzgar else "sin_juzgar"
         cor.resumen = json.dumps(resumen, ensure_ascii=False)
         cor.costo_real_usd = round(costo_total, 4)
         cor.finished_at = datetime.now(timezone.utc)
         db.commit()
     finally:
         db.close()
-    return {"ok": True, "corrida_id": corrida_id, "resumen": resumen,
-            "costo_real_usd": round(costo_total, 4)}
+    return {"ok": True, "corrida_id": corrida_id, "juzgado": juzgar,
+            "resumen": resumen, "costo_real_usd": round(costo_total, 4)}
+
+
+def aplicar_veredictos(corrida_id: int, veredictos: list[dict]) -> dict:
+    """Escribe los veredictos (juzgados en sesión de Claude con el plan Pro — subagente
+    Sonnet aplicando el prompt del Especialista) y finaliza la corrida: recalcula el
+    resumen y pasa a estado 'lista'. veredictos: [{motor_id, escenario_slug,
+    veredicto: 'bien'|'mal'|'dudoso', categoria?, detalle?}]."""
+    from app.database import SessionLocal
+    from app.models.test_llm import TestLlmCorrida, TestLlmResultado
+    idx = {(v["motor_id"], v["escenario_slug"]): v for v in veredictos}
+    db = SessionLocal()
+    try:
+        aplicados = 0
+        for r in db.query(TestLlmResultado).filter(TestLlmResultado.corrida_id == corrida_id).all():
+            v = idx.get((r.motor_id, r.escenario_slug))
+            if not v:
+                continue
+            ver = (v.get("veredicto") or "dudoso").strip().lower()
+            r.veredicto = ver if ver in ("bien", "mal", "dudoso") else "dudoso"
+            r.categoria = (v.get("categoria") or "")[:40]
+            r.detalle = (v.get("detalle") or "")[:2000]
+            aplicados += 1
+        db.commit()
+        # recomputar resumen desde los resultados
+        agg: dict = {}
+        for r in db.query(TestLlmResultado).filter(TestLlmResultado.corrida_id == corrida_id).all():
+            a = agg.setdefault(r.motor_id, {"nombre": r.motor_nombre, "bien": 0, "mal": 0,
+                                            "dudoso": 0, "pendiente": 0, "costo_usd": 0.0, "por_caso": {}})
+            ver = r.veredicto if r.veredicto in ("bien", "mal", "dudoso", "pendiente") else "dudoso"
+            a[ver] = a.get(ver, 0) + 1
+            a["costo_usd"] += r.costo_usd
+            a["por_caso"][r.escenario_slug] = {"veredicto": r.veredicto, "costo_usd": r.costo_usd}
+        resumen = {}
+        costo_total = 0.0
+        for mid, a in agg.items():
+            n = max(1, len(a["por_caso"]))
+            a["score"] = round(100 * a["bien"] / n, 1)
+            a["costo_usd"] = round(a["costo_usd"], 4)
+            resumen[str(mid)] = a
+            costo_total += a["costo_usd"]
+        cor = db.get(TestLlmCorrida, corrida_id)
+        cor.estado = "lista"
+        cor.resumen = json.dumps(resumen, ensure_ascii=False)
+        cor.costo_real_usd = round(costo_total, 4)
+        db.commit()
+        return {"ok": True, "aplicados": aplicados, "resumen": resumen}
+    finally:
+        db.close()
 
 
 # ── seed / estado ─────────────────────────────────────────────────────────────

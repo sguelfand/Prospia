@@ -29,7 +29,7 @@ type Estimacion = {
   por_motor: { motor_id: number; nombre: string; provider: string; costo_usd: number }[]
   por_proveedor: Record<string, number>
   costo_openrouter_usd: number
-  juez_costo_usd: number; total_usd: number; nota: string
+  juez_costo_usd: number; total_usd: number; total_sin_juez_usd: number; nota: string
 }
 type Resultado = {
   motor_id: number; motor_nombre: string; escenario_slug: string; escenario_nombre: string
@@ -71,6 +71,7 @@ export default function TestLlm() {
   const [transcript, setTranscript] = useState<Resultado | null>(null)
   const [runId, setRunId] = useState<number | null>(null)   // corrida en curso (polling en vivo)
   const [vivo, setVivo] = useState<Corrida | null>(null)    // último snapshot polleado
+  const [conJuez, setConJuez] = useState(false)             // juez automático (API) vs en sesión (plan Pro)
 
   async function cargar() {
     try {
@@ -114,7 +115,8 @@ export default function TestLlm() {
         source: SOURCE, motor_ids: [...selMot], escenario_ids: [...selEsc],
       })
       // Lanza en segundo plano (GATED: si el switch está OFF devuelve 423). Vuelve al toque.
-      await api.post(`/admin/test-llm/corridas/${cor.id}/correr`)
+      // juzgar según el switch: con juez = API (Sonnet); sin juez = lo aplico yo en sesión (plan Pro).
+      await api.post(`/admin/test-llm/corridas/${cor.id}/correr?juzgar=${conJuez}`)
       setAbierta(null); setVivo(null); setRunId(cor.id)   // arranca el polling en vivo
     } catch (err) {
       setMsg((err as Error).message)
@@ -131,9 +133,10 @@ export default function TestLlm() {
         const d = await api.get<Corrida>(`/admin/test-llm/corridas/${runId}`)
         if (stop) return
         setVivo(d)
-        if (d.estado === 'lista' || d.estado === 'error') {
+        if (d.estado === 'lista' || d.estado === 'sin_juzgar' || d.estado === 'error') {
           setRunId(null)
           if (d.estado === 'lista') setAbierta(d)
+          if (d.estado === 'sin_juzgar') setVivo(d)   // queda mostrando "pendiente de juzgar"
           cargar()
           return
         }
@@ -295,13 +298,19 @@ export default function TestLlm() {
             {busy ? <Loader2 size={15} className="animate-spin" /> : <DollarSign size={15} />} Estimar costo
           </button>
           {estimacion && (
-            <div className="text-xs text-ink flex items-center gap-3 flex-wrap">
-              <span className="font-bold text-base text-primary">{money(costoTotalSel)}</span>
-              <span className="text-muted">
-                {estimacion.motores} motores × {estimacion.escenarios} escenarios · {estimacion.turnos_totales} turnos
+            <div className="text-xs text-ink flex items-center gap-4 flex-wrap">
+              <span className="text-muted">{estimacion.motores} motores × {estimacion.escenarios} escenarios</span>
+              <span className="flex items-center gap-1">
+                <span className="text-muted">Sin juez</span>
+                <b className={`text-sm ${!conJuez ? 'text-emerald-500' : 'text-ink'}`}>{money(estimacion.total_sin_juez_usd)}</b>
               </span>
-              <span className="flex items-center gap-2">
-                {Object.entries(estimacion.por_proveedor).map(([prov, c]) => (
+              <span className="flex items-center gap-1">
+                <span className="text-muted">Con juez</span>
+                <b className={`text-sm ${conJuez ? 'text-primary' : 'text-ink'}`}>{money(estimacion.total_usd)}</b>
+                <span className="text-[10px] text-muted">(juez {money(estimacion.juez_costo_usd)})</span>
+              </span>
+              <span className="flex items-center gap-1.5 flex-wrap">
+                {Object.entries(estimacion.por_proveedor).filter(([p]) => conJuez || !p.includes('juez')).map(([prov, c]) => (
                   <span key={prov} className={`text-[11px] rounded px-1.5 py-0.5 border ${prov === 'openrouter' ? 'border-primary/40 text-primary' : 'border-line text-muted'}`}>
                     {prov}: {money(c)}
                   </span>
@@ -309,6 +318,10 @@ export default function TestLlm() {
               </span>
             </div>
           )}
+          <label className="flex items-center gap-2 text-xs text-ink cursor-pointer select-none ml-auto" title="Con juez: evalúa por la API (Sonnet). Sin juez: corré ahora y pedime 'juzgá la corrida X' en una sesión (plan Pro, gratis).">
+            <input type="checkbox" checked={conJuez} onChange={e => setConJuez(e.target.checked)} />
+            <span>Con juez <span className="text-muted">(API)</span></span>
+          </label>
           <button
             onClick={crearYCorrer}
             disabled={busy || runId != null || selMot.size === 0 || selEsc.size === 0 || !estado?.habilitado || sobrepasaSaldo}
@@ -327,11 +340,24 @@ export default function TestLlm() {
             {' '}(MyClaw y el juez se facturan aparte y no dependen de este saldo.)
           </div>
         )}
-        {runId != null
-          ? <CorridaEnVivo vivo={vivo} onVerTranscript={setTranscript} />
-          : !estado?.habilitado && (
-            <p className="text-[11px] text-muted flex items-center gap-1"><ShieldAlert size={12} /> "Correr" está bloqueado hasta que habilites el switch. Podés estimar el costo sin gastar nada.</p>
-          )}
+        {runId != null ? (
+          <CorridaEnVivo vivo={vivo} onVerTranscript={setTranscript} />
+        ) : vivo?.estado === 'sin_juzgar' ? (
+          <div className="text-xs bg-primary/5 text-ink border border-primary/40 rounded-lg px-3 py-2 flex items-start gap-2">
+            <Cpu size={14} className="text-primary shrink-0 mt-0.5" />
+            <span>
+              Corrida <b>#{vivo.id}</b> lista — los motores corrieron y las conversaciones quedaron guardadas.
+              <b> Pendiente de juzgar.</b> En una sesión de Claude decime <i>"juzgá la corrida {vivo.id}"</i> y la
+              evalúo con el plan Pro (juez Sonnet, gratis) → ahí aparece el tablero con los puntajes.
+            </span>
+          </div>
+        ) : !conJuez ? (
+          <p className="text-[11px] text-muted flex items-center gap-1">
+            <ShieldAlert size={12} /> Juez en modo <b>sesión (plan Pro)</b>: corré los motores ahora y después pedime que juzgue. Marcá "Con juez (API)" para que evalúe solo.
+          </p>
+        ) : !estado?.habilitado && (
+          <p className="text-[11px] text-muted flex items-center gap-1"><ShieldAlert size={12} /> "Correr" está bloqueado hasta que habilites el switch. Podés estimar el costo sin gastar nada.</p>
+        )}
       </section>
 
       {/* Catálogo OpenRouter: ranking + precios + costo de testear */}
@@ -363,10 +389,10 @@ export default function TestLlm() {
         <div className="space-y-1.5">
           {corridas.map(c => (
             <button key={c.id} onClick={() => abrirCorrida(c.id)} className={`w-full flex items-center gap-3 text-left border rounded-lg px-3 py-2 text-xs hover:border-primary/40 ${abierta?.id === c.id ? 'border-primary/50 bg-primary/5' : 'border-line'}`}>
-              <span className={`w-2 h-2 rounded-full ${c.estado === 'lista' ? 'bg-emerald-500' : c.estado === 'estimada' ? 'bg-amber' : c.estado === 'error' ? 'bg-red-500' : 'bg-muted'}`} />
-              <span className="flex-1 text-ink font-medium">{c.nombre}</span>
+              <span className={`w-2 h-2 rounded-full ${c.estado === 'lista' ? 'bg-emerald-500' : c.estado === 'sin_juzgar' ? 'bg-primary' : c.estado === 'estimada' || c.estado === 'corriendo' ? 'bg-amber' : c.estado === 'error' ? 'bg-red-500' : 'bg-muted'}`} />
+              <span className="flex-1 text-ink font-medium">{c.nombre}{c.estado === 'sin_juzgar' && <span className="ml-1 text-[10px] font-bold text-primary border border-primary/50 rounded px-1">sin juzgar</span>}</span>
               <span className="text-muted">{c.motores.length} motores · {c.escenarios.length} esc.</span>
-              <span className="text-muted">{c.estado === 'lista' ? `real ${money(c.costo_real_usd)}` : `est. ${money(c.costo_estimado_usd)}`}</span>
+              <span className="text-muted">{(c.estado === 'lista' || c.estado === 'sin_juzgar') ? `real ${money(c.costo_real_usd)}` : `est. ${money(c.costo_estimado_usd)}`}</span>
             </button>
           ))}
         </div>

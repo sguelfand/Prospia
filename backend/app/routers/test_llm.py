@@ -196,12 +196,12 @@ def crear_corrida(body: CorridaIn):
 
 
 @router.post("/corridas/{corrida_id}/correr")
-def correr(corrida_id: int):
+def correr(corrida_id: int, juzgar: bool = Query(False)):
     """Lanza la corrida en segundo plano y devuelve al toque (estado 'corriendo').
-    La UI hace polling de GET /corridas/{id} para el progreso en vivo. GATED: si el
-    switch está OFF, devuelve 423 sin gastar."""
+    juzgar=False (default) → corre solo motores (el juez lo aplicás en sesión con el plan
+    Pro). juzgar=True → juez automático por la API. GATED: si el switch está OFF, 423."""
     try:
-        r = test_llm.lanzar(corrida_id)
+        r = test_llm.lanzar(corrida_id, juzgar=juzgar)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"{type(e).__name__}: {e}")
     if r.get("bloqueado"):
