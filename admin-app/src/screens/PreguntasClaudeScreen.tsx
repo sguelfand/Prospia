@@ -273,7 +273,7 @@ function DetalleModal({ pregunta, token, onClose, onResuelta }: {
                       style={styles.input}
                       value={otra[i] ?? ""}
                       onChangeText={(v) => setOtraI(i, v)}
-                      placeholder="Otra opción (texto libre)…"
+                      placeholder={q.opciones.length ? "Otra opción (texto libre)…" : "Escribí tu respuesta…"}
                       placeholderTextColor={colors.textDim}
                       multiline
                     />
