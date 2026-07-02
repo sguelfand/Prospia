@@ -33,14 +33,25 @@ test.describe("Testing (N1)", () => {
     await expect(page.getByRole("link", { name: "Motores LLM" }).first()).toBeVisible();
   });
 
-  test("Motores LLM: Estimar disponible y Correr bloqueado (no gasta tokens)", async ({ page }) => {
+  test("Motores LLM: Estimar disponible y el gate refleja el estado real del switch", async ({ page }) => {
     await page.goto("/testing/llm");
     await page.waitForLoadState("networkidle");
-    // Estimar costo no consume tokens → siempre disponible.
+    // Estimar costo no consume tokens → siempre disponible, prenda o apague el gate.
     await expect(page.getByRole("button", { name: /Estimar costo/ })).toBeVisible();
-    // Correr consume tokens → deshabilitado mientras el gate está apagado (default).
-    await expect(page.getByRole("button", { name: /Correr comparación/ })).toBeDisabled();
-    // El aviso del gate está presente.
-    await expect(page.getByText(/Correr.*bloqueado|bloqueado hasta/i).first()).toBeVisible();
+
+    // El gate es un switch GLOBAL (monitor_settings.test_llm_habilitado). El test no
+    // lo toca (afectaría el uso real); en cambio verifica que el botón "Correr" y el
+    // aviso coincidan con el estado que muestra la tarjeta de estado.
+    const correr = page.getByRole("button", { name: /Correr comparación/ });
+    const habilitado = await page.getByText(/Correr HABILITADO/).isVisible().catch(() => false);
+    if (habilitado) {
+      // Gate prendido → el aviso de bloqueo del gate NO aparece.
+      await expect(page.getByText(/bloqueado hasta que habilites/i)).toHaveCount(0);
+    } else {
+      // Gate apagado → Correr deshabilitado y el aviso del gate presente.
+      await expect(page.getByText(/Correr bloqueado/).first()).toBeVisible();
+      await expect(correr).toBeDisabled();
+      await expect(page.getByText(/bloqueado hasta/i).first()).toBeVisible();
+    }
   });
 });

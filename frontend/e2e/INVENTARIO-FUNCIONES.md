@@ -156,8 +156,9 @@ observable. Sirve como registro de Pendientes/Realizados de la pantalla
   **Correr comparación** (deshabilitado hasta habilitar el gate).
 - Resultados (tablero movible): gráfico calidad por motor, gráfico costo por motor,
   tabla escenario×motor, modal de transcript por celda.
-- Test: `testing.spec.ts` (carga, submenú, gate: Estimar disponible / Correr bloqueado
-  = no consume tokens). ⚠️ El test NO corre comparaciones reales (respeta el gate).
+- Test: `testing.spec.ts` (carga, submenú, gate: Estimar siempre disponible + el botón
+  Correr y el aviso reflejan el estado real del switch global `test_llm_habilitado`).
+  ⚠️ El test NO corre comparaciones reales ni toca el switch (respeta el gate global).
 
 ---
 
