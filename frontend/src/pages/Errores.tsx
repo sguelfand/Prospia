@@ -1,4 +1,4 @@
-import { Check, Flag, Loader2, Phone, Plus, RotateCcw, Search, Trash2, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, Loader2, Phone, Plus, RotateCcw, Search, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
 
@@ -12,6 +12,7 @@ type AgentError = {
   telefono: string | null
   patron: string | null
   contenido: string
+  detalle?: string | null
   estado: Estado
   resuelto: boolean
   fecha: string
@@ -34,7 +35,15 @@ export default function Errores() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [openDetalle, setOpenDetalle] = useState<Set<number>>(new Set())
   const [toast, setToast] = useState<string | null>(null)
+
+  const toggleDetalle = (id: number) =>
+    setOpenDetalle((prev) => {
+      const n = new Set(prev)
+      n.has(id) ? n.delete(id) : n.add(id)
+      return n
+    })
 
   // Modal "Cargar error a mano"
   const [nuevoOpen, setNuevoOpen] = useState(false)
@@ -235,6 +244,14 @@ export default function Errores() {
                   {e.cola_estado === 'standby' && <span className="ml-auto text-[11px] font-bold text-amber">falta info</span>}
                 </div>
                 <p className="text-sm text-ink whitespace-pre-wrap break-words">{e.contenido}</p>
+                {e.detalle && (
+                  <button onClick={() => toggleDetalle(e.id)} className="flex items-center gap-1 text-xs font-semibold text-muted hover:text-ink mt-1.5">
+                    {openDetalle.has(e.id) ? <ChevronDown size={12} /> : <ChevronRight size={12} />} Detalle
+                  </button>
+                )}
+                {e.detalle && openDetalle.has(e.id) && (
+                  <p className="text-xs text-muted whitespace-pre-wrap break-words mt-1.5 pt-2 border-t border-dashed border-line">{e.detalle}</p>
+                )}
                 {e.cola_resultado && (
                   <p className="text-xs text-muted whitespace-pre-wrap break-words mt-2 pt-2 border-t border-dashed border-line">
                     <span className="font-semibold text-ink">Conclusión: </span>{e.cola_resultado}
@@ -310,14 +327,17 @@ export default function Errores() {
                 )}
               </div>
               <p className="text-sm text-ink whitespace-pre-wrap break-words">{e.contenido}</p>
+              {e.detalle && openDetalle.has(e.id) && (
+                <p className="text-xs text-muted whitespace-pre-wrap break-words mt-2 pt-2 border-t border-dashed border-line">{e.detalle}</p>
+              )}
               <div className="flex flex-wrap items-center gap-3 mt-2">
                 {e.telefono && <span className="flex items-center gap-1 text-xs text-muted"><Phone size={12} /> {e.telefono}</span>}
                 {e.patron && <span className="flex items-center gap-1 text-xs text-muted"><Search size={12} /> {e.patron}</span>}
               </div>
               <div className="flex gap-2 mt-3 pt-3 border-t border-dashed border-line">
-                {e.estado === 'nuevo' && (
-                  <button onClick={() => setEstado(e, 'reportado')} className="flex items-center gap-1 text-xs font-semibold border border-red-500/50 text-red-500 rounded-lg px-2.5 py-1.5 hover:bg-red-500/10">
-                    <Flag size={12} /> Reportar
+                {e.detalle && (
+                  <button onClick={() => toggleDetalle(e.id)} className="flex items-center gap-1 text-xs font-semibold border border-line text-muted rounded-lg px-2.5 py-1.5 hover:text-ink">
+                    {openDetalle.has(e.id) ? <ChevronDown size={12} /> : <ChevronRight size={12} />} Detalle
                   </button>
                 )}
                 {e.estado === 'reportado' && (

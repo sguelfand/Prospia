@@ -1025,17 +1025,21 @@ def crear_error_manual(body: AgentErrorManualIn, db: Session = Depends(get_db)):
     y se agrega al contenido. Queda con agente='sebi', patron='manual', estado
     'nuevo' → cae en la MISMA cola de errores que los del outbound-guard."""
     contenido = (body.contenido or "").strip()
+    detalle = None
     if body.imagen_b64:
         from app.services import camila_quality
-        transcripcion = camila_quality.transcribir_imagen_error(
+        detalle = camila_quality.transcribir_imagen_error(
             body.imagen_b64, body.imagen_mime or "image/png", source=body.fuente)
-        if transcripcion:
-            contenido = (contenido + "\n\n" if contenido else "") + "[imagen adjunta]\n" + transcripcion
-    if not contenido:
+    if not contenido and not detalle:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                             detail="Cargá un texto o una imagen")
+    # La descripción corta va a `contenido` (lo que se ve en la lista); la
+    # transcripción de la imagen va a `detalle` (se abre con el botón "Detalle").
+    if not contenido:
+        contenido = "📎 Captura adjunta"
     err = AgentError(
         contenido=contenido[:5000],
+        detalle=(detalle[:5000] if detalle else None),
         fuente=(body.fuente or "etiguel"),
         agente="sebi",
         telefono=None,

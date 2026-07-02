@@ -109,9 +109,12 @@ observable. Sirve como registro de Pendientes/Realizados de la pantalla
 
 ## 10. Errores de Camila (N1)
 - Tabs: Nuevos / Reportados / Fixed
-- Por error: reportar, quitar reporte, reabrir, borrar
+- Por error: quitar reporte, reabrir, borrar (el botón **Reportar** se sacó: ahora
+  se manda a la cola con Seleccionar → Procesar)
+- **Detalle**: si el error tiene transcripción de imagen, botón "Detalle" que la
+  abre/cierra (la lista muestra solo la descripción)
 - **Cargar error a mano**: cuadro de texto + adjuntar/pegar imagen (Ctrl+V, se
-  transcribe con Haiku) → cae en la cola de errores — ✅ `errores.spec.ts`
+  transcribe con Haiku → queda en `detalle`) → cae en la cola de errores — ✅ `errores.spec.ts`
 - **Seleccionar + Procesar** (cola FIFO, igual que Pendientes): tildar varios,
   Procesar, recuadro "Procesando" con barrita — ✅ `errores.spec.ts`
 - Cola en proceso: confirmar (Fixed), rechazar (vuelve a la cola), volver a la cola

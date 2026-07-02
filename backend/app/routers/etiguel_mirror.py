@@ -272,6 +272,7 @@ def listar_agent_errors(
         {
             "id": e.id, "estado": e.estado, "fuente": e.fuente, "agente": e.agente,
             "telefono": e.telefono, "patron": e.patron, "contenido": e.contenido,
+            "detalle": e.detalle,
             "fecha": e.fecha.isoformat() if e.fecha else None,
             "cola_estado": e.cola_estado, "cola_resultado": e.cola_resultado,
             "cola_orden": e.cola_orden.isoformat() if e.cola_orden else None,

@@ -240,6 +240,7 @@ class AgentErrorOut(BaseModel):
     telefono: str | None
     patron: str | None
     contenido: str
+    detalle: str | None = None           # transcripción de la imagen adjunta (botón "Detalle")
     estado: str              # nuevo | reportado | fixed
     resuelto: bool
     fecha: datetime

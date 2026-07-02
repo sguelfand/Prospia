@@ -199,6 +199,7 @@ export interface AgentError {
   telefono: string | null;
   patron: string | null;
   contenido: string;
+  detalle?: string | null; // transcripción de la imagen adjunta (botón "Detalle")
   estado: EstadoError; // nuevo → reportado (Sebi) → fixed (Claude)
   resuelto: boolean;
   fecha: string;

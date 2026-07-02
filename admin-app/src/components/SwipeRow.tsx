@@ -15,7 +15,7 @@ export function SwipeRow({
   children,
 }: {
   left: SwipeAction;
-  right: SwipeAction;
+  right?: SwipeAction;   // opcional: si no se pasa, no hay acción al deslizar a la izquierda
   children: React.ReactNode;
 }) {
   const ref = useRef<Swipeable>(null);
@@ -30,14 +30,14 @@ export function SwipeRow({
     <Swipeable
       ref={ref}
       renderLeftActions={render(left, "flex-start")}
-      renderRightActions={render(right, "flex-end")}
+      renderRightActions={right ? render(right, "flex-end") : undefined}
       leftThreshold={70}
       rightThreshold={70}
       onSwipeableOpen={(direction) => {
         // `direction` = el LADO de acciones que se abrió: "left" = las de la
         // izquierda (lo que se ve al deslizar a la derecha).
         if (direction === "left") left.onTrigger();
-        else right.onTrigger();
+        else right?.onTrigger();
         ref.current?.close();
       }}
     >

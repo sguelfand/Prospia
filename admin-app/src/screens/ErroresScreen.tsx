@@ -205,7 +205,7 @@ export default function ErroresScreen(_props: ErroresProps) {
       {colaWaiting && <Text style={styles.colaBoxHint}>{colaStandby === 1 ? "1 espera" : `${colaStandby} esperan`} tu info para seguir.</Text>}
       {queued.map((q) => (
         <View key={q.id}>
-          <ColaCard err={q} settled={colaSettled} />
+          <ColaCard err={q} />
           {colaSettled && q.cola_estado === "procesado" && (
             <View style={styles.colaActions}>
               <TouchableOpacity style={[styles.colaConfirmBtn, styles.colaActionFlex]} onPress={() => confirmarFixed(q)} activeOpacity={0.8}>
@@ -282,7 +282,7 @@ export default function ErroresScreen(_props: ErroresProps) {
               left={{ icon: "x", color: colors.red, onTrigger: () => confirmarBorrar(item) }}
               right={
                 item.estado === "nuevo"
-                  ? { icon: "flag", color: colors.amber, onTrigger: () => cambiarEstado(item, "reportado") }
+                  ? undefined // 'nuevo' se manda a la cola con Seleccionar → Procesar (ya no hay Reportar)
                   : { icon: "undo", color: colors.amber, onTrigger: () => cambiarEstado(item, "nuevo") }
               }
             >
@@ -328,7 +328,9 @@ function ErrorCard({
   selectMode?: boolean;
   selected?: boolean;
 }) {
+  const [showDetalle, setShowDetalle] = useState(false);
   const borderColor = err.estado === "fixed" ? colors.green : err.estado === "reportado" ? colors.red : colors.amber;
+  const hayAcciones = !selectMode && !!onEstado && (!!err.detalle || err.estado === "reportado" || err.estado === "fixed");
   return (
     <View style={[styles.card, { borderLeftColor: borderColor }, err.estado === "fixed" ? styles.cardFixed : null, selected ? styles.cardSelected : null]}>
       <View style={styles.headerRow}>
@@ -346,23 +348,27 @@ function ErrorCard({
         {err.estado === "fixed" ? <Text style={styles.badgeFixed}>Fixed</Text> : null}
       </View>
       <Text style={styles.contenido}>{err.contenido}</Text>
+      {!selectMode && err.detalle && showDetalle ? (
+        <View style={styles.detalleBody}><Text style={styles.detalleText}>{err.detalle}</Text></View>
+      ) : null}
       <View style={styles.metaRow}>
         {err.telefono ? <IconText name="phone" text={err.telefono} /> : null}
         {err.patron ? <IconText name="search" text={err.patron} /> : null}
       </View>
-      {!selectMode && onEstado && (
+      {hayAcciones && (
         <View style={styles.actionsRow}>
-          {err.estado === "nuevo" ? <ActionBtn icon="flag" label="Reportar" color={colors.red} onPress={() => onEstado(err, "reportado")} /> : null}
-          {err.estado === "reportado" ? <ActionBtn icon="undo" label="Quitar reporte" color={colors.textDim} onPress={() => onEstado(err, "nuevo")} /> : null}
-          {err.estado === "fixed" ? <ActionBtn icon="undo" label="Reabrir" color={colors.textDim} onPress={() => onEstado(err, "nuevo")} /> : null}
+          {err.detalle ? <ActionBtn icon="eye" label="Detalle" color={colors.textDim} onPress={() => setShowDetalle((v) => !v)} /> : null}
+          {err.estado === "reportado" ? <ActionBtn icon="undo" label="Quitar reporte" color={colors.textDim} onPress={() => onEstado!(err, "nuevo")} /> : null}
+          {err.estado === "fixed" ? <ActionBtn icon="undo" label="Reabrir" color={colors.textDim} onPress={() => onEstado!(err, "nuevo")} /> : null}
         </View>
       )}
     </View>
   );
 }
 
-function ColaCard({ err, settled }: { err: AgentError; settled: boolean }) {
+function ColaCard({ err }: { err: AgentError }) {
   const [showConcl, setShowConcl] = useState(false);
+  const [showDetalle, setShowDetalle] = useState(false);
   const dotColor = err.cola_estado === "procesado" ? colors.green : err.cola_estado === "standby" ? YELLOW : colors.blue;
   return (
     <View style={[styles.card, { borderLeftColor: dotColor, borderLeftWidth: 3 }]}>
@@ -376,6 +382,16 @@ function ColaCard({ err, settled }: { err: AgentError; settled: boolean }) {
         {err.cola_estado === "standby" && <Text style={[styles.badgeReportado, { color: YELLOW, borderColor: YELLOW }]}>falta info</Text>}
       </View>
       <Text style={styles.contenido}>{err.contenido}</Text>
+      {err.detalle ? (
+        <View>
+          <TouchableOpacity style={styles.conclToggle} onPress={() => setShowDetalle((v) => !v)} activeOpacity={0.7}>
+            <Text style={styles.detalleToggleText}>{showDetalle ? "▾ Ocultar detalle" : "▸ Detalle"}</Text>
+          </TouchableOpacity>
+          {showDetalle && (
+            <View style={styles.detalleBody}><Text style={styles.detalleText}>{err.detalle}</Text></View>
+          )}
+        </View>
+      ) : null}
       {err.cola_resultado ? (
         <View>
           <TouchableOpacity style={styles.conclToggle} onPress={() => setShowConcl((v) => !v)} activeOpacity={0.7}>
@@ -390,7 +406,7 @@ function ColaCard({ err, settled }: { err: AgentError; settled: boolean }) {
   );
 }
 
-function ActionBtn({ icon, label, color, onPress }: { icon: "flag" | "undo"; label: string; color: string; onPress: () => void }) {
+function ActionBtn({ icon, label, color, onPress }: { icon: "undo" | "eye"; label: string; color: string; onPress: () => void }) {
   return (
     <TouchableOpacity style={[styles.actionBtn, { borderColor: color }]} onPress={onPress} activeOpacity={0.7}>
       <Icon name={icon} size={14} color={color} strokeWidth={2} />
@@ -572,6 +588,9 @@ const styles = StyleSheet.create({
   conclToggleText: { color: colors.green, fontSize: 12, fontWeight: "700" },
   conclBody: { marginTop: 6, backgroundColor: "rgba(70,177,123,0.12)", borderWidth: 1, borderColor: "rgba(70,177,123,0.3)", borderRadius: 10, padding: 11 },
   conclText: { color: colors.text, fontSize: 13, lineHeight: 19 },
+  detalleToggleText: { color: colors.textDim, fontSize: 12, fontWeight: "700" },
+  detalleBody: { marginTop: 8, backgroundColor: colors.cardAlt, borderRadius: 10, padding: 11 },
+  detalleText: { color: colors.text, fontSize: 13, lineHeight: 19 },
 
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   sheet: { backgroundColor: colors.bg, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 18, maxHeight: "90%" },

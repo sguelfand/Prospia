@@ -135,6 +135,10 @@ def run_migrations():
         conn.execute(text(
             "ALTER TABLE agent_errors ADD COLUMN IF NOT EXISTS cola_resultado TEXT"
         ))
+        # ── agent_errors: detalle (transcripción de la imagen adjunta en carga manual) ──
+        conn.execute(text(
+            "ALTER TABLE agent_errors ADD COLUMN IF NOT EXISTS detalle TEXT"
+        ))
 
         # ── monitor_settings: key de Anthropic para los asistentes IA del relevamiento ──
         conn.execute(text(
