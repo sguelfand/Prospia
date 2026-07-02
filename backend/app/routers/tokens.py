@@ -74,7 +74,10 @@ def recompute(source: str = Query("etiguel"), fecha: str | None = Query(None)):
         raise HTTPException(status_code=404, detail="source desconocido")
     f = fecha or camila_audit._hoy_ba()
     try:
-        return camila_audit.run_audit(source, f, notify=False)
+        # Solo el día vivo (hoy) gobierna oportunidades; recomputar un día pasado
+        # refresca costo pero NO resucita/sostiene oportunidades viejas.
+        return camila_audit.run_audit(source, f, notify=False,
+                                      gestionar_oportunidades=(f == camila_audit._hoy_ba()))
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"{type(e).__name__}: {e}")
 

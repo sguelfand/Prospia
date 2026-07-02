@@ -392,10 +392,13 @@ def _upsert_oportunidades(source: str, ops: list[dict]) -> int:
     return nuevas
 
 
-def _auto_resolver_inactivas(source: str, detectadas: list[dict], dias: int = 2) -> int:
+def _auto_resolver_inactivas(source: str, detectadas: list[dict], dias: int = 1) -> int:
     """Cierra solas las oportunidades abiertas que ya no vuelven a ocurrir: las que
     (a) NO se re-detectaron en el día auditado y (b) llevan > `dias` sin re-aparecer
     (ultima_vez vieja). Sin esto, un timeout puntual quedaba 'abierto' para siempre.
+    Solo lo llama la auditoría del día VIVO (`hoy`), así que 1 día limpio = resuelto
+    (antes 2, pero como los recomputes de días pasados ya no bumpean `ultima_vez`,
+    no hace falta tanto margen y el tablero refleja "lo de hoy" más rápido).
     Devuelve cuántas cerró."""
     from app.models.camila_audit import CamilaOportunidad
     from app.database import SessionLocal
@@ -460,7 +463,15 @@ def resolver_oportunidad(op_id: int, resolver: bool = True) -> bool:
 
 # ── persistencia diaria ──────────────────────────────────────────────────────
 
-def run_audit(source: str, fecha: str, notify: bool = True) -> dict:
+def run_audit(source: str, fecha: str, notify: bool = True,
+              gestionar_oportunidades: bool = True) -> dict:
+    """Audita un día. `gestionar_oportunidades`:
+    - True  → gobierna las oportunidades (abrir/cerrar). SOLO debe usarlo el día VIVO
+      (`hoy`), que es la única fuente de "qué está sin resolver AHORA".
+    - False → refresca únicamente el costo/tokens del día, sin tocar oportunidades.
+      Se usa para el recompute de días pasados (ayer/históricos): un blip viejo NO
+      debe resucitar ni sostener una oportunidad — si hoy está limpio, está resuelto.
+    """
     if source not in SOURCES:
         raise ValueError(f"source desconocido: {source}")
     day_start = datetime.strptime(fecha, "%Y-%m-%d").replace(tzinfo=_BA)
@@ -471,6 +482,7 @@ def run_audit(source: str, fecha: str, notify: bool = True) -> dict:
     from app.models.camila_audit import CamilaAudit
     from app.database import SessionLocal
     db = SessionLocal()
+    nuevas = 0
     try:
         row = db.query(CamilaAudit).filter(CamilaAudit.source == source, CamilaAudit.fecha == fecha).first()
         if not row:
@@ -481,9 +493,10 @@ def run_audit(source: str, fecha: str, notify: bool = True) -> dict:
         row.llamadas = t["llamadas"]; row.errores = t["errores"]
         row.data = json.dumps(resumen, ensure_ascii=False)
         row.generated_at = datetime.now(timezone.utc)
-        detectadas = _cap_severidad_por_monto(_detectar(resumen), t["costo_usd"])
-        nuevas = _upsert_oportunidades(source, detectadas)
-        _auto_resolver_inactivas(source, detectadas)
+        if gestionar_oportunidades:
+            detectadas = _cap_severidad_por_monto(_detectar(resumen), t["costo_usd"])
+            nuevas = _upsert_oportunidades(source, detectadas)
+            _auto_resolver_inactivas(source, detectadas)
         row.oportunidades = len(get_oportunidades(source))
         db.commit()
     finally:
@@ -798,17 +811,23 @@ def start():
         first = True
         while True:
             hoy = _hoy_ba()
+            dia_nuevo = (last_day != hoy)
             for source in SOURCES:
                 try:
-                    run_audit(source, hoy, notify=False)
+                    # El día VIVO es la única fuente de oportunidades (qué está sin
+                    # resolver ahora). El push del resumen sale 1×/día, al cambiar el día.
+                    run_audit(source, hoy, notify=dia_nuevo, gestionar_oportunidades=True)
                 except Exception as e:
                     print(f"[CAMILA-AUDIT] {source} hoy: {type(e).__name__}: {e}")
-                if last_day != hoy:
+                if dia_nuevo:
                     try:
-                        run_audit(source, _ayer_ba(), notify=True)
+                        # Recompute de ayer = SOLO precisión de costo (las trajectories
+                        # recién se asientan). NO toca oportunidades: un blip de ayer no
+                        # debe resucitar/sostener una vieja si hoy ya está limpio.
+                        run_audit(source, _ayer_ba(), notify=False, gestionar_oportunidades=False)
                     except Exception as e:
                         print(f"[CAMILA-AUDIT] {source} ayer: {type(e).__name__}: {e}")
-                if first or last_day != hoy:
+                if first or dia_nuevo:
                     try:
                         backfill_mensual(source, meses=6)
                     except Exception as e:
