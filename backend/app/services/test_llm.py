@@ -138,6 +138,38 @@ def _tok(txt: str) -> int:
     return max(1, len(txt or "") // 4)
 
 
+OUT_POR_TURNO = 200  # tokens de salida estimados por respuesta de Camila
+
+
+def _costo_para_prices(sys_tok: int, guion_tok: int, total_turnos: int, n_esc: int,
+                       pin: float, pout: float, pcr: float, pcw: float,
+                       con_cache: bool = True) -> float:
+    """Costo estimado (USD) de correr n_esc escenarios (total_turnos turnos) con un
+    system prompt de sys_tok tokens, dada la rate-card por token de UN motor."""
+    if con_cache and pcr > 0:
+        input_full = sys_tok * n_esc                            # 1er turno de c/escenario: cache-write
+        input_cached = sys_tok * max(0, total_turnos - n_esc)   # resto: cache-read
+        costo_in = input_full * pcw + input_cached * pcr
+    else:
+        costo_in = sys_tok * total_turnos * pin
+    costo_in += guion_tok * pin
+    costo_out = total_turnos * OUT_POR_TURNO * pout
+    return costo_in + costo_out
+
+
+def _turnos_de(escs) -> tuple[int, int]:
+    """(total_turnos, guion_tok) de una lista de escenarios."""
+    total_turnos = 0
+    guion_tok = 0
+    for e in escs:
+        try:
+            total_turnos += max(1, len(json.loads(e.guion or "[]")))
+        except Exception:
+            total_turnos += 1
+        guion_tok += _tok(e.guion)
+    return total_turnos, guion_tok
+
+
 def estimar(source: str, motor_ids: list[int], escenario_ids: list[int],
             con_cache: bool = True) -> dict:
     """Costo estimado ANTES de correr. Conservador. Devuelve total + desglose por motor.
@@ -153,33 +185,15 @@ def estimar(source: str, motor_ids: list[int], escenario_ids: list[int],
         escs = db.query(TestLlmEscenario).filter(TestLlmEscenario.id.in_(escenario_ids)).all()
     finally:
         db.close()
-    OUT_POR_TURNO = 200  # tokens de salida estimados por respuesta de Camila
     por_motor = []
     total = 0.0
-    total_turnos = 0
-    for e in escs:
-        try:
-            turnos = len(json.loads(e.guion or "[]"))
-        except Exception:
-            turnos = 1
-        total_turnos += max(1, turnos)
-    # tokens de guion (chico) sumados
-    guion_tok = sum(_tok(e.guion) for e in escs)
+    total_turnos, guion_tok = _turnos_de(escs)
+    n_esc = len(escs)
     for m in motores:
-        # input: por cada turno se re-manda system + conversación creciente.
-        # Aproximación: system × (turnos, con cache-read del 2º en adelante) + guion.
-        if con_cache and m.precio_cache_read > 0:
-            # 1er turno de cada escenario paga system full (write); resto cache-read
-            input_full = sys_tok * len(escs)
-            input_cached = sys_tok * (total_turnos - len(escs))
-            costo_in = input_full * m.precio_cache_write + input_cached * m.precio_cache_read
-        else:
-            costo_in = sys_tok * total_turnos * m.precio_in
-        costo_in += guion_tok * m.precio_in
-        costo_out = total_turnos * OUT_POR_TURNO * m.precio_out
-        c = costo_in + costo_out
-        por_motor.append({"motor_id": m.id, "nombre": m.nombre,
-                          "costo_usd": round(c, 4)})
+        c = _costo_para_prices(sys_tok, guion_tok, total_turnos, n_esc,
+                               m.precio_in, m.precio_out, m.precio_cache_read,
+                               m.precio_cache_write, con_cache)
+        por_motor.append({"motor_id": m.id, "nombre": m.nombre, "costo_usd": round(c, 4)})
         total += c
     # juez: 1 llamada Anthropic sonnet por (motor × escenario)
     juez_calls = len(motores) * len(escs)
@@ -640,4 +654,150 @@ def get_corrida(corrida_id: int) -> dict | None:
         return out
     finally:
         db.close()
+
+
+# ── catálogo OpenRouter (ranking por uso + precios + costo de testear) ─────────
+
+_OR_MODELS = "https://openrouter.ai/api/v1/models"
+_OR_RANKINGS = "https://openrouter.ai/api/v1/datasets/rankings-daily"
+_catalog_cache: dict = {"ts": 0.0, "data": None}
+_CATALOG_TTL = 3600  # 1h
+
+
+def _norm_slug(slug: str) -> str:
+    """Clave normalizada para matchear el permaslug del ranking (con fecha y orden de
+    palabras distinto) contra el id del catálogo. Ej: 'anthropic/claude-4.6-sonnet-20260217'
+    y 'anthropic/claude-sonnet-4.6' → misma clave."""
+    import re
+    s = slug.split(":")[0]
+    prov, _, name = s.partition("/") if "/" in s else ("", "", s)
+    name = re.sub(r"-?\d{6,8}$", "", name)          # saca sufijo de fecha
+    toks = [t for t in re.split(r"[-_.\s]", name) if t]
+    return f"{prov.lower()}/" + " ".join(sorted(t.lower() for t in toks))
+
+
+def _openrouter_catalog(force: bool = False) -> list[dict]:
+    """Catálogo de OpenRouter (modelos con precios) enriquecido con ranking por uso y
+    un elo promedio de benchmarks. Cacheado 1h. Metadata pura: NO consume tokens."""
+    import time as _t
+    now = _t.time()
+    if not force and _catalog_cache["data"] and now - _catalog_cache["ts"] < _CATALOG_TTL:
+        return _catalog_cache["data"]
+    from app.services.test_llm_keys import provider_key
+    key = provider_key("openrouter")
+    if not key:
+        raise RuntimeError("falta la API key de OpenRouter")
+    hdr = {"Authorization": f"Bearer {key}", "User-Agent": _UA}
+    models = requests.get(_OR_MODELS, headers=hdr, timeout=30).json().get("data", [])
+
+    # ranking por uso (top 50/día) → posición por clave normalizada
+    pop: dict[str, dict] = {}
+    try:
+        rows = requests.get(_OR_RANKINGS, headers=hdr, timeout=30).json().get("data", [])
+        agg: dict[str, float] = {}
+        for r in rows:
+            slug = r.get("model_permaslug")
+            if not slug or slug == "other":
+                continue
+            k = _norm_slug(slug)
+            agg[k] = agg.get(k, 0.0) + float(r.get("total_tokens") or 0)
+        for i, (k, t) in enumerate(sorted(agg.items(), key=lambda x: -x[1]), 1):
+            pop[k] = {"rank": i, "tokens": t}
+    except Exception as e:
+        print(f"[TEST-LLM] rankings: {type(e).__name__}: {e}")
+
+    def _f(x) -> float:
+        try:
+            return float(x)
+        except Exception:
+            return 0.0
+
+    out = []
+    for m in models:
+        p = m.get("pricing") or {}
+        k = _norm_slug(m["id"])
+        popd = pop.get(k)
+        elo = None
+        bm = (m.get("benchmarks") or {}).get("design_arena")
+        if isinstance(bm, list) and bm:
+            elos = [b.get("elo") for b in bm if isinstance(b, dict) and b.get("elo")]
+            if elos:
+                elo = round(sum(elos) / len(elos))
+        out.append({
+            "id": m["id"], "name": m.get("name") or m["id"],
+            "precio_in": _f(p.get("prompt")), "precio_out": _f(p.get("completion")),
+            "precio_cache_read": _f(p.get("input_cache_read")),
+            "precio_cache_write": _f(p.get("input_cache_write")),
+            "context": m.get("context_length"),
+            "rank_uso": popd["rank"] if popd else None,
+            "tokens_uso": popd["tokens"] if popd else None,
+            "elo": elo,
+        })
+    _catalog_cache["data"] = out
+    _catalog_cache["ts"] = now
+    return out
+
+
+def catalogo(source: str, escenario_ids: list[int] | None = None, filtro: str = "",
+             orden: str = "rank", limit: int = 80, con_cache: bool = True) -> dict:
+    """Catálogo OpenRouter con el COSTO DE TESTEAR cada modelo para los escenarios
+    elegidos (o todos los activos si no se pasan). Ordena por 'rank' (uso), 'costo',
+    'precio_in' o 'nombre'. Solo modelos con precio > 0 (descarta gratis/imagen)."""
+    from app.database import SessionLocal
+    from app.models.test_llm import TestLlmEscenario
+    cat = _openrouter_catalog()
+    env = _build_envelope(source)
+    sys_tok = _tok(env["system"])
+    db = SessionLocal()
+    try:
+        q = db.query(TestLlmEscenario)
+        if escenario_ids:
+            q = q.filter(TestLlmEscenario.id.in_(escenario_ids))
+        else:
+            q = q.filter(TestLlmEscenario.activo == True)  # noqa: E712
+        escs = q.all()
+    finally:
+        db.close()
+    total_turnos, guion_tok = _turnos_de(escs)
+    n_esc = len(escs)
+
+    items = []
+    fl = (filtro or "").strip().lower()
+    for c in cat:
+        if fl and fl not in c["id"].lower() and fl not in c["name"].lower():
+            continue
+        if c["precio_in"] <= 0 and c["precio_out"] <= 0:  # gratis o sin precio → fuera
+            continue
+        costo = _costo_para_prices(sys_tok, guion_tok, total_turnos, n_esc,
+                                   c["precio_in"], c["precio_out"],
+                                   c["precio_cache_read"], c["precio_cache_write"], con_cache)
+        items.append({**c, "costo_test_usd": round(costo, 5)})
+
+    if orden == "costo":
+        items.sort(key=lambda x: x["costo_test_usd"])
+    elif orden == "precio_in":
+        items.sort(key=lambda x: x["precio_in"])
+    elif orden == "nombre":
+        items.sort(key=lambda x: x["name"].lower())
+    else:  # rank (uso) — los sin rank al final
+        items.sort(key=lambda x: (x["rank_uso"] is None, x["rank_uso"] or 9999))
+
+    return {"source": source, "escenarios": n_esc, "turnos_totales": total_turnos,
+            "system_tokens": sys_tok, "total": len(items), "items": items[:limit]}
+
+
+def agregar_desde_catalogo(model_id: str) -> dict:
+    """Crea un motor de OpenRouter a partir de un modelo del catálogo (precios per-token
+    ya vienen listos). Usa la key compartida de OpenRouter (api_key vacía)."""
+    cat = _openrouter_catalog()
+    m = next((x for x in cat if x["id"] == model_id), None)
+    if not m:
+        raise ValueError("modelo no encontrado en el catálogo")
+    return guardar_motor({
+        "nombre": f"{m['name']} (OpenRouter)", "provider": "openrouter",
+        "model_id": m["id"], "base_url": "https://openrouter.ai/api/v1", "api_key": None,
+        "precio_in": m["precio_in"], "precio_out": m["precio_out"],
+        "precio_cache_read": m["precio_cache_read"], "precio_cache_write": m["precio_cache_write"],
+        "notas": f"Alta desde catálogo OpenRouter. Uso rank {m.get('rank_uso') or '—'}.",
+    })
 

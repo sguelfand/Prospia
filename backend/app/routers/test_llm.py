@@ -65,6 +65,18 @@ class SwitchIn(BaseModel):
     on: bool
 
 
+class CatalogoIn(BaseModel):
+    source: str = "etiguel"
+    escenario_ids: list[int] = []
+    filtro: str = ""
+    orden: str = "rank"   # rank | costo | precio_in | nombre
+    limit: int = 80
+
+
+class DesdeCatalogoIn(BaseModel):
+    model_id: str
+
+
 @router.get("/estado")
 def estado(source: str = Query("etiguel")):
     """Panel: gate on/off, sobre (fidelidad), keys por proveedor, conteos."""
@@ -137,6 +149,29 @@ def set_key(body: KeyIn):
     if not test_llm_keys.set_provider_key(body.provider, body.key):
         raise HTTPException(status_code=400, detail="proveedor sin slot de key")
     return {"ok": True, "keys": test_llm_keys.key_status()}
+
+
+# ── catálogo OpenRouter (ranking + precios + costo de testear) ──
+@router.post("/catalogo")
+def catalogo(body: CatalogoIn):
+    """Catálogo OpenRouter con ranking por uso, precios y el costo estimado de testear
+    cada modelo para los escenarios elegidos. No consume tokens (metadata + estimación)."""
+    try:
+        return test_llm.catalogo(body.source, body.escenario_ids, body.filtro,
+                                 body.orden, body.limit)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/motores-desde-catalogo")
+def motor_desde_catalogo(body: DesdeCatalogoIn):
+    """Da de alta un motor de OpenRouter desde el catálogo (precios ya cargados)."""
+    try:
+        return test_llm.agregar_desde_catalogo(body.model_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"{type(e).__name__}: {e}")
 
 
 # ── estimar / correr / resultados ──

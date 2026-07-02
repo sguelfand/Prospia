@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronDown, Cpu, DollarSign, Loader2, Play, Plus, RefreshCw, ShieldAlert, Trash2, Zap } from 'lucide-react'
+import { AlertTriangle, ChevronDown, Cpu, DollarSign, Loader2, Play, Plus, RefreshCw, Search, ShieldAlert, TrendingUp, Trash2, Zap } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
 import { DashboardGrid, Widget, buildLayouts } from '../components/DashboardGrid'
@@ -276,6 +276,9 @@ export default function TestLlm() {
         )}
       </section>
 
+      {/* Catálogo OpenRouter: ranking + precios + costo de testear */}
+      <CatalogoOpenRouter selEsc={[...selEsc]} onAdded={cargar} />
+
       {/* Escenarios (detalle colapsable) */}
       <section className="bg-card border border-line rounded-2xl p-6">
         <button onClick={() => setShowEsc(v => !v)} className="w-full flex items-center justify-between text-sm font-bold text-ink">
@@ -476,5 +479,114 @@ function MotorForm({ onSaved }: { onSaved: () => void }) {
         {busy ? 'Guardando…' : 'Agregar motor'}
       </button>
     </div>
+  )
+}
+
+/* ── Catálogo OpenRouter: ranking por uso + precios + costo de testear ── */
+type CatModel = {
+  id: string; name: string; precio_in: number; precio_out: number
+  precio_cache_read: number; precio_cache_write: number
+  context: number | null; rank_uso: number | null; tokens_uso: number | null
+  elo: number | null; costo_test_usd: number
+}
+type Catalogo = { escenarios: number; turnos_totales: number; system_tokens: number; total: number; items: CatModel[] }
+
+function CatalogoOpenRouter({ selEsc, onAdded }: { selEsc: number[]; onAdded: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [data, setData] = useState<Catalogo | null>(null)
+  const [filtro, setFiltro] = useState('')
+  const [orden, setOrden] = useState('rank')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const [addId, setAddId] = useState('')
+
+  async function cargar() {
+    setBusy(true); setErr('')
+    try {
+      setData(await api.post<Catalogo>('/admin/test-llm/catalogo', {
+        source: SOURCE, escenario_ids: selEsc, filtro, orden, limit: 80,
+      }))
+    } catch (e) { setErr((e as Error).message) } finally { setBusy(false) }
+  }
+  useEffect(() => { if (open) cargar() }, [open, orden])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function agregar(id: string) {
+    setAddId(id); setErr('')
+    try { await api.post('/admin/test-llm/motores-desde-catalogo', { model_id: id }); onAdded() }
+    catch (e) { setErr((e as Error).message) } finally { setAddId('') }
+  }
+
+  const m6 = (n: number) => `$${(n * 1e6).toFixed(2)}`
+
+  return (
+    <section className="bg-card border border-line rounded-2xl p-6 space-y-3">
+      <button onClick={() => setOpen(v => !v)} className="w-full flex items-center gap-2 text-sm font-bold text-ink">
+        <TrendingUp size={16} className="text-primary" />
+        Catálogo OpenRouter — ranking, precios y costo de testear
+        <ChevronDown size={16} className={`ml-auto transition-transform ${open ? '' : '-rotate-90'}`} />
+      </button>
+      {open && (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 border border-line rounded-lg px-2 flex-1 min-w-[180px]">
+              <Search size={13} className="text-muted" />
+              <input value={filtro} onChange={e => setFiltro(e.target.value)} onKeyDown={e => e.key === 'Enter' && cargar()}
+                placeholder="filtrar (claude, gemini, deepseek…)" className="bg-transparent text-xs py-1.5 text-ink placeholder:text-muted flex-1 outline-none" />
+            </div>
+            <select value={orden} onChange={e => setOrden(e.target.value)} className="text-xs bg-transparent border border-line rounded-lg px-2 py-1.5 text-ink">
+              <option value="rank">Más usados</option>
+              <option value="costo">Más barato de testear</option>
+              <option value="precio_in">Precio input</option>
+              <option value="nombre">Nombre</option>
+            </select>
+            <button onClick={cargar} disabled={busy} className="flex items-center gap-1 text-xs font-semibold border border-line text-muted rounded-lg px-2.5 py-1.5 hover:text-ink disabled:opacity-50">
+              {busy ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Buscar
+            </button>
+          </div>
+          {data && (
+            <p className="text-[11px] text-muted">
+              "Costo test" = correr los <b>{data.escenarios}</b> escenarios seleccionados arriba
+              ({data.turnos_totales} turnos, prompt ~{data.system_tokens.toLocaleString()} tokens) en ese modelo.
+              {' '}{data.total} modelos con precio.
+            </p>
+          )}
+          {err && <p className="text-xs text-red-500">{err}</p>}
+          <div className="overflow-auto max-h-[28rem]">
+            <table className="w-full text-[11px]">
+              <thead className="text-muted text-left sticky top-0 bg-card">
+                <tr>
+                  <th className="py-1 pr-2">Modelo</th>
+                  <th className="py-1 px-2">Uso</th>
+                  <th className="py-1 px-2 text-right">in $/M</th>
+                  <th className="py-1 px-2 text-right">out $/M</th>
+                  <th className="py-1 px-2 text-right">Costo test</th>
+                  <th className="py-1 pl-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {data?.items.map(m => (
+                  <tr key={m.id} className="border-t border-line">
+                    <td className="py-1.5 pr-2">
+                      <span className="text-ink font-medium">{m.name}</span>
+                      <span className="block text-muted font-mono">{m.id}</span>
+                    </td>
+                    <td className="py-1.5 px-2 text-muted">{m.rank_uso ? `#${m.rank_uso}` : '—'}</td>
+                    <td className="py-1.5 px-2 text-right text-ink">{m6(m.precio_in)}</td>
+                    <td className="py-1.5 px-2 text-right text-ink">{m6(m.precio_out)}</td>
+                    <td className="py-1.5 px-2 text-right font-semibold text-primary">{money(m.costo_test_usd)}</td>
+                    <td className="py-1.5 pl-2 text-right">
+                      <button onClick={() => agregar(m.id)} disabled={addId === m.id} title="Agregar como motor"
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold border border-primary/50 text-primary rounded px-1.5 py-1 hover:bg-primary/10 disabled:opacity-50">
+                        {addId === m.id ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </section>
   )
 }
