@@ -31,8 +31,16 @@ DIAS_TOPE = 7                   # tope de respaldo: proponer igual 1×/semana si
 MARKER_START = "<!-- APRENDIZAJES_NEGOCIO:START (Especialista Negocio - no editar a mano) -->"
 MARKER_END = "<!-- APRENDIZAJES_NEGOCIO:END -->"
 
-# Agentes por source (id del agente en openclaw.json cuyo systemPromptOverride es el de Camila).
+# Sources activos (agente de Camila por cada uno).
 _AGENT_ID = {"etiguel": "etiguel"}
+
+# Desde el upgrade de OpenClaw 2026.6.11 (1/7) el prompt de Camila NO vive más en
+# agents.list[].systemPromptOverride (clave eliminada del schema) sino en un archivo
+# bootstrap del workspace: workspace-<source>/AGENTS.md. Se lee vía /fs/read y se
+# escribe entero vía la op `workspace-file` de /camila-config (auto-backup + restart).
+def _agents_md_path(source: str) -> str:
+    """Path del AGENTS.md relativo a ~/.openclaw (para la op workspace-file)."""
+    return f"workspace-{source}/AGENTS.md"
 
 
 # ── pendientes / estado ───────────────────────────────────────────────────────
@@ -129,7 +137,7 @@ def _prompt_base(source: str) -> str:
     reescribimos nosotros). Sirve de contexto para no duplicar/contradecir lo que
     ya está en el prompt base. "" si no se puede leer (cae al comportamiento viejo)."""
     try:
-        _, prompt, _ = _leer_prompt(source)
+        prompt = _leer_prompt(source)
     except Exception as e:
         print(f"[CAMILA-APRENDIZAJE] no pude leer prompt base: {type(e).__name__}: {e}")
         return ""
@@ -242,19 +250,18 @@ def _src_cfg(source: str):
     return cfg["base"], cfg["token_fn"]()
 
 
-def _leer_prompt(source: str) -> tuple[int, str, dict]:
-    """Devuelve (idx del agente en agents.list, systemPromptOverride actual, cfg)."""
+def _leer_prompt(source: str) -> str:
+    """Devuelve el prompt actual de Camila (contenido de workspace-<source>/AGENTS.md)."""
     base, token = _src_cfg(source)
-    r = requests.get(f"{base}/fs/read", params={"path": ".openclaw/openclaw.json", "max_bytes": 5_000_000},
+    # /fs/read es relativo a ~ (/home/ubuntu); el workspace vive bajo .openclaw/.
+    r = requests.get(f"{base}/fs/read",
+                     params={"path": f".openclaw/{_agents_md_path(source)}", "max_bytes": 5_000_000},
                      headers={"User-Agent": _UA, "X-Deploy-Token": token}, timeout=30)
     r.raise_for_status()
-    cfg = json.loads(r.json().get("content", "{}"))
-    lista = cfg.get("agents", {}).get("list", [])
-    agente_id = _AGENT_ID.get(source, source)
-    for i, a in enumerate(lista):
-        if a.get("id") == agente_id:
-            return i, (a.get("systemPromptOverride") or ""), cfg
-    raise RuntimeError(f"no encontré el agente '{agente_id}' en openclaw.json")
+    data = r.json()
+    if data.get("content") is None:
+        raise RuntimeError(f"no pude leer AGENTS.md de '{source}': {str(data)[:200]}")
+    return data["content"]
 
 
 def _upsert_seccion(prompt: str, bloque: str) -> str:
@@ -267,17 +274,18 @@ def _upsert_seccion(prompt: str, bloque: str) -> str:
 
 
 def aplicar_a_camila(source: str, bloque: str) -> dict:
-    """Inserta/reemplaza la sección de aprendizajes en el prompt de Camila vía
-    /camila-config (config-set: auto-backupea openclaw.json y reinicia el gateway)."""
-    idx, prompt_actual, _ = _leer_prompt(source)
+    """Inserta/reemplaza la sección de aprendizajes en el prompt de Camila (AGENTS.md
+    del workspace) y lo reescribe entero vía /camila-config (op workspace-file:
+    auto-backupea el archivo anterior y reinicia el gateway)."""
+    prompt_actual = _leer_prompt(source)
     nuevo = _upsert_seccion(prompt_actual, bloque)
     base, token = _src_cfg(source)
     r = requests.post(
         f"{base}/camila-config",
         headers={"User-Agent": _UA, "X-Deploy-Token": token, "Content-Type": "application/json"},
-        json={"ops": [{"type": "config-set",
-                       "path": f"agents.list.{idx}.systemPromptOverride",
-                       "value": nuevo}]},
+        json={"ops": [{"type": "workspace-file",
+                       "path": _agents_md_path(source),
+                       "content": nuevo}]},
         timeout=40,
     )
     r.raise_for_status()

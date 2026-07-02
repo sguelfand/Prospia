@@ -104,7 +104,7 @@ def auditar(source: str = "etiguel") -> dict:
     from app.database import SessionLocal
     from app.models.camila_revision import CamilaPromptAudit
     try:
-        _, prompt, _ = _leer_prompt(source)
+        prompt = _leer_prompt(source)
     except Exception as e:
         return {"ok": False, "motivo": "no_pude_leer_prompt", "error": f"{type(e).__name__}: {e}"}
     if not (prompt or "").strip():
