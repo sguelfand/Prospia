@@ -1,4 +1,4 @@
-import { AlertTriangle, BarChart2, ChevronDown, Cpu, DollarSign, Loader2, MessageSquare, Play, Plus, RefreshCw, Search, ShieldAlert, TrendingUp, Trash2, X, Zap } from 'lucide-react'
+import { AlertTriangle, BarChart2, ChevronDown, Cpu, DollarSign, Loader2, MessageSquare, Pencil, Play, Plus, RefreshCw, Search, ShieldAlert, TrendingUp, Trash2, X, Zap } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
 import { DashboardGrid, Widget, buildLayouts } from '../components/DashboardGrid'
@@ -68,6 +68,7 @@ export default function TestLlm() {
   const [busy, setBusy] = useState(false)
   const [showMotorForm, setShowMotorForm] = useState(false)
   const [showEsc, setShowEsc] = useState(false)
+  const [editEsc, setEditEsc] = useState<number | 'nuevo' | null>(null)
   const [transcript, setTranscript] = useState<Resultado | null>(null)
   const [runId, setRunId] = useState<number | null>(null)   // corrida en curso (polling en vivo)
   const [vivo, setVivo] = useState<Corrida | null>(null)    // último snapshot polleado
@@ -372,20 +373,36 @@ export default function TestLlm() {
       {/* Catálogo OpenRouter: ranking + precios + costo de testear */}
       <CatalogoOpenRouter selEsc={[...selEsc]} onAdded={cargar} />
 
-      {/* Escenarios (detalle colapsable) */}
+      {/* Banco de escenarios — editable (crear / modificar / borrar) */}
       <section className="bg-card border border-line rounded-2xl p-6">
-        <button onClick={() => setShowEsc(v => !v)} className="w-full flex items-center justify-between text-sm font-bold text-ink">
-          Banco de escenarios ({escenarios.length})
-          <ChevronDown size={16} className={`transition-transform ${showEsc ? '' : '-rotate-90'}`} />
-        </button>
+        <div className="flex items-center justify-between gap-3">
+          <button onClick={() => setShowEsc(v => !v)} className="flex items-center gap-2 text-sm font-bold text-ink">
+            Banco de escenarios ({escenarios.length})
+            <ChevronDown size={16} className={`transition-transform ${showEsc ? '' : '-rotate-90'}`} />
+          </button>
+          {showEsc && (
+            <button onClick={() => setEditEsc('nuevo')} className="flex items-center gap-1 text-xs font-semibold border border-primary/50 text-primary rounded-lg px-2.5 py-1.5 hover:bg-primary/10">
+              <Plus size={13} /> Nuevo escenario
+            </button>
+          )}
+        </div>
         {showEsc && (
           <div className="mt-4 space-y-2">
+            {editEsc === 'nuevo' && <EscenarioForm onSaved={() => { setEditEsc(null); cargar() }} onCancel={() => setEditEsc(null)} />}
             {escenarios.map(e => (
-              <div key={e.id} className="border border-line rounded-lg px-3 py-2 text-xs">
-                <div className="font-semibold text-ink">{e.nombre} <span className="text-muted font-normal">· {e.caso_uso}</span></div>
-                <div className="text-muted">{e.descripcion}</div>
-                <div className="text-ink/70 mt-1 font-mono">{e.guion.map((g, i) => `[${i + 1}] ${g}`).join('  ')}</div>
-              </div>
+              editEsc === e.id ? (
+                <EscenarioForm key={e.id} esc={e} onSaved={() => { setEditEsc(null); cargar() }} onCancel={() => setEditEsc(null)} />
+              ) : (
+                <div key={e.id} className="border border-line rounded-lg px-3 py-2 text-xs flex items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-ink">{e.nombre} <span className="text-muted font-normal">· {e.caso_uso}</span>{!e.activo && <span className="ml-1 text-[10px] text-muted border border-line rounded px-1">inactivo</span>}</div>
+                    {e.descripcion && <div className="text-muted">{e.descripcion}</div>}
+                    <div className="text-ink/70 mt-1 font-mono text-[11px]">{e.guion.map((g, i) => `[${i + 1}] ${g}`).join('  ')}</div>
+                  </div>
+                  <button onClick={() => setEditEsc(e.id)} className="text-muted hover:text-primary shrink-0" title="Editar"><Pencil size={13} /></button>
+                  <button onClick={() => { if (confirm(`¿Borrar escenario "${e.nombre}"?`)) api.delete(`/admin/test-llm/escenarios/${e.id}`).then(cargar) }} className="text-muted hover:text-red-500 shrink-0" title="Borrar"><Trash2 size={13} /></button>
+                </div>
+              )
             ))}
           </div>
         )}
@@ -665,6 +682,73 @@ function MotorForm({ onSaved }: { onSaved: () => void }) {
       <button onClick={guardar} disabled={busy || !f.nombre || !f.model_id} className="text-xs font-semibold bg-primary text-on-primary rounded-lg px-3 py-1.5 hover:bg-primary-dark disabled:opacity-50">
         {busy ? 'Guardando…' : 'Agregar motor'}
       </button>
+    </div>
+  )
+}
+
+/* ── Form de escenario (crear / editar) ── */
+function EscenarioForm({ esc, onSaved, onCancel }: { esc?: Escenario; onSaved: () => void; onCancel: () => void }) {
+  const [nombre, setNombre] = useState(esc?.nombre || '')
+  const [caso, setCaso] = useState(esc?.caso_uso || '')
+  const [desc, setDesc] = useState(esc?.descripcion || '')
+  const [guion, setGuion] = useState<string[]>(esc?.guion?.length ? [...esc.guion] : [''])
+  const [tool, setTool] = useState((esc?.esperado?.tool as string) || '')
+  const [conducta, setConducta] = useState((esc?.esperado?.conducta as string) || '')
+  const [activo, setActivo] = useState(esc?.activo ?? true)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  const setTurno = (i: number, v: string) => setGuion(g => g.map((x, j) => (j === i ? v : x)))
+
+  async function guardar() {
+    setBusy(true); setErr('')
+    const esperado: Record<string, string> = {}
+    if (tool.trim()) esperado.tool = tool.trim()
+    if (conducta.trim()) esperado.conducta = conducta.trim()
+    const base = (nombre.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 44)) || 'escenario'
+    const body = {
+      slug: esc?.slug || `${base}_${Math.random().toString(36).slice(2, 5)}`,
+      nombre: nombre.trim(), caso_uso: caso.trim(), descripcion: desc.trim(),
+      guion: guion.map(g => g.trim()).filter(Boolean),
+      esperado, activo, orden: esc?.orden ?? 99,
+    }
+    try {
+      if (esc) await api.put(`/admin/test-llm/escenarios/${esc.id}`, body)
+      else await api.post('/admin/test-llm/escenarios', body)
+      onSaved()
+    } catch (e) { setErr((e as Error).message) } finally { setBusy(false) }
+  }
+
+  const inp = 'w-full text-xs bg-transparent border border-line rounded-lg px-2.5 py-1.5 text-ink placeholder:text-muted'
+  return (
+    <div className="border border-primary/40 rounded-xl p-4 space-y-2 bg-primary/5">
+      <div className="text-[11px] font-semibold text-primary">{esc ? `Editar: ${esc.nombre}` : 'Nuevo escenario'}</div>
+      <input className={inp} placeholder="Nombre del escenario" value={nombre} onChange={e => setNombre(e.target.value)} />
+      <input className={inp} list="casos-uso" placeholder="Caso de uso (prospeccion, consulta, rechazo, interesado…)" value={caso} onChange={e => setCaso(e.target.value)} />
+      <textarea className={`${inp} resize-none`} rows={2} placeholder="Descripción (qué representa este escenario)" value={desc} onChange={e => setDesc(e.target.value)} />
+      <div>
+        <div className="text-[11px] text-muted mb-1">Guion — mensajes del cliente, uno por turno:</div>
+        {guion.map((g, i) => (
+          <div key={i} className="flex items-center gap-1 mb-1">
+            <span className="text-[10px] text-muted w-5 shrink-0">[{i + 1}]</span>
+            <input className={inp} placeholder={`Mensaje ${i + 1} del cliente`} value={g} onChange={e => setTurno(i, e.target.value)} />
+            {guion.length > 1 && <button onClick={() => setGuion(gg => gg.filter((_, j) => j !== i))} className="text-muted hover:text-red-500 shrink-0"><X size={12} /></button>}
+          </div>
+        ))}
+        <button onClick={() => setGuion(g => [...g, ''])} className="text-[11px] text-primary hover:underline">+ turno</button>
+      </div>
+      <input className={inp} placeholder="Herramienta esperada (opcional: interesado, no_interesa, escalar_consulta, agendar_contacto, redireccionar)" value={tool} onChange={e => setTool(e.target.value)} />
+      <textarea className={`${inp} resize-none`} rows={2} placeholder="Conducta esperada (qué debería hacer/decir Camila) — orienta al juez" value={conducta} onChange={e => setConducta(e.target.value)} />
+      <label className="flex items-center gap-2 text-xs text-ink cursor-pointer"><input type="checkbox" checked={activo} onChange={e => setActivo(e.target.checked)} /> Activo (entra en las comparaciones)</label>
+      {err && <p className="text-[11px] text-red-500">{err}</p>}
+      <div className="flex gap-2 pt-1">
+        <button onClick={guardar} disabled={busy || !nombre.trim() || guion.every(g => !g.trim())} className="text-xs font-semibold bg-primary text-on-primary rounded-lg px-3 py-1.5 hover:bg-primary-dark disabled:opacity-50">{busy ? 'Guardando…' : 'Guardar'}</button>
+        <button onClick={onCancel} className="text-xs font-semibold border border-line text-muted rounded-lg px-3 py-1.5 hover:text-ink">Cancelar</button>
+      </div>
+      <datalist id="casos-uso">
+        {['prospeccion', 'lead', 'recontacto', 'inbound', 'consulta', 'callback', 'redireccion', 'rechazo', 'interesado', 'derivacion', 'cotizacion'].map(c => <option key={c} value={c} />)}
+      </datalist>
     </div>
   )
 }
