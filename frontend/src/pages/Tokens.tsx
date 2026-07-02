@@ -53,7 +53,15 @@ type Conv = {
 type MirrorMensaje = { id: number; direccion: string; texto: string; fecha: string }
 type DiaDetalle = { fecha: string; totales: Totales; por_modelo: Record<string, { tokens: number; costo_usd: number; llamadas: number }>; conversaciones?: Conv[]; top_conversaciones?: Conv[]; n_conversaciones: number }
 type Ultimo = DiaDetalle
-type DiaTrend = { fecha: string; costo_usd: number; costo_mensajes: number; costo_errores: number }
+type DiaTrend = { fecha: string; costo_usd: number; costo_mensajes: number; costo_errores: number; costo_interno?: number }
+
+// Series apilables del gráfico "Costos diarios" (Sebi las prende/apaga con tildes).
+type SerieKey = 'mensajes' | 'errores' | 'interno'
+const SERIES_DIA: { key: SerieKey; label: string; color: string; get: (d: DiaTrend) => number }[] = [
+  { key: 'mensajes', label: 'Mensajes', color: '#F5B23D', get: (d) => d.costo_mensajes || 0 },
+  { key: 'errores', label: 'Errores', color: '#ef4444', get: (d) => d.costo_errores || 0 },
+  { key: 'interno', label: 'Gastos internos', color: '#6CB6FF', get: (d) => d.costo_interno || 0 },
+]
 type MesTrend = { mes: string; costo_usd: number; conversaciones: number; llamadas: number; costo_por_conversacion: number }
 type Oportunidad = { id: number; tipo: string; clave: string; severidad: 'alta' | 'media' | 'baja'; titulo: string; detalle: string; estado: string; primera_vez: string | null; ultima_vez: string | null }
 type Source = { id: string; nombre: string }
@@ -97,6 +105,8 @@ export default function Tokens() {
   const [error, setError] = useState<string | null>(null)
   const [recomputando, setRecomputando] = useState(false)
   const [hoverMes, setHoverMes] = useState<number | null>(null)
+  // Series visibles del gráfico "Costos diarios" (tildes que Sebi prende/apaga).
+  const [seriesOn, setSeriesOn] = useState<Record<SerieKey, boolean>>({ mensajes: true, errores: true, interno: true })
   const [diaSel, setDiaSel] = useState<string | null>(null)   // fecha del día abierto (null = último)
   const [diaData, setDiaData] = useState<DiaDetalle | null>(null)
   const [diaLoading, setDiaLoading] = useState(false)
@@ -179,7 +189,9 @@ export default function Tokens() {
   }
 
   const u = data?.ultimo
-  const dias = data?.tendencia ?? []
+  // Merge: a cada día de Camila le sumo su costo interno (Anthropic) del mismo día.
+  const internoPorDia = apiUsage?.por_dia ?? {}
+  const dias: DiaTrend[] = (data?.tendencia ?? []).map((d) => ({ ...d, costo_interno: internoPorDia[d.fecha] ?? 0 }))
   const meses = data?.serie_mensual ?? []
   // Día mostrado: el último por defecto; o el que el usuario clickeó en el gráfico.
   const verUltimo = !diaSel || diaSel === u?.fecha
@@ -342,16 +354,21 @@ export default function Tokens() {
           </Widget>
         </div>
 
-        {/* Costo por día */}
+        {/* Costos diarios (Camila + gastos internos, apilados) */}
         <div key="costoDia">
-          <Widget id="costoDia" title="Costo de Camila por día · tocá un día" fuente="openclaw"
+          <Widget id="costoDia" title="Costos diarios · tocá un día"
             right={
-              <span className="flex items-center gap-3 text-[11px] text-muted">
-                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: '#F5B23D' }} />mensajes</span>
-                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: '#ef4444' }} />errores</span>
-              </span>
+              <div className="flex items-center gap-3 text-[11px]">
+                {SERIES_DIA.map((s) => (
+                  <label key={s.key} className="flex items-center gap-1 cursor-pointer select-none text-muted hover:text-ink">
+                    <input type="checkbox" checked={seriesOn[s.key]} className="accent-[#F5B23D] cursor-pointer"
+                      onChange={(e) => setSeriesOn((p) => ({ ...p, [s.key]: e.target.checked }))} />
+                    <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: s.color }} />{s.label}
+                  </label>
+                ))}
+              </div>
             }>
-            {dias.length === 0 ? <p className="text-sm text-muted">Sin datos.</p> : <BarrasDia dias={dias} sel={det?.fecha} onSelect={(f) => { setDiaSel(f); setConvAbierta(null) }} />}
+            {dias.length === 0 ? <p className="text-sm text-muted">Sin datos.</p> : <BarrasDia dias={dias} sel={det?.fecha} show={seriesOn} onSelect={(f) => { setDiaSel(f); setConvAbierta(null) }} />}
           </Widget>
         </div>
 
@@ -473,10 +490,12 @@ function niceMax(v: number): number {
   return step * pow
 }
 
-function BarrasDia({ dias, sel, onSelect }: { dias: DiaTrend[]; sel?: string; onSelect?: (f: string) => void }) {
+function BarrasDia({ dias, sel, onSelect, show }: { dias: DiaTrend[]; sel?: string; onSelect?: (f: string) => void; show: Record<SerieKey, boolean> }) {
   const [hi, setHi] = useState<number | null>(null)
   const W = 900, H = 300, padL = 56, padR = 14, padT = 28, padB = 50
-  const top = niceMax(Math.max(0.001, ...dias.map((d) => d.costo_usd)))
+  const activas = SERIES_DIA.filter((s) => show[s.key])
+  const totalDia = (d: DiaTrend) => activas.reduce((acc, s) => acc + s.get(d), 0)
+  const top = niceMax(Math.max(0.001, ...dias.map(totalDia)))
   const n = dias.length
   const slot = (W - padL - padR) / n
   const bw = Math.min(36, slot * 0.6)
@@ -489,9 +508,10 @@ function BarrasDia({ dias, sel, onSelect }: { dias: DiaTrend[]; sel?: string; on
       {h && (
         <div className="absolute top-0 right-2 bg-app border border-line rounded-lg px-3 py-2 text-xs z-10 shadow whitespace-nowrap">
           <div className="font-semibold text-ink mb-0.5">{h.fecha}</div>
-          <div className="text-muted">Total: <span className="text-ink font-medium">{usd3(h.costo_usd)}</span></div>
-          <div className="text-muted">Mensajes: <span className="font-medium" style={{ color: '#F5B23D' }}>{usd3(h.costo_mensajes)}</span></div>
-          <div className="text-muted">Errores: <span className="font-medium" style={{ color: '#ef4444' }}>{usd3(h.costo_errores)}</span></div>
+          <div className="text-muted">Total: <span className="text-ink font-medium">{usd3(totalDia(h))}</span></div>
+          {activas.map((s) => (
+            <div key={s.key} className="text-muted">{s.label}: <span className="font-medium" style={{ color: s.color }}>{usd3(s.get(h))}</span></div>
+          ))}
         </div>
       )}
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full" style={{ minHeight: 160 }}>
@@ -503,22 +523,25 @@ function BarrasDia({ dias, sel, onSelect }: { dias: DiaTrend[]; sel?: string; on
         ))}
         <line x1={padL} y1={H - padB} x2={W - padR} y2={H - padB} stroke="#243454" strokeWidth={1} />
         {dias.map((d, i) => {
-          const hMsg = (H - padB) - y(d.costo_mensajes)
-          const hErr = (H - padB) - y(d.costo_errores)
-          const yTop = y(d.costo_usd)
+          const tot = totalDia(d)
+          const yTop = y(tot)
           const isSel = sel === d.fecha
           const op = isSel ? 1 : (hi == null || hi === i ? 1 : 0.4)
+          let acc = 0  // apila de abajo hacia arriba
           return (
             <g key={d.fecha} onMouseEnter={() => setHi(i)} onMouseLeave={() => setHi(null)} onClick={() => onSelect?.(d.fecha)} style={{ cursor: 'pointer', opacity: op }}>
               {/* resaltado del día abierto */}
               {isSel && <rect x={xc(i) - slot / 2 + 2} y={padT} width={slot - 4} height={H - padT - padB} fill="#F5B23D" fillOpacity={0.08} rx={4} />}
-              {/* mensajes (ámbar, abajo) */}
-              {d.costo_mensajes > 0 && <rect x={xc(i) - bw / 2} y={(H - padB) - hMsg} width={bw} height={hMsg} fill="#F5B23D" rx={2} />}
-              {/* errores (rojo, arriba) */}
-              {d.costo_errores > 0 && <rect x={xc(i) - bw / 2} y={yTop} width={bw} height={hErr} fill="#ef4444" rx={2} />}
-              {isSel && <rect x={xc(i) - bw / 2 - 1.5} y={yTop - 1.5} width={bw + 3} height={(H - padB) - yTop + 1.5} fill="none" stroke="#F5B23D" strokeWidth={1.5} rx={3} />}
+              {/* segmentos apilados de cada serie activa */}
+              {activas.map((s) => {
+                const v = s.get(d)
+                if (v <= 0) return null
+                const y0 = y(acc); acc += v; const y1 = y(acc)
+                return <rect key={s.key} x={xc(i) - bw / 2} y={y1} width={bw} height={y0 - y1} fill={s.color} rx={2} />
+              })}
+              {isSel && tot > 0 && <rect x={xc(i) - bw / 2 - 1.5} y={yTop - 1.5} width={bw + 3} height={(H - padB) - yTop + 1.5} fill="none" stroke="#F5B23D" strokeWidth={1.5} rx={3} />}
               {/* total arriba */}
-              {d.costo_usd > 0 && <text x={xc(i)} y={yTop - 6} textAnchor="middle" fontSize={10.5} fontWeight={700} fill="#EEF3FB" fontFamily="JetBrains Mono">{usd(d.costo_usd)}</text>}
+              {tot > 0 && <text x={xc(i)} y={yTop - 6} textAnchor="middle" fontSize={10.5} fontWeight={700} fill="#EEF3FB" fontFamily="JetBrains Mono">{usd(tot)}</text>}
               {/* fecha rotada */}
               <text x={xc(i)} y={H - padB + 14} textAnchor="end" fontSize={10} fill="#8294B4" transform={`rotate(-40 ${xc(i)} ${H - padB + 14})`}>{d.fecha.slice(5)}</text>
               <rect x={xc(i) - slot / 2} y={padT} width={slot} height={H - padT - padB} fill="transparent" />

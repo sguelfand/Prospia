@@ -6,6 +6,7 @@ export type AnthUsage = {
   mes_actual: string; mes_nombre: string; dias_transcurridos: number
   total_mes: number; prev_total: number; delta_pct: number | null
   por_funcion: AnthFuncion[]; meses: AnthMes[]
+  por_dia?: Record<string, number>  // 'YYYY-MM-DD' -> costo interno del día
 }
 
 const PALETTE = ['#F5B23D', '#6CB6FF', '#5AD8A6', '#C792EA', '#FF9F7E', '#8294B4', '#E0A02E', '#9FE0FF']

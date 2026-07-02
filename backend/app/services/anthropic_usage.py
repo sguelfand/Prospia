@@ -86,12 +86,15 @@ def resumen(meses: int = 12, source: str | None = None) -> dict:
             q = q.filter(AnthropicUsage.source == source)
         rows = q.all()
         por_mes: dict[str, dict[str, float]] = {}  # 'YYYY-MM' -> funcion -> costo
+        por_dia: dict[str, float] = {}  # 'YYYY-MM-DD' -> costo total interno del día
         for r in rows:
             mes = (r.fecha or "")[:7]
             if not mes:
                 continue
             por_mes.setdefault(mes, {})
             por_mes[mes][r.funcion] = por_mes[mes].get(r.funcion, 0.0) + r.costo_usd
+            if r.fecha:
+                por_dia[r.fecha] = por_dia.get(r.fecha, 0.0) + r.costo_usd
 
         meses_ord = sorted(por_mes)[-max(1, meses):]
         serie = []
@@ -125,6 +128,7 @@ def resumen(meses: int = 12, source: str | None = None) -> dict:
             "delta_pct": delta,
             "por_funcion": por_funcion,
             "meses": serie,
+            "por_dia": {k: round(v, 4) for k, v in por_dia.items()},
         }
     finally:
         db.close()

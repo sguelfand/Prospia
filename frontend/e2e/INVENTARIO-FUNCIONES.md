@@ -140,6 +140,9 @@ observable. Sirve como registro de Pendientes/Realizados de la pantalla
 - Costos internos: hover discriminado por función → "Histórico mensual" (barras
   apiladas, panel con monto por función) y "Participación por función" (donut, panel
   con costo + % de la función)
+- **"Costos diarios"** (widget `costoDia`): barras apiladas por día = Mensajes (ámbar)
+  + Errores (rojo) + Gastos internos (Anthropic, azul). 3 tildes en el header para
+  prender/apagar cada serie; el total y la escala se recalculan con lo visible — ✅ `tokens.spec.ts`
 
 ## 14. Monitoreo / Calidad (N1)
 - Selector cliente/Etiguel + definir por defecto
