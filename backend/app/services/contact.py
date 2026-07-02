@@ -165,6 +165,12 @@ def _registrar_historial(db, prospect_id: int, tenant_id: int, tipo: str, detall
     db.add(entry)
 
 
+# Estados en los que un recontacto de cadencia YA no corresponde: el cliente
+# respondió ('en_conversacion') o el prospect llegó a un estado terminal. Si un
+# recontacto encolado llega a enviarse con el prospect en uno de estos, se aborta.
+_ESTADOS_FRENA_RECONTACTO = {"en_conversacion", "interesado", "no_le_interesa", "cancelado"}
+
+
 def contactar_prospect(prospect_id: int):
     """Corre en un thread daemon. Lee el prospect y la config del tenant.
     Lógica:
@@ -197,6 +203,17 @@ def contactar_prospect(prospect_id: int):
         ahora = datetime.now(timezone.utc)
         contacto_n = (prospect.cant_contactos or 0) + 1   # número de este intento
         es_segundo_o_mas = contacto_n >= 2
+
+        # Race guard (paridad con el webhook de Etiguel): un recontacto pudo quedar
+        # encolado (estado 'en_cola') ANTES de que el cliente respondiera; la cola
+        # drena lento (horario, delay, tope diario). Si al momento de ENVIAR el
+        # prospect ya salió de cadencia (respondió → 'en_conversacion', o pasó a un
+        # estado terminal), abortamos el recontacto para no mandarlo ENCIMA de su
+        # respuesta. Solo aplica a recontactos (2°+); el 1er contacto sale igual.
+        if es_segundo_o_mas and (prospect.estado or "") in _ESTADOS_FRENA_RECONTACTO:
+            print(f"[CONTACT] recontacto ABORTADO prospect {prospect_id}: "
+                  f"estado={prospect.estado!r} (cliente respondió / fuera de cadencia)")
+            return
 
         wa_enviado    = False
         wa_info       = ""
