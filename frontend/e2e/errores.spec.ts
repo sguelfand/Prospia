@@ -30,6 +30,8 @@ test.describe("Errores · carga manual + cola (N1)", () => {
     expect(err.estado).toBe("nuevo");
     expect(err.agente).toBe("sebi");
     expect(err.patron).toBe("manual");
+    expect(err).toHaveProperty("detalle"); // campo nuevo (transcripción de imagen); null sin imagen
+    expect(err.detalle).toBeNull();
 
     try {
       // 2) Encolar (Seleccionar → Procesar): pasa a cola_estado=pendiente y estado=reportado.
