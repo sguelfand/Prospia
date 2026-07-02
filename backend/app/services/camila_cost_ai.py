@@ -47,12 +47,33 @@ _TEMA_CACHE_KW = (
 )
 
 
+# ── Anti-repetición del tema "gpt-5.4 aparece / $0" ─────────────────────────
+# Camila está pineada a sonnet-4.6 (MODEL-GUARD) con `myclaw/gpt-5.4` de fallback.
+# Cuando sonnet timeout/falla, cae a gpt-5.4; esas llamadas suelen registrar 0
+# tokens y $0 (fallback fallido). La IA lo malinterpreta como "pricing sin
+# configurar / integración experimental" y lo flaggea (id25…). NO es un bug de
+# costo ni una oportunidad de ahorro: es el fallback esperado, y el evento de
+# fondo (timeouts de sonnet) ya lo cubren las reglas de fiabilidad.
+_TEMA_GPT_FALLBACK_KW = (
+    "gpt-5", "gpt5", "gpt 5", "gpt-4", "modelo gpt", "fallback gpt", "gpt como fallback",
+)
+
+
 def _es_tema_cache_conocido(op: dict) -> bool:
     """True si el hallazgo IA es una variante del tema cache-write/contexto-base,
     que ya está trackeado (bug de metadata OpenClaw → upgrade). Se filtra para que
     deje de re-aparecer con otro nombre cada día."""
     txt = f"{op.get('clave','')} {op.get('titulo','')} {op.get('detalle','')}".lower()
     return any(kw in txt for kw in _TEMA_CACHE_KW)
+
+
+def _es_tema_conocido_benigno(op: dict) -> bool:
+    """True si el hallazgo IA cae en un tema ya conocido y NO accionable como
+    ahorro (cache-write/contexto → upgrade; o gpt-5.4 fallback con $0). Se descarta
+    antes de guardarlo para que el tablero muestre solo lo genuinamente sin resolver."""
+    txt = f"{op.get('clave','')} {op.get('titulo','')} {op.get('detalle','')}".lower()
+    return (any(kw in txt for kw in _TEMA_CACHE_KW)
+            or any(kw in txt for kw in _TEMA_GPT_FALLBACK_KW))
 
 # Contexto fijo del análisis de costo de Camila (ver memoria de costos).
 _CONTEXTO_COSTO = (
@@ -82,6 +103,13 @@ _CONTEXTO_COSTO = (
     "ni 'priorizar cacheRetention', ni 'keep-warm ping').\n"
     "- Ir directo a Anthropic (perder el 10% off de MyClaw): +38% más caro, descartado.\n"
     "- Bajar a haiku: más caro por el cacheRead sin descuento. Descartado.\n\n"
+    "COMPORTAMIENTO ESPERADO (NO es hallazgo, NO lo reportes):\n"
+    "- Camila está pineada a sonnet-4.6 (MODEL-GUARD) con `myclaw/gpt-5.4` de FALLBACK. "
+    "Si ves gpt-5.4 (o gpt-*) en una conversación, es el fallback que salta cuando sonnet "
+    "hace timeout/falla; suele registrar 0 tokens y $0.000 (llamada de fallback fallida). "
+    "NO es un bug de pricing, ni integración experimental, ni pricing sin configurar: el "
+    "costo $0 es correcto (0 tokens). El problema de fondo (timeouts de sonnet) ya lo "
+    "cubren las reglas de fiabilidad. NO generes ningún hallazgo sobre gpt-5.4 / modelo con $0.\n\n"
     "Por lo anterior: NO generes oportunidades cuyo único remedio sea el TTL/cache 1h "
     "o cambiar de modelo. Un ratio cacheWrite≈cacheRead o 'contexto re-escrito entre "
     "turnos' NO es accionable (es estructural) → no lo reportes salvo que traigas un "
@@ -167,14 +195,14 @@ def diagnosticar(source: str = "etiguel", fecha: str | None = None, notify: bool
         ops.append({"tipo": "ia", "clave": clave, "severidad": sev,
                     "titulo": titulo[:200], "detalle": (o.get("detalle") or "")[:2000]})
 
-    # Red de seguridad: aunque el prompt le pide NO tocar el tema, la IA suele
-    # reformular el hallazgo de cacheWrite/contexto-base con otra clave/cliente.
-    # Lo descartamos acá para que no re-aparezca (ya está trackeado → upgrade).
+    # Red de seguridad: aunque el prompt le pide NO tocar estos temas, la IA suele
+    # reformularlos con otra clave/cliente (cacheWrite/contexto-base, o gpt-5.4 $0).
+    # Los descartamos acá para que no re-aparezcan (ya conocidos/no accionables).
     antes = len(ops)
-    ops = [o for o in ops if not _es_tema_cache_conocido(o)]
+    ops = [o for o in ops if not _es_tema_conocido_benigno(o)]
     if antes != len(ops):
         print(f"[CAMILA-COST-AI] descartadas {antes - len(ops)} oportunidad(es) "
-              f"del tema cache-write/contexto (ya trackeado)")
+              f"de temas ya conocidos (cache-write/contexto o gpt-5.4 fallback)")
 
     # Mismo cap por monto absoluto que las reglas: una oportunidad de costo 'alta' en
     # un día barato es ruido (los $/día acá son chicos → casi todo cae a media/baja).
