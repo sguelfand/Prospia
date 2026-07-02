@@ -28,6 +28,32 @@ _REGLAS_CONOCIDAS = (
     "contexto, y la conversación más cara del día"
 )
 
+# ── Anti-repetición del tema "cache write / contexto base" ──────────────────
+# La IA re-descubre el MISMO hallazgo cada corrida (cacheWrite alto, contexto
+# base grande, re-escrituras por turno) con una `clave` distinta y otro cliente
+# → el dedup por (source,tipo,clave) nunca matchea y se acumulan (id 13-24…).
+# Ese tema ya está DIAGNOSTICADO y TRACKEADO: es el bug de metadata por mensaje
+# de OpenClaw (issues #20894/#75300), cuyo remedio es el UPGRADE de OpenClaw, no
+# una acción por conversación. Por eso lo suprimimos como oportunidad nueva: si
+# un hallazgo IA cae en este tema, se descarta antes de guardarlo. (Ver memoria
+# project_prospia_costos.)
+_TEMA_CACHE_KW = (
+    "cachewrite", "cache write", "cache-write", "cacheread", "cache read",
+    "cache-read", "contexto base", "contexto crece", "contexto enorme",
+    "contexto grande", "contexto completo", "sobredimension", "high-context",
+    "high context", "re-escrib", "reescrib", "re-escrit", "reescrit", "prefij",
+    "prefix", "amortiz", "sin beneficio de cache", "sin cache", "sin reutiliz",
+    "ttl", "40k token", ">40k", "40.000 token",
+)
+
+
+def _es_tema_cache_conocido(op: dict) -> bool:
+    """True si el hallazgo IA es una variante del tema cache-write/contexto-base,
+    que ya está trackeado (bug de metadata OpenClaw → upgrade). Se filtra para que
+    deje de re-aparecer con otro nombre cada día."""
+    txt = f"{op.get('clave','')} {op.get('titulo','')} {op.get('detalle','')}".lower()
+    return any(kw in txt for kw in _TEMA_CACHE_KW)
+
 # Contexto fijo del análisis de costo de Camila (ver memoria de costos).
 _CONTEXTO_COSTO = (
     "Datos clave del costo de Camila (agente de WhatsApp sobre el gateway MyClaw, "
@@ -37,9 +63,16 @@ _CONTEXTO_COSTO = (
     "- sonnet es el modelo correcto; haiku NO conviene (su cacheRead no tiene "
     "descuento, sale más caro); opus es ~1.67× sonnet, solo fallback.\n"
     "- El TTL del cache (5 min default) vence entre turnos porque los clientes "
-    "contestan a las horas → se re-escribe todo el contexto. Esto es ESTRUCTURAL "
-    "(cadencia B2B + arranque en frío por sesión); es la naturaleza del negocio, "
-    "no un bug a arreglar.\n\n"
+    "contestan a las horas → se re-escribe todo el contexto. La causa de fondo del "
+    "cacheWrite alto es un BUG CONOCIDO de OpenClaw (metadata por mensaje que rompe "
+    "el prefijo cacheado, issues #20894/#75300); su remedio es el UPGRADE de "
+    "OpenClaw, ya trackeado. NO es una acción por conversación.\n\n"
+    "TEMA PROHIBIDO (NO generes NINGÚN hallazgo sobre esto, ni reformulado):\n"
+    "- Todo lo relativo a cacheWrite alto, cacheWrite vs cacheRead, 'contexto base "
+    "grande', 'contexto que crece por turno', 're-escritura de contexto', 'sesiones "
+    "de 1 llamada que pagan contexto', 'segmentar el catálogo', 'podar historial', "
+    "'leer archivos una vez'. TODO eso es el mismo tema ya trackeado → NO lo reportes. "
+    "Si el hallazgo que ibas a dar toca cacheWrite/contexto/prefijo, descartalo.\n\n"
     "PALANCAS YA INVESTIGADAS Y DESCARTADAS (NO las propongas, ni reformuladas):\n"
     "- `cacheRetention=long` (TTL 1h): DESCARTADO (30/6). Es no-op en la versión de "
     "OpenClaw de Camila (2026.4.27, gating al provider literal 'anthropic'), y AUN "
@@ -133,6 +166,15 @@ def diagnosticar(source: str = "etiguel", fecha: str | None = None, notify: bool
             sev = "media"
         ops.append({"tipo": "ia", "clave": clave, "severidad": sev,
                     "titulo": titulo[:200], "detalle": (o.get("detalle") or "")[:2000]})
+
+    # Red de seguridad: aunque el prompt le pide NO tocar el tema, la IA suele
+    # reformular el hallazgo de cacheWrite/contexto-base con otra clave/cliente.
+    # Lo descartamos acá para que no re-aparezca (ya está trackeado → upgrade).
+    antes = len(ops)
+    ops = [o for o in ops if not _es_tema_cache_conocido(o)]
+    if antes != len(ops):
+        print(f"[CAMILA-COST-AI] descartadas {antes - len(ops)} oportunidad(es) "
+              f"del tema cache-write/contexto (ya trackeado)")
 
     # Mismo cap por monto absoluto que las reglas: una oportunidad de costo 'alta' en
     # un día barato es ruido (los $/día acá son chicos → casi todo cae a media/baja).
