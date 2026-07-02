@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronDown, Cpu, DollarSign, Loader2, Play, Plus, RefreshCw, Search, ShieldAlert, TrendingUp, Trash2, Zap } from 'lucide-react'
+import { AlertTriangle, BarChart2, ChevronDown, Cpu, DollarSign, Loader2, MessageSquare, Play, Plus, RefreshCw, Search, ShieldAlert, TrendingUp, Trash2, X, Zap } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
 import { DashboardGrid, Widget, buildLayouts } from '../components/DashboardGrid'
@@ -347,13 +347,18 @@ export default function TestLlm() {
         {runId != null ? (
           <CorridaEnVivo vivo={vivo} onVerTranscript={setTranscript} />
         ) : vivo?.estado === 'sin_juzgar' ? (
-          <div className="text-xs bg-primary/5 text-ink border border-primary/40 rounded-lg px-3 py-2 flex items-start gap-2">
+          <div className="text-xs bg-primary/5 text-ink border border-primary/40 rounded-lg px-3 py-2.5 flex items-start gap-2">
             <Cpu size={14} className="text-primary shrink-0 mt-0.5" />
-            <span>
-              Corrida <b>#{vivo.id}</b> lista — los motores corrieron y las conversaciones quedaron guardadas.
-              <b> Pendiente de juzgar.</b> En una sesión de Claude decime <i>"juzgá la corrida {vivo.id}"</i> y la
-              evalúo con el plan Pro (juez Sonnet, gratis) → ahí aparece el tablero con los puntajes.
-            </span>
+            <div className="flex-1">
+              <div>
+                Corrida <b>#{vivo.id}</b> lista — los motores corrieron y las conversaciones quedaron guardadas.
+                <b> Pendiente de juzgar.</b> En una sesión decime <i>"juzgá la corrida {vivo.id}"</i> y la evalúo con
+                el plan Pro (juez Sonnet, gratis) → ahí aparecen los puntajes.
+              </div>
+              <button onClick={() => abrirCorrida(vivo.id)} className="mt-2 flex items-center gap-1 text-[11px] font-semibold border border-primary/50 text-primary rounded-lg px-2.5 py-1 hover:bg-primary/10">
+                <BarChart2 size={12} /> Ver resultados
+              </button>
+            </div>
           </div>
         ) : !conJuez ? (
           <p className="text-[11px] text-muted flex items-center gap-1">
@@ -392,23 +397,117 @@ export default function TestLlm() {
         {corridas.length === 0 && <p className="text-xs text-muted">Todavía no corriste ninguna comparación.</p>}
         <div className="space-y-1.5">
           {corridas.map(c => (
-            <button key={c.id} onClick={() => abrirCorrida(c.id)} className={`w-full flex items-center gap-3 text-left border rounded-lg px-3 py-2 text-xs hover:border-primary/40 ${abierta?.id === c.id ? 'border-primary/50 bg-primary/5' : 'border-line'}`}>
-              <span className={`w-2 h-2 rounded-full ${c.estado === 'lista' ? 'bg-emerald-500' : c.estado === 'sin_juzgar' ? 'bg-primary' : c.estado === 'estimada' || c.estado === 'corriendo' ? 'bg-amber' : c.estado === 'error' ? 'bg-red-500' : 'bg-muted'}`} />
-              <span className="flex-1 text-ink font-medium">{c.nombre}{c.estado === 'sin_juzgar' && <span className="ml-1 text-[10px] font-bold text-primary border border-primary/50 rounded px-1">sin juzgar</span>}</span>
-              <span className="text-muted">{c.motores.length} motores · {c.escenarios.length} esc.</span>
-              <span className="text-muted">{(c.estado === 'lista' || c.estado === 'sin_juzgar') ? `real ${money(c.costo_real_usd)}` : `est. ${money(c.costo_estimado_usd)}`}</span>
-            </button>
+            <div key={c.id} className={`w-full flex items-center gap-3 border rounded-lg px-3 py-2 text-xs ${abierta?.id === c.id ? 'border-primary/50 bg-primary/5' : 'border-line'}`}>
+              <span className={`w-2 h-2 rounded-full shrink-0 ${c.estado === 'lista' ? 'bg-emerald-500' : c.estado === 'sin_juzgar' ? 'bg-primary' : c.estado === 'estimada' || c.estado === 'corriendo' ? 'bg-amber animate-pulse' : c.estado === 'error' ? 'bg-red-500' : 'bg-muted'}`} />
+              <span className="flex-1 text-ink font-medium truncate">{c.nombre}{c.estado === 'sin_juzgar' && <span className="ml-1 text-[10px] font-bold text-primary border border-primary/50 rounded px-1">sin juzgar</span>}{c.estado === 'corriendo' && <span className="ml-1 text-[10px] font-bold text-amber border border-amber/50 rounded px-1">corriendo</span>}</span>
+              <span className="text-muted shrink-0">{c.motores.length} motores · {c.escenarios.length} esc.</span>
+              <span className="text-muted shrink-0">{(c.estado === 'lista' || c.estado === 'sin_juzgar') ? `real ${money(c.costo_real_usd)}` : `est. ${money(c.costo_estimado_usd)}`}</span>
+              {(c.estado === 'lista' || c.estado === 'sin_juzgar') && (
+                <button onClick={() => abrirCorrida(c.id)} className="shrink-0 flex items-center gap-1 text-[11px] font-semibold border border-primary/50 text-primary rounded-lg px-2.5 py-1 hover:bg-primary/10">
+                  <BarChart2 size={12} /> Resultados
+                </button>
+              )}
+            </div>
           ))}
         </div>
       </section>
 
-      {/* Resultados de la corrida abierta — tablero movible */}
-      {abierta && abierta.estado === 'lista' && (
-        <ResultadosTablero corrida={abierta} onVerTranscript={setTranscript} />
+      {/* Resultados de la corrida abierta (juzgada o sin juzgar) */}
+      {abierta && (abierta.estado === 'lista' || abierta.estado === 'sin_juzgar') && (
+        <ResultadosView corrida={abierta} onVerTranscript={setTranscript} onClose={() => setAbierta(null)} />
       )}
 
       {transcript && <TranscriptModal r={transcript} onClose={() => setTranscript(null)} />}
     </div>
+  )
+}
+
+/* ── Vista de resultados: ranking + conversaciones por motor (juzgada o sin juzgar) ── */
+function ResultadosView({ corrida, onVerTranscript, onClose }: { corrida: Corrida; onVerTranscript: (r: Resultado) => void; onClose: () => void }) {
+  const juzgada = corrida.estado === 'lista'
+  const res = corrida.resultados || []
+  const [abiertoMotor, setAbiertoMotor] = useState<number | null>(null)
+  const motores = [...new Set(res.map(r => r.motor_id))].map(id => {
+    const rs = res.filter(r => r.motor_id === id)
+    const bien = rs.filter(r => r.veredicto === 'bien').length
+    const mal = rs.filter(r => r.veredicto === 'mal').length
+    const dudoso = rs.filter(r => r.veredicto === 'dudoso').length
+    const errores = rs.filter(r => r.error).length
+    const costo = rs.reduce((a, r) => a + r.costo_usd, 0)
+    const latencia = rs.length ? Math.round(rs.reduce((a, r) => a + r.latencia_ms, 0) / rs.length) : 0
+    const score = rs.length ? Math.round((100 * bien) / rs.length) : 0
+    return { id, nombre: rs[0]?.motor_nombre || String(id), rs, bien, mal, dudoso, errores, costo, latencia, score }
+  })
+  motores.sort((a, b) => (juzgada ? (b.score - a.score) || (a.costo - b.costo) : a.costo - b.costo))
+
+  return (
+    <section className="bg-card border border-line rounded-2xl p-6 space-y-4">
+      <div className="flex items-center gap-3">
+        <BarChart2 size={18} className="text-primary shrink-0" />
+        <div className="flex-1 min-w-0">
+          <h2 className="text-sm font-bold text-ink truncate">{corrida.nombre}</h2>
+          <p className="text-[11px] text-muted">
+            {motores.length} motores · costo real {money(corrida.costo_real_usd)} ·{' '}
+            {juzgada
+              ? <span className="text-emerald-500 font-semibold">juzgada</span>
+              : <span className="text-primary font-semibold">sin juzgar</span>}
+          </p>
+        </div>
+        <button onClick={onClose} className="text-muted hover:text-ink"><X size={16} /></button>
+      </div>
+
+      {!juzgada && (
+        <div className="text-xs bg-primary/5 text-ink border border-primary/40 rounded-lg px-3 py-2 flex items-start gap-2">
+          <AlertTriangle size={14} className="text-primary shrink-0 mt-0.5" />
+          <span>
+            Esta comparación <b>todavía no fue juzgada</b> — podés ver las conversaciones de cada motor, pero
+            no hay puntajes ni ranking de calidad. Pedí en una sesión <i>"juzgá la corrida {corrida.id}"</i> y
+            la evalúo con el juez Sonnet (plan Pro) → ahí aparecen los puntajes.
+          </span>
+        </div>
+      )}
+
+      {juzgada && <ResultadosTablero corrida={corrida} onVerTranscript={onVerTranscript} />}
+
+      <div>
+        <div className="text-[11px] uppercase tracking-wide text-muted font-semibold mb-2">
+          {juzgada ? 'Ranking y conversaciones por motor' : 'Conversaciones por motor (ordenados por costo)'}
+        </div>
+        <div className="space-y-2">
+          {motores.map((m, i) => (
+            <div key={m.id} className="border border-line rounded-xl overflow-hidden">
+              <button onClick={() => setAbiertoMotor(v => (v === m.id ? null : m.id))} className="w-full flex items-center gap-3 px-3 py-2.5 text-xs hover:bg-white/[0.02]">
+                <span className="text-muted font-bold w-5 shrink-0">{i + 1}º</span>
+                <span className="flex-1 text-left text-ink font-semibold truncate">{m.nombre}</span>
+                {juzgada && (
+                  <span className="flex items-center gap-2 shrink-0">
+                    <span className="text-emerald-500 font-bold">{m.score}%</span>
+                    <span className="text-[10px] text-muted">{m.bien}✓ {m.mal}✗ {m.dudoso}?</span>
+                  </span>
+                )}
+                {m.errores > 0 && <span className="text-[10px] text-red-500 shrink-0">{m.errores} error</span>}
+                <span className="text-muted shrink-0">{money(m.costo)}</span>
+                <span className="text-muted shrink-0 hidden sm:inline">{m.latencia}ms</span>
+                <ChevronDown size={14} className={`text-muted transition-transform shrink-0 ${abiertoMotor === m.id ? '' : '-rotate-90'}`} />
+              </button>
+              {abiertoMotor === m.id && (
+                <div className="border-t border-line">
+                  {m.rs.map((r, j) => (
+                    <button key={j} onClick={() => onVerTranscript(r)} className="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-left border-t border-line/50 hover:bg-primary/5">
+                      {juzgada && <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${VER_BG[r.veredicto] || 'bg-muted'}`} />}
+                      <span className="flex-1 text-ink truncate">{r.escenario_nombre} <span className="text-muted">· {r.caso_uso}</span></span>
+                      {r.tool_calls.length > 0 && <span className="text-primary flex items-center gap-0.5 shrink-0"><Zap size={10} />{r.tool_calls.map(t => t.nombre).join(',')}</span>}
+                      {r.error ? <span className="text-red-500 shrink-0">error</span> : <MessageSquare size={11} className="text-muted shrink-0" />}
+                      <span className="text-muted shrink-0">{money(r.costo_usd)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   )
 }
 
