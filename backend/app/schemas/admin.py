@@ -213,6 +213,16 @@ class AgentErrorIn(BaseModel):
     patron: str | None = None
 
 
+class AgentErrorManualIn(BaseModel):
+    """Carga manual de un error desde el panel (app/web): un cuadro de texto y,
+    opcional, una imagen (adjunta o pegada del portapapeles) que se transcribe con
+    IA y se agrega al contenido. Cae en la misma cola que los del outbound-guard."""
+    contenido: str = ""
+    fuente: str = "etiguel"
+    imagen_b64: str | None = None       # base64 SIN prefijo data:
+    imagen_mime: str | None = None      # ej image/png
+
+
 class AvisoIn(BaseModel):
     """Aviso genérico para push a la app (reemplaza mails de notificación).
     Lo postean el webhook y OpenClaw/Camila. categoria: primer_contacto |
@@ -233,6 +243,9 @@ class AgentErrorOut(BaseModel):
     estado: str              # nuevo | reportado | fixed
     resuelto: bool
     fecha: datetime
+    cola_estado: str | None = None       # NULL | pendiente | procesado | standby
+    cola_orden: datetime | None = None
+    cola_resultado: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -240,9 +253,12 @@ class AgentErrorOut(BaseModel):
 class AgentErrorResolve(BaseModel):
     """PATCH del panel (app/web). Mandá `estado` (nuevo|reportado|fixed) — es lo
     que usa el botón Reportar. `resuelto` queda por compatibilidad: si solo viene
-    `resuelto`, se traduce a estado fixed/nuevo."""
+    `resuelto`, se traduce a estado fixed/nuevo. `cola_estado`/`cola_resultado`
+    manejan la cola de procesamiento (igual que pendientes)."""
     estado: str | None = None
     resuelto: bool | None = None
+    cola_estado: str | None = None
+    cola_resultado: str | None = None
 
 
 # ── Consultas: preguntas que Camila escaló porque no supo qué responder ──────

@@ -110,6 +110,12 @@ observable. Sirve como registro de Pendientes/Realizados de la pantalla
 ## 10. Errores de Camila (N1)
 - Tabs: Nuevos / Reportados / Fixed
 - Por error: reportar, quitar reporte, reabrir, borrar
+- **Cargar error a mano**: cuadro de texto + adjuntar/pegar imagen (Ctrl+V, se
+  transcribe con Haiku) → cae en la cola de errores — ✅ `errores.spec.ts`
+- **Seleccionar + Procesar** (cola FIFO, igual que Pendientes): tildar varios,
+  Procesar, recuadro "Procesando" con barrita — ✅ `errores.spec.ts`
+- Cola en proceso: confirmar (Fixed), rechazar (vuelve a la cola), volver a la cola
+  (standby), ver/ocultar conclusión — ✅ `errores.spec.ts` (flujo API)
 
 ## 11. Preguntas / consultas escaladas (N1 y N2)
 - Tabs: Pendientes / Contestadas

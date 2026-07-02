@@ -125,6 +125,16 @@ def run_migrations():
         conn.execute(text(
             "ALTER TABLE agent_errors ADD COLUMN IF NOT EXISTS estado VARCHAR(20) NOT NULL DEFAULT 'nuevo'"
         ))
+        # ── agent_errors: cola de procesamiento (tildar + Procesar, igual que pendientes) ──
+        conn.execute(text(
+            "ALTER TABLE agent_errors ADD COLUMN IF NOT EXISTS cola_estado VARCHAR(20)"
+        ))
+        conn.execute(text(
+            "ALTER TABLE agent_errors ADD COLUMN IF NOT EXISTS cola_orden TIMESTAMPTZ"
+        ))
+        conn.execute(text(
+            "ALTER TABLE agent_errors ADD COLUMN IF NOT EXISTS cola_resultado TEXT"
+        ))
 
         # ── monitor_settings: key de Anthropic para los asistentes IA del relevamiento ──
         conn.execute(text(

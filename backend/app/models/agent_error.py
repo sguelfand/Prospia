@@ -30,3 +30,12 @@ class AgentError(Base):
     fecha: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
     )
+    # ── cola de procesamiento (mismo patrón que Pendiente): Sebi tilda varios y los
+    # manda a procesar; Claude los levanta FIFO, los arregla y los marca 'procesado'.
+    #   cola_estado: NULL (no encolado) | 'pendiente' (esperando) | 'procesado'
+    #     (Claude terminó, falta que Sebi confirme→fixed) | 'standby' (frenado por falta de info)
+    #   cola_orden: timestamp de encolado → orden FIFO
+    #   cola_resultado: resumen de lo que Claude hizo (lo ve Sebi al confirmar)
+    cola_estado: Mapped[str | None] = mapped_column(String(20), index=True)
+    cola_orden: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cola_resultado: Mapped[str | None] = mapped_column(Text)

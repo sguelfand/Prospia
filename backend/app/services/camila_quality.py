@@ -145,6 +145,47 @@ def transcribir_imagen(image_b64: str, mime: str = "image/jpeg", source: str | N
         return None
 
 
+def transcribir_imagen_error(image_b64: str, mime: str = "image/png", source: str | None = None) -> str | None:
+    """Lee UNA imagen adjunta a un error cargado a mano (captura de un bug, mensaje
+    de error, pantalla, o conversación) con Haiku-visión y devuelve una descripción
+    fiel para que quede como texto en el error. Barato (Haiku), 1 sola vez. None si
+    no hay key o falla."""
+    key = _anthropic_key()
+    if not key or not image_b64:
+        return None
+    HAIKU = "claude-haiku-4-5-20251001"
+    content = [
+        {"type": "image", "source": {"type": "base64", "media_type": mime, "data": image_b64}},
+        {"type": "text", "text": (
+            "Es una captura que documenta un error o problema (puede ser un mensaje de error, "
+            "una pantalla de una app/web, o una conversación de WhatsApp). Describí fielmente y "
+            "en detalle lo que se ve: transcribí TODO el texto visible (mensajes de error, "
+            "botones, títulos, el intercambio si es un chat indicando quién dijo cada cosa) para "
+            "que sirva de referencia técnica. Sin opinar ni resumir de más; priorizá el texto literal.")},
+    ]
+    try:
+        resp = requests.post(
+            ANTHROPIC_API_URL,
+            headers={"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
+            json={"model": HAIKU, "max_tokens": 1500, "messages": [{"role": "user", "content": content}]},
+            timeout=60,
+        )
+    except Exception as e:
+        print(f"[CAMILA-QUALITY] transcribir error HTTP: {type(e).__name__}: {e}")
+        return None
+    if resp.status_code != 200:
+        print(f"[CAMILA-QUALITY] transcribir error HTTP {resp.status_code}: {resp.text[:200]}")
+        return None
+    try:
+        data = resp.json()
+        from app.services import anthropic_usage
+        anthropic_usage.registrar("Transcripción imagen (error)", HAIKU, data.get("usage"), source)
+        return (data.get("content") or [{}])[0].get("text", "").strip() or None
+    except Exception as e:
+        print(f"[CAMILA-QUALITY] transcribir error parse: {e}")
+        return None
+
+
 def _parse_json(raw: str | None) -> dict | None:
     if not raw:
         return None

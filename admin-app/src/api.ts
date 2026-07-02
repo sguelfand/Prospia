@@ -202,6 +202,10 @@ export interface AgentError {
   estado: EstadoError; // nuevo → reportado (Sebi) → fixed (Claude)
   resuelto: boolean;
   fecha: string;
+  // Cola de procesamiento (tildar + Procesar, igual que pendientes).
+  cola_estado?: "pendiente" | "procesado" | "standby" | null;
+  cola_orden?: string | null;
+  cola_resultado?: string | null;
 }
 
 export type Prioridad = "alta" | "media" | "baja";
@@ -646,6 +650,31 @@ export const setEstadoError = (token: string, id: number, estado: EstadoError) =
 
 export const deleteError = (token: string, id: number) =>
   request<void>(`/admin/errores/${id}`, { method: "DELETE" }, token);
+
+// Cargar un error a mano (texto + imagen opcional que se transcribe con Haiku).
+export const crearErrorManual = (token: string, contenido: string, imagen?: { b64: string; mime: string }) =>
+  request<AgentError>(`/admin/errores`, {
+    method: "POST",
+    body: JSON.stringify({ contenido, imagen_b64: imagen?.b64 || null, imagen_mime: imagen?.mime || "image/png" }),
+  }, token);
+
+// PATCH genérico: cambiar estado y/o cola_estado (confirmar/rechazar/reactivar).
+export const editarError = (
+  token: string,
+  id: number,
+  cambios: Partial<{ estado: EstadoError; cola_estado: "pendiente" | "procesado" | "standby" | ""; cola_resultado: string }>,
+) =>
+  request<AgentError>(`/admin/errores/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(cambios),
+  }, token);
+
+// Tildar errores y mandarlos a la cola de procesamiento (FIFO).
+export const encolarErrores = (token: string, ids: number[]) =>
+  request<AgentError[]>(`/admin/errores/cola`, {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  }, token);
 
 // ── Calidad (especialista del negocio que revisa las conversaciones) ──────────
 export type EstadoRevision = "nuevo" | "revisado";

@@ -37,6 +37,7 @@ from app.schemas.admin import (
     AdminOverview,
     AgentErrorOut,
     AgentErrorResolve,
+    AgentErrorManualIn,
     TestRunResumen,
     TestRunDetalleOut,
     ConsultaOut,
@@ -974,10 +975,15 @@ def listar_errores(
     return q.order_by(AgentError.fecha.desc()).all()
 
 
+COLA_ESTADOS_ERROR = (None, "pendiente", "procesado", "standby")
+
+
 @router.patch("/errores/{error_id}", response_model=AgentErrorOut)
 def resolver_error(error_id: int, body: AgentErrorResolve, db: Session = Depends(get_db)):
     """Cambia el estado de un error (botón Reportar de la app/web, o tilde legacy).
-    Mandá `estado` (nuevo|reportado|fixed). `resuelto` se acepta por compatibilidad."""
+    Mandá `estado` (nuevo|reportado|fixed). `resuelto` se acepta por compatibilidad.
+    `cola_estado`/`cola_resultado` manejan la cola de procesamiento (igual que pendientes):
+    al confirmar realizado se manda `estado=fixed` y se limpia la cola."""
     err = db.get(AgentError, error_id)
     if not err:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No existe ese error")
@@ -986,11 +992,106 @@ def resolver_error(error_id: int, body: AgentErrorResolve, db: Session = Depends
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                                 detail=f"estado inválido: {body.estado}")
         _set_estado_error(err, body.estado)
+        # Confirmado (fixed) → sale de la cola de procesamiento.
+        if body.estado == "fixed":
+            err.cola_estado = None
+            err.cola_orden = None
     elif body.resuelto is not None:
         _set_estado_error(err, "fixed" if body.resuelto else "nuevo")
+        if body.resuelto:
+            err.cola_estado = None
+            err.cola_orden = None
+    if body.cola_estado is not None:
+        nuevo = body.cola_estado.strip() or None
+        if nuevo not in COLA_ESTADOS_ERROR:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                detail=f"cola_estado inválido: {nuevo}")
+        err.cola_estado = nuevo
+        if nuevo and err.cola_orden is None:
+            err.cola_orden = datetime.now(timezone.utc)
+        elif nuevo is None:
+            err.cola_orden = None
+    if body.cola_resultado is not None:
+        err.cola_resultado = body.cola_resultado or None
     db.commit()
     db.refresh(err)
     return err
+
+
+@router.post("/errores", response_model=AgentErrorOut, status_code=status.HTTP_201_CREATED)
+def crear_error_manual(body: AgentErrorManualIn, db: Session = Depends(get_db)):
+    """Carga manual de un error desde el panel (app/web): cuadro de texto + imagen
+    opcional (adjunta o pegada del portapapeles). La imagen se transcribe con Haiku
+    y se agrega al contenido. Queda con agente='sebi', patron='manual', estado
+    'nuevo' → cae en la MISMA cola de errores que los del outbound-guard."""
+    contenido = (body.contenido or "").strip()
+    if body.imagen_b64:
+        from app.services import camila_quality
+        transcripcion = camila_quality.transcribir_imagen_error(
+            body.imagen_b64, body.imagen_mime or "image/png", source=body.fuente)
+        if transcripcion:
+            contenido = (contenido + "\n\n" if contenido else "") + "[imagen adjunta]\n" + transcripcion
+    if not contenido:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail="Cargá un texto o una imagen")
+    err = AgentError(
+        contenido=contenido[:5000],
+        fuente=(body.fuente or "etiguel"),
+        agente="sebi",
+        telefono=None,
+        patron="manual",
+        # estado 'nuevo' por default: entra al sector como los del guard; Sebi lo
+        # selecciona y lo manda a procesar.
+    )
+    db.add(err)
+    db.commit()
+    db.refresh(err)
+    return err
+
+
+@router.post("/errores/cola", response_model=list[AgentErrorOut])
+def encolar_errores(body: ColaIn, db: Session = Depends(get_db)):
+    """Tildar errores y mandarlos a la cola de procesamiento. Marca cada uno (que no
+    esté fixed ni ya encolado) como cola_estado='pendiente' con cola_orden = ahora →
+    la cola se procesa FIFO. También los pasa a estado 'reportado' para que queden en
+    la cola que reviso por token."""
+    if not body.ids:
+        return []
+    items = db.query(AgentError).filter(AgentError.id.in_(body.ids)).all()
+    ahora = datetime.now(timezone.utc)
+    for e in items:
+        if e.estado == "fixed" or e.cola_estado is not None:
+            continue
+        e.cola_estado = "pendiente"
+        e.cola_orden = ahora
+        if e.estado == "nuevo":
+            _set_estado_error(e, "reportado")
+    db.commit()
+    return _cola_errores(db)
+
+
+@router.get("/errores-cola", response_model=list[AgentErrorOut])
+def listar_cola_errores(db: Session = Depends(get_db)):
+    """La cola de procesamiento de errores, FIFO (más viejo primero). Incluye los que
+    esperan ('pendiente'), los resueltos sin confirmar ('procesado') y los frenados
+    ('standby'). Lo lee Claude para avanzar la cola."""
+    return _cola_errores(db)
+
+
+def _cola_errores(db: Session):
+    estados = ("pendiente", "procesado", "standby")
+    orden_estado = case(
+        (AgentError.cola_estado == "pendiente", 0),
+        (AgentError.cola_estado == "standby", 1),
+        (AgentError.cola_estado == "procesado", 2),
+        else_=3,
+    )
+    return (
+        db.query(AgentError)
+        .filter(AgentError.cola_estado.in_(estados))
+        .order_by(orden_estado, AgentError.cola_orden.asc())
+        .all()
+    )
 
 
 @router.delete("/errores/{error_id}", status_code=status.HTTP_204_NO_CONTENT)

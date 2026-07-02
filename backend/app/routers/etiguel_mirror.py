@@ -251,21 +251,30 @@ def ingest_agent_error(
 @router.get("/agent-errors")
 def listar_agent_errors(
     estado: str | None = None,
+    cola_estado: str | None = None,
     x_mirror_token: str | None = Header(None),
     db: Session = Depends(get_db),
 ):
     """Lista de errores para que Claude levante la cola. Auth: token.
-    Con `?estado=reportado` devuelve solo la cola que Sebi marcó para revisar."""
+    Con `?estado=reportado` devuelve la cola que Sebi marcó para revisar.
+    Con `?cola_estado=pendiente` devuelve la cola de procesamiento FIFO (lo que Sebi
+    tildó y mandó a Procesar) — el más viejo primero."""
     _check_token(x_mirror_token)
     q = db.query(AgentError)
     if estado:
         q = q.filter(AgentError.estado == estado)
-    errs = q.order_by(AgentError.fecha.desc()).all()
+    if cola_estado:
+        q = q.filter(AgentError.cola_estado == cola_estado)
+        errs = q.order_by(AgentError.cola_orden.asc()).all()
+    else:
+        errs = q.order_by(AgentError.fecha.desc()).all()
     return [
         {
             "id": e.id, "estado": e.estado, "fuente": e.fuente, "agente": e.agente,
             "telefono": e.telefono, "patron": e.patron, "contenido": e.contenido,
             "fecha": e.fecha.isoformat() if e.fecha else None,
+            "cola_estado": e.cola_estado, "cola_resultado": e.cola_resultado,
+            "cola_orden": e.cola_orden.isoformat() if e.cola_orden else None,
         }
         for e in errs
     ]
@@ -278,20 +287,43 @@ def patch_agent_error(
     x_mirror_token: str | None = Header(None),
     db: Session = Depends(get_db),
 ):
-    """Cambia el estado de un error. Lo usa Claude para marcar `fixed` cuando
-    soluciona un error de la cola reportada. Auth: token. Body: {"estado": "fixed"}."""
+    """Cambia el estado de un error. Lo usa Claude para avanzar la cola: al resolver
+    uno marca `cola_estado=procesado` + `cola_resultado` (resumen); Sebi confirma
+    después → fixed. Auth: token. Body: {"estado"?, "cola_estado"?, "cola_resultado"?}."""
     _check_token(x_mirror_token)
     err = db.get(AgentError, error_id)
     if not err:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No existe ese error")
-    estado = (body or {}).get("estado")
-    if estado not in ("nuevo", "reportado", "fixed"):
+    body = body or {}
+    estado = body.get("estado")
+    cola_estado = body.get("cola_estado")
+    cola_resultado = body.get("cola_resultado")
+    if estado is None and cola_estado is None and cola_resultado is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                            detail=f"estado inválido: {estado}")
-    err.estado = estado
-    err.resuelto = (estado == "fixed")
+                            detail="mandá 'estado', 'cola_estado' o 'cola_resultado'")
+    if estado is not None:
+        if estado not in ("nuevo", "reportado", "fixed"):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                detail=f"estado inválido: {estado}")
+        err.estado = estado
+        err.resuelto = (estado == "fixed")
+        if estado == "fixed":
+            err.cola_estado = None
+            err.cola_orden = None
+    if cola_estado is not None:
+        nuevo = (cola_estado or "").strip() or None
+        if nuevo not in (None, "pendiente", "procesado", "standby"):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                detail=f"cola_estado inválido: {nuevo}")
+        err.cola_estado = nuevo
+        if nuevo and err.cola_orden is None:
+            err.cola_orden = datetime.now(timezone.utc)
+        elif nuevo is None:
+            err.cola_orden = None
+    if cola_resultado is not None:
+        err.cola_resultado = cola_resultado or None
     db.commit()
-    return {"ok": True, "id": error_id, "estado": estado}
+    return {"ok": True, "id": error_id, "estado": err.estado, "cola_estado": err.cola_estado}
 
 
 @router.delete("/agent-error/{error_id}")
