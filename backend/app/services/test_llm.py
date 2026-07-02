@@ -301,9 +301,26 @@ def _costo_celda(motor, tin: int, tout: int, tcache: int) -> float:
             + tout * motor.precio_out)
 
 
-def _juzgar(escenario, transcript: list[dict], tool_calls: list[dict]) -> dict:
+def _calibracion(source: str) -> str:
+    """Bloque de calibración del Especialista (confirmaciones acierto/falso_positivo de
+    Sebi). Es el MISMO que usa el especialista vivo → el juez del test juzga con tu criterio
+    acumulado, no 'de fábrica'. Se calcula 1 vez por corrida."""
+    from app.database import SessionLocal
+    from app.services.camila_quality import _ejemplos_calibracion
+    db = SessionLocal()
+    try:
+        return _ejemplos_calibracion(db, source)
+    except Exception:
+        return ""
+    finally:
+        db.close()
+
+
+def _juzgar(escenario, transcript: list[dict], tool_calls: list[dict],
+            calibracion: str = "") -> dict:
     """Especialista de Negocio juzga la respuesta del motor. Devuelve
-    {veredicto: bien|mal|dudoso, categoria, detalle}."""
+    {veredicto: bien|mal|dudoso, categoria, detalle}. `calibracion` = el feedback real de
+    Sebi (mismo bloque que el especialista vivo) para juzgar con su criterio."""
     from app.services.camila_quality import _NEGOCIO, _parse_json, _post, CATEGORIAS
     negocio = _NEGOCIO["etiguel"]
     cats = "\n".join(f"- {k}: {v}" for k, v in CATEGORIAS.items())
@@ -314,7 +331,8 @@ def _juzgar(escenario, transcript: list[dict], tool_calls: list[dict]) -> dict:
         f"Sos un especialista de negocio que evalúa a la agente de WhatsApp de un negocio.\n{negocio}\n\n"
         f"Estás evaluando cómo respondió un MOTOR candidato en un escenario de prueba controlado. "
         f"Juzgá SOLO la calidad de negocio de la respuesta (no la infra).\n\n"
-        f"Categorías de problema posibles:\n{cats}\n\n"
+        f"Categorías de problema posibles:\n{cats}\n"
+        f"{calibracion}\n\n"
         "Respondé SOLO un JSON: {\"veredicto\": \"bien\"|\"mal\"|\"dudoso\", "
         "\"categoria\": \"<una de las categorías o vacío si está bien>\", "
         "\"detalle\": \"1-2 oraciones de por qué\"}."
@@ -354,12 +372,16 @@ def correr(corrida_id: int) -> dict:
         motores = db.query(TestLlmMotor).filter(TestLlmMotor.id.in_(motor_ids)).all()
         escs = (db.query(TestLlmEscenario).filter(TestLlmEscenario.id.in_(esc_ids))
                 .order_by(TestLlmEscenario.orden).all())
-        env = _build_envelope(cor.source)
+        src = cor.source
+        env = _build_envelope(src)
         system = env["system"]
         cor.estado = "corriendo"
         db.commit()
     finally:
         db.close()
+
+    # calibración del Especialista (feedback real de Sebi) — 1 vez por corrida
+    calib = _calibracion(src)
 
     resumen: dict = {}
     costo_total = 0.0
@@ -371,7 +393,7 @@ def correr(corrida_id: int) -> dict:
                 try:
                     r = _run_escenario(motor, system, esc)
                     costo = _costo_celda(motor, r["in"], r["out"], r["cache"])
-                    veredicto = _juzgar(esc, r["transcript"], r["tool_calls"])
+                    veredicto = _juzgar(esc, r["transcript"], r["tool_calls"], calib)
                     err = None
                 except Exception as e:
                     r = {"transcript": [], "tool_calls": [], "in": 0, "out": 0, "cache": 0, "ms": 0}
