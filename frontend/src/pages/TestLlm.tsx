@@ -444,6 +444,9 @@ function ResultadosView({ corrida, onVerTranscript, onClose }: { corrida: Corrid
   const juzgada = corrida.estado === 'lista'
   const res = corrida.resultados || []
   const [abiertoMotor, setAbiertoMotor] = useState<number | null>(null)
+  const [selCmp, setSelCmp] = useState<Set<number>>(new Set())
+  const [comparando, setComparando] = useState(false)
+  const toggleCmp = (id: number) => setSelCmp(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   const motores = [...new Set(res.map(r => r.motor_id))].map(id => {
     const rs = res.filter(r => r.motor_id === id)
     const bien = rs.filter(r => r.veredicto === 'bien').length
@@ -486,14 +489,30 @@ function ResultadosView({ corrida, onVerTranscript, onClose }: { corrida: Corrid
 
       {juzgada && <ResultadosTablero corrida={corrida} onVerTranscript={onVerTranscript} />}
 
+      {comparando && selCmp.size >= 2 && (
+        <ComparacionMotores corrida={corrida} motorIds={[...selCmp]} juzgada={juzgada}
+          onVerTranscript={onVerTranscript} onClose={() => setComparando(false)} />
+      )}
+
       <div>
-        <div className="text-[11px] uppercase tracking-wide text-muted font-semibold mb-2">
-          {juzgada ? 'Ranking y conversaciones por motor' : 'Conversaciones por motor (ordenados por costo)'}
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-[11px] uppercase tracking-wide text-muted font-semibold">
+            {juzgada ? 'Ranking y conversaciones por motor' : 'Conversaciones por motor (ordenados por costo)'}
+          </div>
+          <div className="flex items-center gap-2 text-[11px]">
+            <span className="text-muted">tildá 2+ para comparar</span>
+            <button onClick={() => setComparando(true)} disabled={selCmp.size < 2}
+              className="flex items-center gap-1 font-semibold border border-primary/50 text-primary rounded-lg px-2.5 py-1 hover:bg-primary/10 disabled:opacity-40">
+              <BarChart2 size={12} /> Comparar {selCmp.size >= 2 ? `(${selCmp.size})` : ''}
+            </button>
+          </div>
         </div>
         <div className="space-y-2">
           {motores.map((m, i) => (
-            <div key={m.id} className="border border-line rounded-xl overflow-hidden">
-              <button onClick={() => setAbiertoMotor(v => (v === m.id ? null : m.id))} className="w-full flex items-center gap-3 px-3 py-2.5 text-xs hover:bg-white/[0.02]">
+            <div key={m.id} className={`border rounded-xl overflow-hidden ${selCmp.has(m.id) ? 'border-primary/50 bg-primary/5' : 'border-line'}`}>
+              <div className="w-full flex items-center gap-3 px-3 py-2.5 text-xs hover:bg-white/[0.02]">
+                <input type="checkbox" checked={selCmp.has(m.id)} onChange={() => toggleCmp(m.id)} onClick={e => e.stopPropagation()} className="shrink-0" title="Elegir para comparar" />
+                <button onClick={() => setAbiertoMotor(v => (v === m.id ? null : m.id))} className="flex-1 flex items-center gap-3 min-w-0">
                 <span className="text-muted font-bold w-5 shrink-0">{i + 1}º</span>
                 <span className="flex-1 text-left text-ink font-semibold truncate">{m.nombre}</span>
                 {juzgada && (
@@ -506,7 +525,8 @@ function ResultadosView({ corrida, onVerTranscript, onClose }: { corrida: Corrid
                 <span className="text-muted shrink-0">{money(m.costo)}</span>
                 <span className="text-muted shrink-0 hidden sm:inline">{m.latencia}ms</span>
                 <ChevronDown size={14} className={`text-muted transition-transform shrink-0 ${abiertoMotor === m.id ? '' : '-rotate-90'}`} />
-              </button>
+                </button>
+              </div>
               {abiertoMotor === m.id && (
                 <div className="border-t border-line">
                   {m.rs.map((r, j) => (
@@ -525,6 +545,94 @@ function ResultadosView({ corrida, onVerTranscript, onClose }: { corrida: Corrid
         </div>
       </div>
     </section>
+  )
+}
+
+/* ── Comparación lado a lado de motores elegidos ── */
+function ComparacionMotores({ corrida, motorIds, juzgada, onVerTranscript, onClose }: {
+  corrida: Corrida; motorIds: number[]; juzgada: boolean
+  onVerTranscript: (r: Resultado) => void; onClose: () => void
+}) {
+  const res = corrida.resultados || []
+  const motores = motorIds.map(id => {
+    const rs = res.filter(r => r.motor_id === id)
+    const bien = rs.filter(r => r.veredicto === 'bien').length
+    const mal = rs.filter(r => r.veredicto === 'mal').length
+    const dudoso = rs.filter(r => r.veredicto === 'dudoso').length
+    const costo = rs.reduce((a, r) => a + r.costo_usd, 0)
+    const latencia = rs.length ? Math.round(rs.reduce((a, r) => a + r.latencia_ms, 0) / rs.length) : 0
+    const score = rs.length ? Math.round((100 * bien) / rs.length) : 0
+    return { id, nombre: rs[0]?.motor_nombre || String(id), rs, bien, mal, dudoso, costo, latencia, score }
+  })
+  const slugs: string[] = []
+  for (const r of res) if (!slugs.includes(r.escenario_slug)) slugs.push(r.escenario_slug)
+  const cel = (mid: number, slug: string) => res.find(r => r.motor_id === mid && r.escenario_slug === slug)
+  const camila = (r?: Resultado) => r ? r.transcript.filter(t => t.quien === 'Camila').map(t => t.texto).filter(Boolean).join('\n') : ''
+  const genCols = { gridTemplateColumns: `130px repeat(${motores.length}, minmax(200px, 1fr))` }
+  const escCols = { gridTemplateColumns: `repeat(${motores.length}, minmax(240px, 1fr))` }
+
+  return (
+    <div className="border-2 border-primary/50 rounded-2xl p-4 bg-primary/5 space-y-3">
+      <div className="flex items-center gap-2">
+        <BarChart2 size={16} className="text-primary" />
+        <h3 className="text-sm font-bold text-ink flex-1">Comparación ({motores.length} motores)</h3>
+        <button onClick={onClose} className="text-muted hover:text-ink"><X size={16} /></button>
+      </div>
+
+      {/* Datos generales */}
+      <div className="overflow-x-auto">
+        <div className="grid gap-px bg-line rounded-lg overflow-hidden text-[11px]" style={genCols}>
+          <div className="bg-card px-2 py-1.5 text-muted font-semibold">Motor</div>
+          {motores.map(m => <div key={m.id} className="bg-card px-2 py-1.5 text-ink font-semibold truncate">{m.nombre}</div>)}
+          {juzgada && <>
+            <div className="bg-card px-2 py-1.5 text-muted">Score</div>
+            {motores.map(m => <div key={m.id} className="bg-card px-2 py-1.5 text-emerald-500 font-bold">{m.score}%</div>)}
+            <div className="bg-card px-2 py-1.5 text-muted">Bien / Mal / Dud</div>
+            {motores.map(m => <div key={m.id} className="bg-card px-2 py-1.5 text-ink">{m.bien} / {m.mal} / {m.dudoso}</div>)}
+          </>}
+          <div className="bg-card px-2 py-1.5 text-muted">Costo</div>
+          {motores.map(m => <div key={m.id} className="bg-card px-2 py-1.5 text-ink">{money(m.costo)}</div>)}
+          <div className="bg-card px-2 py-1.5 text-muted">Latencia</div>
+          {motores.map(m => <div key={m.id} className="bg-card px-2 py-1.5 text-ink">{m.latencia}ms</div>)}
+        </div>
+      </div>
+
+      {/* Respuestas enfrentadas por escenario */}
+      <div className="text-[11px] uppercase tracking-wide text-muted font-semibold">Respuestas en cada escenario</div>
+      <div className="space-y-2">
+        {slugs.map(slug => {
+          const any = res.find(r => r.escenario_slug === slug)
+          return (
+            <div key={slug} className="border border-line rounded-lg bg-card overflow-hidden">
+              <div className="px-3 py-1.5 text-[11px] font-semibold text-ink border-b border-line">
+                {any?.escenario_nombre} <span className="text-muted font-normal">· {any?.caso_uso}</span>
+              </div>
+              <div className="overflow-x-auto">
+                <div className="grid gap-px bg-line" style={escCols}>
+                  {motores.map(m => {
+                    const r = cel(m.id, slug)
+                    return (
+                      <div key={m.id} className="bg-card p-2 text-[11px]">
+                        <div className="flex items-center gap-1 mb-1">
+                          {juzgada && r && <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${VER_BG[r.veredicto] || 'bg-muted'}`} />}
+                          <span className="text-muted font-semibold truncate flex-1">{m.nombre}</span>
+                          {r && r.tool_calls.length > 0 && <span className="text-primary flex items-center gap-0.5 shrink-0"><Zap size={9} />{r.tool_calls.map(t => t.nombre).join(',')}</span>}
+                        </div>
+                        <div className="text-ink whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
+                          {r?.error ? <span className="text-red-500">Error: {r.error}</span> : (camila(r) || <span className="text-muted">—</span>)}
+                        </div>
+                        {juzgada && r?.detalle && <div className="text-muted mt-1 italic">Juez: {r.detalle}</div>}
+                        {r && <button onClick={() => onVerTranscript(r)} className="text-primary hover:underline mt-1 flex items-center gap-0.5"><MessageSquare size={10} /> ver conversación</button>}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
