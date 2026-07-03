@@ -620,6 +620,55 @@ def aplicar_veredictos(corrida_id: int, veredictos: list[dict]) -> dict:
         db.close()
 
 
+# ── conclusión / veredicto final del juez (recomendación en prosa) ─────────────
+def pedir_conclusion(corrida_id: int, motor_ids: list[int] | None = None) -> dict:
+    """Marca que se pidió el veredicto final (conclusión) de la corrida — opcionalmente
+    acotado a un subconjunto de motores del ranking. NO llama a ninguna API ni gasta: solo
+    deja la corrida en estado 'procesando' esperando a que la conclusión la genere yo en
+    sesión con el plan Pro (subagente Sonnet) y la aplique con `aplicar_conclusion`."""
+    from app.database import SessionLocal
+    from app.models.test_llm import TestLlmCorrida
+    db = SessionLocal()
+    try:
+        cor = db.get(TestLlmCorrida, corrida_id)
+        if not cor:
+            return {"ok": False, "detalle": "corrida no encontrada"}
+        if cor.estado != "lista":
+            return {"ok": False, "detalle": "la corrida tiene que estar juzgada (estado 'lista') para pedir el veredicto"}
+        cor.conclusion = None
+        cor.conclusion_estado = "procesando"
+        cor.conclusion_motores = json.dumps([int(m) for m in (motor_ids or [])])
+        cor.conclusion_at = None
+        db.commit()
+        return {"ok": True, "conclusion_estado": "procesando",
+                "conclusion_motores": [int(m) for m in (motor_ids or [])]}
+    finally:
+        db.close()
+
+
+def aplicar_conclusion(corrida_id: int, texto: str, motor_ids: list[int] | None = None) -> dict:
+    """Escribe la conclusión final (la genero yo en sesión con el plan Pro — subagente Sonnet
+    sintetizando el ranking/costos/fallos con el criterio del Especialista) y pasa la
+    conclusión a estado 'lista'. Si motor_ids no viene, conserva el subconjunto que se pidió."""
+    from app.database import SessionLocal
+    from app.models.test_llm import TestLlmCorrida
+    db = SessionLocal()
+    try:
+        cor = db.get(TestLlmCorrida, corrida_id)
+        if not cor:
+            return {"ok": False, "detalle": "corrida no encontrada"}
+        cor.conclusion = (texto or "").strip()[:8000]
+        cor.conclusion_estado = "lista"
+        if motor_ids is not None:
+            cor.conclusion_motores = json.dumps([int(m) for m in motor_ids])
+        cor.conclusion_at = datetime.now(timezone.utc)
+        db.commit()
+        return {"ok": True, "conclusion_estado": "lista",
+                "conclusion_motores": json.loads(cor.conclusion_motores or "[]")}
+    finally:
+        db.close()
+
+
 # ── seed / estado ─────────────────────────────────────────────────────────────
 
 def ensure_seed() -> dict:
@@ -842,6 +891,10 @@ def _cor_dict(c) -> dict:
             "costo_estimado_usd": c.costo_estimado_usd, "costo_real_usd": c.costo_real_usd,
             "resumen": json.loads(c.resumen or "{}"),
             "fidelidad": json.loads(c.fidelidad) if c.fidelidad else None,
+            "conclusion": c.conclusion or "",
+            "conclusion_estado": getattr(c, "conclusion_estado", "") or "",
+            "conclusion_motores": json.loads(getattr(c, "conclusion_motores", None) or "[]"),
+            "conclusion_at": c.conclusion_at.isoformat() if getattr(c, "conclusion_at", None) else None,
             "error": c.error,
             "created_at": c.created_at.isoformat() if c.created_at else None,
             "finished_at": c.finished_at.isoformat() if c.finished_at else None}

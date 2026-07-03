@@ -218,6 +218,19 @@ def run_migrations():
         conn.execute(text(
             "ALTER TABLE monitor_settings ADD COLUMN IF NOT EXISTS apk_version INTEGER NOT NULL DEFAULT 2"
         ))
+        # ── Test LLM: conclusión / veredicto final del juez (recomendación en prosa) ──
+        conn.execute(text(
+            "ALTER TABLE test_llm_corrida ADD COLUMN IF NOT EXISTS conclusion TEXT"
+        ))
+        conn.execute(text(
+            "ALTER TABLE test_llm_corrida ADD COLUMN IF NOT EXISTS conclusion_estado VARCHAR(16) NOT NULL DEFAULT ''"
+        ))
+        conn.execute(text(
+            "ALTER TABLE test_llm_corrida ADD COLUMN IF NOT EXISTS conclusion_motores TEXT NOT NULL DEFAULT '[]'"
+        ))
+        conn.execute(text(
+            "ALTER TABLE test_llm_corrida ADD COLUMN IF NOT EXISTS conclusion_at TIMESTAMPTZ"
+        ))
 
 
 Base.metadata.create_all(bind=engine)

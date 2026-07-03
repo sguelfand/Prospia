@@ -89,6 +89,14 @@ class TestLlmCorrida(Base):
     costo_real_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     resumen: Mapped[str] = mapped_column(Text, nullable=False, default="{}")       # JSON
     fidelidad: Mapped[str | None] = mapped_column(Text, nullable=True)             # JSON golden set
+    # Veredicto / conclusión final del juez: recomendación en prosa de qué motor usar y por qué.
+    # La genero yo en sesión con el plan Pro (subagente Sonnet), no la API. El botón de la UI solo
+    # marca 'procesando' y espera a que me la pidas por el chat. conclusion_motores = subconjunto
+    # del ranking sobre el que se pidió (vacío = todos los motores de la corrida).
+    conclusion: Mapped[str | None] = mapped_column(Text, nullable=True)
+    conclusion_estado: Mapped[str] = mapped_column(String(16), nullable=False, default="")  # ''|procesando|lista
+    conclusion_motores: Mapped[str] = mapped_column(Text, nullable=False, default="[]")      # JSON ids
+    conclusion_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

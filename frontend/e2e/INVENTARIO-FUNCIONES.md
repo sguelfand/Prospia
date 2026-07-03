@@ -168,8 +168,15 @@ observable. Sirve como registro de Pendientes/Realizados de la pantalla
   **Correr comparación** (deshabilitado hasta habilitar el gate).
 - Resultados (tablero movible): gráfico calidad por motor, gráfico costo por motor,
   tabla escenario×motor, modal de transcript por celda.
+- **Comparar**: tildar 2+ motores del ranking → vista lado a lado.
+- **Ver veredicto** (conclusión final del juez): tildá motores del ranking (o ninguno = todos)
+  → botón "Ver veredicto (N)" marca la corrida en **procesando** (animación) sin gastar tokens;
+  la conclusión la genera Claude en sesión con el **plan Pro** (`aplicar_conclusion` por SSH) y
+  aparece sola en el recuadro arriba del ranking (qué motor usar y por qué, sobre el subconjunto
+  tildado). Solo visible si la corrida está juzgada (estado `lista`). Endpoint `pedir-conclusion`.
 - Test: `testing.spec.ts` (carga, submenú, gate: Estimar siempre disponible + el botón
-  Correr y el aviso reflejan el estado real del switch global `test_llm_habilitado`).
+  Correr y el aviso reflejan el estado real del switch global `test_llm_habilitado`; Resultados
+  muestran Comparar y —si la corrida está juzgada— "Ver veredicto").
   ⚠️ El test NO corre comparaciones reales ni toca el switch (respeta el gate global).
 
 ---

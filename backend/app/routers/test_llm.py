@@ -211,6 +211,21 @@ def correr(corrida_id: int, juzgar: bool = Query(False)):
     return r
 
 
+class ConclusionIn(BaseModel):
+    motor_ids: list[int] = []
+
+
+@router.post("/corridas/{corrida_id}/pedir-conclusion")
+def pedir_conclusion(corrida_id: int, body: ConclusionIn):
+    """Pide el veredicto/conclusión final de la corrida (opcional: solo de los motores
+    tildados en el ranking). NO gasta tokens: deja la corrida 'procesando' y la conclusión
+    la genera Claude en sesión con el plan Pro. La UI muestra la animación y espera."""
+    r = test_llm.pedir_conclusion(corrida_id, body.motor_ids or None)
+    if not r.get("ok"):
+        raise HTTPException(status_code=400, detail=r.get("detalle", "no se pudo pedir el veredicto"))
+    return r
+
+
 @router.get("/corridas")
 def corridas(source: str = Query("etiguel")):
     return test_llm.listar_corridas(source)

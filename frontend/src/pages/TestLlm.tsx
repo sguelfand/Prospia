@@ -43,6 +43,7 @@ type Corrida = {
   id: number; nombre: string; estado: string; motores: number[]; escenarios: number[]
   costo_estimado_usd: number; costo_real_usd: number; resumen: Record<string, ResumenMotor>
   created_at: string | null; finished_at: string | null; resultados?: Resultado[]
+  conclusion?: string; conclusion_estado?: string; conclusion_motores?: number[]; conclusion_at?: string | null
 }
 
 const RESULT_LAYOUT = buildLayouts([
@@ -447,6 +448,35 @@ function ResultadosView({ corrida, onVerTranscript, onClose }: { corrida: Corrid
   const [selCmp, setSelCmp] = useState<Set<number>>(new Set())
   const [comparando, setComparando] = useState(false)
   const toggleCmp = (id: number) => setSelCmp(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+
+  // Veredicto / conclusión final del juez: la pido (marca 'procesando') y la genera Claude en
+  // sesión con el plan Pro (subagente Sonnet). Acá solo muestro la animación y polleo hasta 'lista'.
+  const [conc, setConc] = useState({
+    estado: corrida.conclusion_estado || '', texto: corrida.conclusion || '',
+    motores: corrida.conclusion_motores || [] as number[], at: corrida.conclusion_at || null as string | null,
+  })
+  const [pidiendo, setPidiendo] = useState(false)
+  async function pedirVeredicto() {
+    setPidiendo(true)
+    try {
+      const ids = [...selCmp]
+      await api.post(`/admin/test-llm/corridas/${corrida.id}/pedir-conclusion`, { motor_ids: ids })
+      setConc({ estado: 'procesando', texto: '', motores: ids, at: null })
+    } catch { /* noop */ } finally { setPidiendo(false) }
+  }
+  useEffect(() => {
+    if (conc.estado !== 'procesando') return
+    const t = setInterval(async () => {
+      try {
+        const d = await api.get<Corrida>(`/admin/test-llm/corridas/${corrida.id}`)
+        if ((d.conclusion_estado || '') === 'lista') {
+          setConc({ estado: 'lista', texto: d.conclusion || '', motores: d.conclusion_motores || [], at: d.conclusion_at || null })
+        }
+      } catch { /* noop */ }
+    }, 5000)
+    return () => clearInterval(t)
+  }, [conc.estado, corrida.id])
+  const nombreMotor = (id: number) => motores.find(m => m.id === id)?.nombre || String(id)
   const motores = [...new Set(res.map(r => r.motor_id))].map(id => {
     const rs = res.filter(r => r.motor_id === id)
     const bien = rs.filter(r => r.veredicto === 'bien').length
@@ -487,6 +517,32 @@ function ResultadosView({ corrida, onVerTranscript, onClose }: { corrida: Corrid
         </div>
       )}
 
+      {/* Veredicto / conclusión final del juez */}
+      {conc.estado === 'procesando' && (
+        <div className="bg-emerald-500/5 border border-emerald-500/40 rounded-xl px-4 py-3 flex items-start gap-3">
+          <Loader2 size={16} className="text-emerald-500 shrink-0 mt-0.5 animate-spin" />
+          <div className="text-xs text-ink">
+            <b>Generando veredicto…</b>{conc.motores.length ? ` (${conc.motores.length} motores tildados)` : ' (todos los motores)'}
+            <div className="text-[11px] text-muted mt-0.5">
+              Pedímelo por el chat de Claude — <i>"dame el veredicto de la corrida {corrida.id}"</i> — y lo genero con el
+              plan Pro (gratis). Apenas lo aplico, aparece acá solo.
+            </div>
+          </div>
+        </div>
+      )}
+      {conc.estado === 'lista' && conc.texto && (
+        <div className="bg-emerald-500/5 border border-emerald-500/40 rounded-xl px-4 py-3 flex items-start gap-3">
+          <TrendingUp size={16} className="text-emerald-500 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <div className="text-[11px] uppercase tracking-wide text-emerald-500 font-bold mb-1">
+              Veredicto del juez{conc.motores.length ? ` · ${conc.motores.map(nombreMotor).join(' · ')}` : ' · todos los motores'}
+            </div>
+            <div className="text-xs text-ink whitespace-pre-wrap leading-relaxed">{conc.texto}</div>
+            {conc.at && <div className="text-[10px] text-muted mt-2">generado {new Date(conc.at).toLocaleString('es-AR')} · plan Pro</div>}
+          </div>
+        </div>
+      )}
+
       {juzgada && <ResultadosTablero corrida={corrida} onVerTranscript={onVerTranscript} />}
 
       {comparando && selCmp.size >= 2 && (
@@ -500,11 +556,18 @@ function ResultadosView({ corrida, onVerTranscript, onClose }: { corrida: Corrid
             {juzgada ? 'Ranking y conversaciones por motor' : 'Conversaciones por motor (ordenados por costo)'}
           </div>
           <div className="flex items-center gap-2 text-[11px]">
-            <span className="text-muted">tildá 2+ para comparar</span>
+            <span className="text-muted hidden sm:inline">tildá motores</span>
             <button onClick={() => setComparando(true)} disabled={selCmp.size < 2}
               className="flex items-center gap-1 font-semibold border border-primary/50 text-primary rounded-lg px-2.5 py-1 hover:bg-primary/10 disabled:opacity-40">
               <BarChart2 size={12} /> Comparar {selCmp.size >= 2 ? `(${selCmp.size})` : ''}
             </button>
+            {juzgada && (
+              <button onClick={pedirVeredicto} disabled={pidiendo || conc.estado === 'procesando'}
+                title={selCmp.size ? `Veredicto de los ${selCmp.size} motores tildados` : 'Veredicto de todos los motores'}
+                className="flex items-center gap-1 font-semibold border border-emerald-500/50 text-emerald-500 rounded-lg px-2.5 py-1 hover:bg-emerald-500/10 disabled:opacity-40">
+                <TrendingUp size={12} /> Ver veredicto {selCmp.size ? `(${selCmp.size})` : ''}
+              </button>
+            )}
           </div>
         </div>
         <div className="space-y-2">

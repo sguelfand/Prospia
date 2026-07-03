@@ -54,4 +54,26 @@ test.describe("Testing (N1)", () => {
       await expect(page.getByText(/bloqueado hasta/i).first()).toBeVisible();
     }
   });
+
+  test("Motores LLM: Resultados de una corrida muestran Comparar y (si juzgada) Ver veredicto", async ({ page }) => {
+    await page.goto("/testing/llm");
+    await page.waitForLoadState("networkidle");
+    const resultados = page.getByRole("button", { name: /Resultados/ }).first();
+    if (!(await resultados.isVisible().catch(() => false))) {
+      test.skip(true, "no hay corridas con resultados en qa-test");
+      return;
+    }
+    await resultados.click();
+    // La vista de resultados siempre trae el botón Comparar (tildar motores).
+    await expect(page.getByRole("button", { name: /Comparar/ }).first()).toBeVisible();
+    // "Ver veredicto" (conclusión final del juez, plan Pro) aparece SOLO si la corrida está
+    // juzgada (estado 'lista'). No gasta tokens: solo marca 'procesando' y espera la sesión Pro.
+    const veredicto = page.getByRole("button", { name: /Ver veredicto/ });
+    const juzgada = await page.getByText(/juzgada/).first().isVisible().catch(() => false);
+    if (juzgada) {
+      await expect(veredicto.first()).toBeVisible();
+    } else {
+      await expect(veredicto).toHaveCount(0);
+    }
+  });
 });
