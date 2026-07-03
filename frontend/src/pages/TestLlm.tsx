@@ -417,6 +417,7 @@ export default function TestLlm() {
           {corridas.map(c => (
             <div key={c.id} className={`w-full flex items-center gap-3 border rounded-lg px-3 py-2 text-xs ${abierta?.id === c.id ? 'border-primary/50 bg-primary/5' : 'border-line'}`}>
               <span className={`w-2 h-2 rounded-full shrink-0 ${c.estado === 'lista' ? 'bg-emerald-500' : c.estado === 'sin_juzgar' ? 'bg-primary' : c.estado === 'estimada' || c.estado === 'corriendo' ? 'bg-amber animate-pulse' : c.estado === 'error' ? 'bg-red-500' : 'bg-muted'}`} />
+              <span className="shrink-0 font-mono font-bold text-primary bg-primary/10 rounded px-1.5 py-0.5" title="Número de comparación (referencialo así)">#{c.id}</span>
               <span className="flex-1 text-ink font-medium truncate">{c.nombre}{c.estado === 'sin_juzgar' && <span className="ml-1 text-[10px] font-bold text-primary border border-primary/50 rounded px-1">sin juzgar</span>}{c.estado === 'corriendo' && <span className="ml-1 text-[10px] font-bold text-amber border border-amber/50 rounded px-1">corriendo</span>}</span>
               <span className="text-muted shrink-0">{c.motores.length} motores · {c.escenarios.length} esc.</span>
               <span className="text-muted shrink-0">{(c.estado === 'lista' || c.estado === 'sin_juzgar') ? `real ${money(c.costo_real_usd)}` : `est. ${money(c.costo_estimado_usd)}`}</span>
@@ -495,7 +496,7 @@ function ResultadosView({ corrida, onVerTranscript, onClose }: { corrida: Corrid
       <div className="flex items-center gap-3">
         <BarChart2 size={18} className="text-primary shrink-0" />
         <div className="flex-1 min-w-0">
-          <h2 className="text-sm font-bold text-ink truncate">{corrida.nombre}</h2>
+          <h2 className="text-sm font-bold text-ink truncate"><span className="font-mono text-primary">#{corrida.id}</span> · {corrida.nombre}</h2>
           <p className="text-[11px] text-muted">
             {motores.length} motores · costo real {money(corrida.costo_real_usd)} ·{' '}
             {juzgada

@@ -168,6 +168,8 @@ observable. Sirve como registro de Pendientes/Realizados de la pantalla
   **Correr comparación** (deshabilitado hasta habilitar el gate).
 - Resultados (tablero movible): gráfico calidad por motor, gráfico costo por motor,
   tabla escenario×motor, modal de transcript por celda.
+- **Historial de comparaciones**: cada ítem lleva su **número `#N`** (id de la corrida) para
+  referenciarlo fácil ("dame el veredicto de la corrida N"); también en el header de Resultados.
 - **Comparar**: tildar 2+ motores del ranking → vista lado a lado.
 - **Ver veredicto** (conclusión final del juez): tildá motores del ranking (o ninguno = todos)
   → botón "Ver veredicto (N)" marca la corrida en **procesando** (animación) sin gastar tokens;
