@@ -231,6 +231,9 @@ def run_migrations():
         conn.execute(text(
             "ALTER TABLE test_llm_corrida ADD COLUMN IF NOT EXISTS conclusion_at TIMESTAMPTZ"
         ))
+        conn.execute(text(
+            "ALTER TABLE test_llm_corrida ADD COLUMN IF NOT EXISTS conclusiones TEXT NOT NULL DEFAULT '[]'"
+        ))
 
 
 Base.metadata.create_all(bind=engine)

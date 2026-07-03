@@ -93,9 +93,14 @@ class TestLlmCorrida(Base):
     # La genero yo en sesión con el plan Pro (subagente Sonnet), no la API. El botón de la UI solo
     # marca 'procesando' y espera a que me la pidas por el chat. conclusion_motores = subconjunto
     # del ranking sobre el que se pidió (vacío = todos los motores de la corrida).
-    conclusion: Mapped[str | None] = mapped_column(Text, nullable=True)
-    conclusion_estado: Mapped[str] = mapped_column(String(16), nullable=False, default="")  # ''|procesando|lista
-    conclusion_motores: Mapped[str] = mapped_column(Text, nullable=False, default="[]")      # JSON ids
+    # `conclusiones` (JSON) = lista de veredictos aplicados, uno por subconjunto pedido:
+    #   [{"motores": [ids], "texto": "...", "at": iso}]. Se ACUMULAN (no se pisan): cada
+    #   "Ver veredicto" agrega/reemplaza el del mismo subconjunto. conclusion_estado/_motores
+    #   marcan el pedido EN CURSO (procesando) hasta que aplico el veredicto.
+    conclusiones: Mapped[str] = mapped_column(Text, nullable=False, default="[]")             # JSON list
+    conclusion: Mapped[str | None] = mapped_column(Text, nullable=True)                       # legacy (1 texto)
+    conclusion_estado: Mapped[str] = mapped_column(String(16), nullable=False, default="")    # ''|procesando
+    conclusion_motores: Mapped[str] = mapped_column(Text, nullable=False, default="[]")       # JSON ids (pedido en curso)
     conclusion_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

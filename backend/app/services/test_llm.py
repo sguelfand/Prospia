@@ -647,9 +647,11 @@ def pedir_conclusion(corrida_id: int, motor_ids: list[int] | None = None) -> dic
 
 
 def aplicar_conclusion(corrida_id: int, texto: str, motor_ids: list[int] | None = None) -> dict:
-    """Escribe la conclusión final (la genero yo en sesión con el plan Pro — subagente Sonnet
-    sintetizando el ranking/costos/fallos con el criterio del Especialista) y pasa la
-    conclusión a estado 'lista'. Si motor_ids no viene, conserva el subconjunto que se pidió."""
+    """Escribe un veredicto (la genero yo en sesión con el plan Pro — subagente Sonnet
+    sintetizando el ranking/costos/fallos con el criterio del Especialista) y lo AGREGA a la
+    lista `conclusiones` de la corrida (no pisa los otros): un veredicto por subconjunto de
+    motores. Si ya había uno del MISMO subconjunto, lo reemplaza. Si motor_ids no viene, usa
+    el subconjunto del pedido en curso (conclusion_motores). Limpia el flag 'procesando'."""
     from app.database import SessionLocal
     from app.models.test_llm import TestLlmCorrida
     db = SessionLocal()
@@ -657,14 +659,20 @@ def aplicar_conclusion(corrida_id: int, texto: str, motor_ids: list[int] | None 
         cor = db.get(TestLlmCorrida, corrida_id)
         if not cor:
             return {"ok": False, "detalle": "corrida no encontrada"}
-        cor.conclusion = (texto or "").strip()[:8000]
-        cor.conclusion_estado = "lista"
-        if motor_ids is not None:
-            cor.conclusion_motores = json.dumps([int(m) for m in motor_ids])
+        ids = [int(m) for m in (motor_ids if motor_ids is not None
+                                else json.loads(cor.conclusion_motores or "[]"))]
+        lista = json.loads(getattr(cor, "conclusiones", None) or "[]")
+        entry = {"motores": ids, "texto": (texto or "").strip()[:8000],
+                 "at": datetime.now(timezone.utc).isoformat()}
+        key = sorted(ids)
+        lista = [e for e in lista if sorted(e.get("motores", [])) != key]  # reemplaza mismo subconjunto
+        lista.append(entry)
+        cor.conclusiones = json.dumps(lista, ensure_ascii=False)
+        cor.conclusion_estado = ""   # ya no hay pedido en curso
+        cor.conclusion = None        # legacy: la fuente de verdad es la lista
         cor.conclusion_at = datetime.now(timezone.utc)
         db.commit()
-        return {"ok": True, "conclusion_estado": "lista",
-                "conclusion_motores": json.loads(cor.conclusion_motores or "[]")}
+        return {"ok": True, "conclusiones": lista}
     finally:
         db.close()
 
@@ -891,7 +899,7 @@ def _cor_dict(c) -> dict:
             "costo_estimado_usd": c.costo_estimado_usd, "costo_real_usd": c.costo_real_usd,
             "resumen": json.loads(c.resumen or "{}"),
             "fidelidad": json.loads(c.fidelidad) if c.fidelidad else None,
-            "conclusion": c.conclusion or "",
+            "conclusiones": json.loads(getattr(c, "conclusiones", None) or "[]"),
             "conclusion_estado": getattr(c, "conclusion_estado", "") or "",
             "conclusion_motores": json.loads(getattr(c, "conclusion_motores", None) or "[]"),
             "conclusion_at": c.conclusion_at.isoformat() if getattr(c, "conclusion_at", None) else None,
