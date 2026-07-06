@@ -115,6 +115,10 @@ def run_migrations():
         conn.execute(text(
             "ALTER TABLE pendientes ADD COLUMN IF NOT EXISTS cola_resultado TEXT"
         ))
+        # transcripción de imagen adjunta/pegada (como en agent_errors.detalle)
+        conn.execute(text(
+            "ALTER TABLE pendientes ADD COLUMN IF NOT EXISTS detalle TEXT"
+        ))
 
         # ── etiguel_mirror: próximo contacto (cadencia/callback espejado) ──
         conn.execute(text(

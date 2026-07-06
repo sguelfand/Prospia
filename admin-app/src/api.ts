@@ -230,6 +230,7 @@ export interface Pendiente extends Partial<PendienteRich> {
   area: Area;
   hecho: boolean;
   fecha: string;
+  detalle?: string | null;   // transcripción de imagen adjunta
   cola_estado?: ColaEstado;
   cola_orden?: string | null;
   cola_resultado?: string | null;
@@ -776,17 +777,22 @@ export const crearPendiente = (
   prioridad: Prioridad,
   area: Area,
   extra?: Partial<PendienteRich>,
+  imagen?: { b64: string; mime: string },
 ) =>
   request<Pendiente>("/admin/pendientes", {
     method: "POST",
-    body: JSON.stringify({ texto, prioridad, area, ...(extra ?? {}) }),
+    body: JSON.stringify({
+      texto, prioridad, area, ...(extra ?? {}),
+      imagen_b64: imagen?.b64 ?? null, imagen_mime: imagen?.mime ?? "image/png",
+    }),
   }, token);
 
 export const editarPendiente = (
   token: string,
   id: number,
   // cola_estado: "" saca de la cola (el backend lo interpreta como nulo).
-  cambios: Partial<{ texto: string; prioridad: Prioridad; area: Area; hecho: boolean; cola_estado: ColaEstado | "" } & PendienteRich>,
+  // imagen_b64: "" borra la transcripción; con base64 la reemplaza.
+  cambios: Partial<{ texto: string; prioridad: Prioridad; area: Area; hecho: boolean; cola_estado: ColaEstado | ""; imagen_b64: string; imagen_mime: string } & PendienteRich>,
 ) =>
   request<Pendiente>(`/admin/pendientes/${id}`, {
     method: "PATCH",

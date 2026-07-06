@@ -1218,10 +1218,16 @@ def listar_pendientes(
 @router.post("/pendientes", response_model=PendienteOut, status_code=status.HTTP_201_CREATED)
 def crear_pendiente(body: PendienteIn, db: Session = Depends(get_db)):
     """Alta manual de un pendiente desde la app o la web (texto + prioridad +
-    área + campos ricos opcionales)."""
+    área + campos ricos opcionales + imagen opcional). La imagen (adjunta o
+    pegada del portapapeles) se transcribe con Haiku y queda en `detalle`."""
     def _clean(v):
         v = (v or "").strip()
         return v or None
+    detalle = None
+    if body.imagen_b64:
+        from app.services import camila_quality
+        detalle = camila_quality.transcribir_imagen_error(
+            body.imagen_b64, body.imagen_mime or "image/png", source=body.area)
     p = Pendiente(
         texto=body.texto.strip(),
         prioridad=body.prioridad if body.prioridad in ("alta", "media", "baja") else "media",
@@ -1231,6 +1237,7 @@ def crear_pendiente(body: PendienteIn, db: Session = Depends(get_db)):
         consideraciones=_clean(body.consideraciones),
         depende=_clean(body.depende),
         alcance=_clean(body.alcance),
+        detalle=(detalle[:5000] if detalle else None),
     )
     db.add(p)
     db.commit()
@@ -1269,6 +1276,15 @@ def editar_pendiente(pendiente_id: int, body: PendienteUpdate, db: Session = Dep
         val = getattr(body, campo)
         if val is not None:
             setattr(p, campo, val.strip() or None)
+    # Imagen: si viene b64, se transcribe y reemplaza `detalle`; "" → sacar.
+    if body.imagen_b64 is not None:
+        if body.imagen_b64:
+            from app.services import camila_quality
+            det = camila_quality.transcribir_imagen_error(
+                body.imagen_b64, body.imagen_mime or "image/png", source=p.area)
+            p.detalle = (det[:5000] if det else None)
+        else:
+            p.detalle = None
     # Conclusión: lo que hizo Claude al procesarlo ("" → NULL).
     if body.cola_resultado is not None:
         p.cola_resultado = body.cola_resultado.strip() or None

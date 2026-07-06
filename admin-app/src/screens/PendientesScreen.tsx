@@ -19,6 +19,7 @@ import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 
 import { Area, ColaEstado, Pendiente, PendienteRich, Prioridad, borrarPendiente, crearPendiente, editarPendiente, encolarPendientes, getPendientes } from "../api";
 import { useAuth } from "../auth";
+import { pickImageBase64 } from "../imagePicker";
 import { Icon } from "../components/Icon";
 import { SwipeRow } from "../components/SwipeRow";
 import { ErrorBox, Loader } from "../components/ui";
@@ -138,7 +139,7 @@ export default function PendientesScreen(_props: PendientesProps) {
     ]);
   };
 
-  const guardar = async (texto: string, prioridad: Prioridad, area: Area, rich: Partial<PendienteRich>) => {
+  const guardar = async (texto: string, prioridad: Prioridad, area: Area, rich: Partial<PendienteRich>, imagen?: { b64: string; mime: string } | null) => {
     if (!token) return;
     if (editing) {
       // Si lo estoy rechazando, lo SACO de la cola (cola_estado vacío → nulo):
@@ -147,12 +148,13 @@ export default function PendientesScreen(_props: PendientesProps) {
       const rechazando = requeueId === editing.id;
       const upd = await editarPendiente(token, editing.id, {
         texto, prioridad, area, ...rich,
+        ...(imagen ? { imagen_b64: imagen.b64, imagen_mime: imagen.mime } : {}),
         ...(rechazando ? { cola_estado: "" as const } : {}),
       });
       setItems((prev) => prev.map((p) => (p.id === upd.id ? upd : p)));
       setRequeueId(null);
     } else {
-      const nuevo = await crearPendiente(token, texto, prioridad, area, rich);
+      const nuevo = await crearPendiente(token, texto, prioridad, area, rich, imagen ?? undefined);
       setItems((prev) => [nuevo, ...prev]);
       setFiltro("pendientes");
     }
@@ -487,7 +489,7 @@ function PendienteCard({
   const [expanded, setExpanded] = useState(false);
   const [showConcl, setShowConcl] = useState(false);
   const richCampos = RICH_ORDER.filter((k) => item[k]);
-  const tieneDetalle = richCampos.length > 0;
+  const tieneDetalle = richCampos.length > 0 || !!item.detalle;
   const cola = item.cola_estado;
   return (
     <View style={[styles.card, selected ? styles.cardSelected : null]}>
@@ -537,6 +539,12 @@ function PendienteCard({
               {richCampos.map((k) => (
                 <RichSection key={k} campo={k} valor={item[k] as string} />
               ))}
+              {item.detalle ? (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>📎 Imagen adjunta (transcripción)</Text>
+                  <Text style={styles.sectionText}>{item.detalle}</Text>
+                </View>
+              ) : null}
             </View>
           )}
         </>
@@ -555,7 +563,7 @@ function FormModal({
   visible: boolean;
   initial?: Pendiente | null;
   onClose: () => void;
-  onSubmit: (texto: string, prioridad: Prioridad, area: Area, rich: Partial<PendienteRich>) => Promise<void>;
+  onSubmit: (texto: string, prioridad: Prioridad, area: Area, rich: Partial<PendienteRich>, imagen?: { b64: string; mime: string } | null) => Promise<void>;
   rejecting?: boolean;
 }) {
   const [texto, setTexto] = useState("");
@@ -564,6 +572,7 @@ function FormModal({
   const [rich, setRich] = useState<Record<keyof PendienteRich, string>>({
     contexto: "", que_armar: "", consideraciones: "", depende: "", alcance: "",
   });
+  const [img, setImg] = useState<{ b64: string; mime: string; nombre: string } | null>(null);
   const [mostrarDetalle, setMostrarDetalle] = useState(false);
   const [saving, setSaving] = useState(false);
   const insets = useSafeAreaInsets();
@@ -579,16 +588,26 @@ function FormModal({
         alcance: initial?.alcance ?? "",
       };
       setRich(r);
+      setImg(null);
       setMostrarDetalle(RICH_ORDER.some((k) => r[k]));
     }
   }, [visible, initial]);
+
+  const elegirImagen = async () => {
+    try {
+      const picked = await pickImageBase64();
+      if (picked) setImg(picked);
+    } catch (e) {
+      Alert.alert("Imagen", e instanceof Error ? e.message : "No se pudo abrir la galería.");
+    }
+  };
 
   const guardar = async () => {
     if (!texto.trim() || saving) return;
     setSaving(true);
     try {
       // mandamos los campos ricos siempre (vacío → el backend lo guarda como NULL)
-      await onSubmit(texto.trim(), prioridad, area, rich);
+      await onSubmit(texto.trim(), prioridad, area, rich, img ? { b64: img.b64, mime: img.mime } : null);
       onClose();
     } finally {
       setSaving(false);
@@ -650,12 +669,28 @@ function FormModal({
                 </View>
               ))}
 
+            <Text style={styles.label}>Imagen (opcional)</Text>
+            {img ? (
+              <View style={styles.imgRow}>
+                <Text style={styles.imgName} numberOfLines={1}>📎 {img.nombre}</Text>
+                <TouchableOpacity onPress={() => setImg(null)} disabled={saving}>
+                  <Text style={styles.imgQuitar}>Quitar</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity style={styles.imgBtn} onPress={elegirImagen} disabled={saving} activeOpacity={0.8}>
+                <Icon name="plus" size={15} color={colors.primary} />
+                <Text style={styles.imgBtnText}>Adjuntar imagen</Text>
+              </TouchableOpacity>
+            )}
+            <Text style={styles.imgHint}>La IA la lee y transcribe (cuesta centavos).</Text>
+
             <View style={styles.actions}>
               <TouchableOpacity style={styles.btnCancel} onPress={onClose}>
                 <Text style={styles.btnCancelText}>Cancelar</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.btnSave, !texto.trim() ? styles.btnSaveOff : null]} onPress={guardar} disabled={!texto.trim() || saving}>
-                <Text style={styles.btnSaveText}>{saving ? "Guardando…" : rejecting ? "Rechazar" : "Guardar"}</Text>
+                <Text style={styles.btnSaveText}>{saving ? (img ? "Analizando…" : "Guardando…") : rejecting ? "Rechazar" : "Guardar"}</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -778,6 +813,13 @@ const styles = StyleSheet.create({
   chip: { borderColor: colors.border, borderWidth: 1, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 8 },
   chipText: { color: colors.text, fontSize: 13, textTransform: "capitalize" },
   chipTextOn: { color: "#fff", fontWeight: "700" },
+
+  imgBtn: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", borderWidth: 1, borderColor: colors.primary, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 14 },
+  imgBtnText: { color: colors.primary, fontSize: 13, fontWeight: "700" },
+  imgRow: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.card, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12 },
+  imgName: { flex: 1, color: colors.text, fontSize: 13 },
+  imgQuitar: { color: colors.red, fontSize: 13, fontWeight: "700" },
+  imgHint: { color: colors.textDim, fontSize: 11, marginTop: 6 },
 
   actions: { flexDirection: "row", gap: 10, marginTop: 20 },
   btnCancel: { flex: 1, borderColor: colors.border, borderWidth: 1, borderRadius: 10, paddingVertical: 13, alignItems: "center" },

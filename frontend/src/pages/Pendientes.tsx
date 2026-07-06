@@ -1,4 +1,4 @@
-import { Check, Copy, Pencil, RotateCcw, Trash2 } from 'lucide-react'
+import { Check, Copy, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 
@@ -19,10 +19,13 @@ type Pendiente = {
   consideraciones?: string | null
   depende?: string | null
   alcance?: string | null
+  detalle?: string | null
   cola_estado?: ColaEstado
   cola_orden?: string | null
   cola_resultado?: string | null
 }
+
+type ImgAdjunta = { b64: string; mime: string; nombre: string }
 
 const AREA_LABELS: Record<Area, string> = { app: 'App (Prospia Admin)', web: 'Web / Plataforma', etiguel: 'Etiguel / Scraper' }
 const AREA_ORDER: Area[] = ['app', 'web', 'etiguel']
@@ -468,6 +471,12 @@ function ItemCard({ it, ctx }: { it: Pendiente; ctx: ItemCtx }) {
               )}
             </div>
           )) : <p className="text-xs text-muted">Sin detalle. Tocá «Editar» para agregar contexto.</p>}
+          {it.detalle && (
+            <div className="mb-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted mb-1">📎 Imagen adjunta (transcripción)</p>
+              <p className="text-sm text-ink-soft whitespace-pre-wrap">{it.detalle}</p>
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-dashed border-line">
             {cola && cola !== 'procesado' && <ActBtn onClick={() => ctx.dequeue(it)}>Sacar de cola</ActBtn>}
             <ActBtn onClick={() => ctx.copyItem(it)}><Copy size={12} /> Copiar</ActBtn>
@@ -508,8 +517,32 @@ function FormModal({
     contexto: editing?.contexto ?? '', que_armar: editing?.que_armar ?? '',
     consideraciones: editing?.consideraciones ?? '', depende: editing?.depende ?? '', alcance: editing?.alcance ?? '',
   })
+  const [img, setImg] = useState<ImgAdjunta | null>(null)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
+
+  // ── imagen adjunta / pegada (se transcribe con IA, como en Errores) ──
+  const leerArchivoImagen = (file: File) => {
+    if (!file.type.startsWith('image/')) { setErr('Tiene que ser una imagen.'); return }
+    if (file.size > 8 * 1024 * 1024) { setErr('La imagen es muy grande (máx 8MB).'); return }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '')
+      setImg({ b64: dataUrl.split(',')[1] || '', mime: file.type || 'image/png', nombre: file.name || 'pegada.png' })
+    }
+    reader.readAsDataURL(file)
+  }
+  const onElegirImagen = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (file) leerArchivoImagen(file)
+  }
+  const onPasteImagen = (e: React.ClipboardEvent) => {
+    const item = Array.from(e.clipboardData?.items || []).find((it) => it.type.startsWith('image/'))
+    if (!item) return
+    const file = item.getAsFile()
+    if (file) { e.preventDefault(); leerArchivoImagen(file) }
+  }
 
   const save = async () => {
     if (!texto.trim()) { setErr('Poné al menos un título.'); return }
@@ -517,6 +550,7 @@ function FormModal({
     setErr('')
     try {
       const body: Record<string, unknown> = { texto: texto.trim(), prioridad, area, ...rich }
+      if (img) { body.imagen_b64 = img.b64; body.imagen_mime = img.mime }
       if (rejecting && editing) body.cola_estado = '' // rechazar = sacar de la cola
       if (editing) {
         const upd = await api.patch<Pendiente>(`/admin/pendientes/${editing.id}`, body)
@@ -531,7 +565,7 @@ function FormModal({
 
   return (
     <div className="fixed inset-0 z-40 bg-black/45 flex items-start justify-center p-4 overflow-y-auto" onClick={onClose}>
-      <div className="bg-card border border-line rounded-2xl w-full max-w-xl p-6 mt-8" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-card border border-line rounded-2xl w-full max-w-xl p-6 mt-8" onClick={(e) => e.stopPropagation()} onPaste={onPasteImagen}>
         <h2 className="text-lg font-semibold text-ink mb-1">{rejecting ? 'Rechazar y reabrir' : editing ? 'Editar pendiente' : 'Nuevo pendiente'}</h2>
         {rejecting && <p className="text-xs text-muted mb-3">Escribí qué viste / qué falta. Al guardar sale del recuadro y vuelve abajo como pendiente normal.</p>}
         <div className="space-y-3 mt-3">
@@ -559,11 +593,26 @@ function FormModal({
               <textarea value={rich[k]} onChange={(e) => setRich((p) => ({ ...p, [k]: e.target.value }))} className={`${inputCls} min-h-[44px]`} placeholder="Opcional" />
             </div>
           ))}
+          <div>
+            <label className={fieldLabel}>Imagen <span className="normal-case text-muted/60">(opcional)</span></label>
+            {img ? (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-ink truncate flex-1">📎 {img.nombre}</span>
+                <button onClick={() => setImg(null)} disabled={saving} className="text-xs text-muted hover:text-red-500">Quitar</button>
+              </div>
+            ) : (
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-primary border border-primary/50 rounded-lg px-3 py-1.5 hover:bg-primary/10 cursor-pointer w-fit">
+                <Plus size={14} /> Adjuntar imagen o pegá (Ctrl+V)
+                <input type="file" accept="image/*" className="hidden" onChange={onElegirImagen} />
+              </label>
+            )}
+            <p className="text-[11px] text-muted mt-1">Podés elegir un archivo o <span className="text-ink">pegar una captura (Ctrl/Cmd+V)</span>. La IA la lee y la transcribe (cuesta centavos).</p>
+          </div>
           {err && <p className="text-sm text-red-500">{err}</p>}
           <div className="flex justify-end gap-2 pt-1">
             <button onClick={onClose} className="px-4 py-2 rounded-lg border border-line text-sm text-ink">Cancelar</button>
             <button onClick={save} disabled={saving} className="px-4 py-2 rounded-lg bg-primary text-on-primary text-sm font-semibold disabled:opacity-50">
-              {saving ? 'Guardando…' : rejecting ? 'Rechazar' : 'Guardar'}
+              {saving ? (img ? 'Analizando imagen…' : 'Guardando…') : rejecting ? 'Rechazar' : 'Guardar'}
             </button>
           </div>
         </div>

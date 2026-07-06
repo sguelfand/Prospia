@@ -102,6 +102,8 @@ observable. Sirve como registro de Pendientes/Realizados de la pantalla
 - Filtros: estado (Pendientes/Hechas/Todas), área (App/Web/Etiguel/Todas),
   orden (Fecha/Prioridad), vista (Por áreas / Todas juntas)
 - Nuevo pendiente (modal con todos los campos) + guardar/cancelar
+- **Adjuntar/pegar imagen** (Ctrl+V) al crear/editar → se transcribe con Haiku y
+  queda en `detalle` (se ve al abrir el pendiente) — igual que Errores — ✅ `pendientes.spec.ts`
 - Por pendiente: abrir/cerrar detalle, marcar realizado, reabrir, copiar, editar,
   borrar, sacar de cola
 - Lote: seleccionar, procesar, eliminar, cancelar

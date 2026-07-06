@@ -369,6 +369,8 @@ class PendienteIn(BaseModel):
     consideraciones: str | None = None
     depende: str | None = None
     alcance: str | None = None
+    imagen_b64: str | None = None       # base64 SIN prefijo data:, se transcribe con IA
+    imagen_mime: str | None = None      # ej image/png
 
 
 class PendienteUpdate(BaseModel):
@@ -382,6 +384,8 @@ class PendienteUpdate(BaseModel):
     consideraciones: str | None = None
     depende: str | None = None
     alcance: str | None = None
+    imagen_b64: str | None = None       # base64 SIN prefijo data:, se transcribe con IA
+    imagen_mime: str | None = None      # ej image/png
     # cola: NULL = sacar de cola | "pendiente" | "procesado" | "standby"
     cola_estado: str | None = None
     cola_resultado: str | None = None
@@ -404,6 +408,7 @@ class PendienteOut(BaseModel):
     consideraciones: str | None = None
     depende: str | None = None
     alcance: str | None = None
+    detalle: str | None = None          # transcripción de imagen adjunta
     cola_estado: str | None = None
     cola_orden: datetime | None = None
     cola_resultado: str | None = None
