@@ -809,6 +809,66 @@ export const encolarPendientes = (token: string, ids: number[]) =>
     body: JSON.stringify({ ids }),
   }, token);
 
+// ── Agenda (#92): tareas con fecha, fuente única compartida con Claude ──
+export interface AgendaItem {
+  id: number;
+  fecha: string;          // AAAA-MM-DD
+  descripcion: string;
+  hecho: boolean;
+  hecho_fecha: string | null;
+  origen: string;         // sebi | claude
+  creado_at: string;
+}
+
+export const getAgenda = (token: string, incluirHechas = false) =>
+  request<AgendaItem[]>(`/admin/agenda?incluir_hechas=${incluirHechas}`, {}, token);
+
+export const crearAgenda = (token: string, fecha: string, descripcion: string) =>
+  request<AgendaItem>("/admin/agenda", {
+    method: "POST",
+    body: JSON.stringify({ fecha, descripcion, origen: "sebi" }),
+  }, token);
+
+export const editarAgenda = (
+  token: string,
+  id: number,
+  cambios: { fecha?: string; descripcion?: string; hecho?: boolean },
+) =>
+  request<AgendaItem>(`/admin/agenda/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(cambios),
+  }, token);
+
+export const borrarAgenda = (token: string, id: number) =>
+  request<void>(`/admin/agenda/${id}`, { method: "DELETE" }, token);
+
+// ── Fixes manuales de Camila (#95): changelog para no duplicar mejoras ──
+export interface CamilaFix {
+  id: number;
+  source: string;
+  telefono: string | null;
+  descripcion: string;
+  categoria: string | null;
+  creado_at: string;
+}
+
+export const getCamilaFixes = (token: string, source?: string) =>
+  request<CamilaFix[]>(`/admin/camila-fixes${source ? `?source=${encodeURIComponent(source)}` : ""}`, {}, token);
+
+export const crearCamilaFix = (
+  token: string,
+  descripcion: string,
+  telefono?: string,
+  source = "etiguel",
+) =>
+  request<CamilaFix>("/admin/camila-fixes", {
+    method: "POST",
+    body: JSON.stringify({ descripcion, telefono: telefono || null, source }),
+  }, token);
+
+export const borrarCamilaFix = (token: string, id: number) =>
+  request<void>(`/admin/camila-fixes/${id}`, { method: "DELETE" }, token);
+
 export const getPushPref = (token: string, tenantId: number, expoToken: string) =>
   request<{ enabled: boolean }>(
     `/admin/clientes/${tenantId}/push?expo_token=${encodeURIComponent(expoToken)}`,

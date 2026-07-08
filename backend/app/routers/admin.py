@@ -23,6 +23,8 @@ from app.models.etiguel_mirror import EtiguelMirror, EtiguelMirrorMensaje
 from app.models.historial import ProspectHistorial
 from app.models.mensaje import ProspectMensaje
 from app.models.pendiente import Pendiente
+from app.models.agenda import AgendaItem
+from app.models.camila_fix import CamilaFix
 from app.models.prospect import ESTADOS, Prospect
 from app.models.push_mute import PushMute
 from app.models.push_event_mute import PushEventMute
@@ -75,6 +77,11 @@ from app.schemas.admin import (
     PendienteIn,
     PendienteOut,
     PendienteUpdate,
+    AgendaItemIn,
+    AgendaItemOut,
+    AgendaItemUpdate,
+    CamilaFixIn,
+    CamilaFixOut,
     PushPrefIn,
     PushPrefOut,
     ResetPasswordOut,
@@ -1340,6 +1347,99 @@ def borrar_pendiente(pendiente_id: int, db: Session = Depends(get_db)):
     p = db.get(Pendiente, pendiente_id)
     if p:
         db.delete(p)
+        db.commit()
+
+
+# ── Agenda (#92): tareas con fecha, fuente única compartida con Claude ──
+@router.get("/agenda", response_model=list[AgendaItemOut])
+def listar_agenda(
+    incluir_hechas: bool = Query(False),
+    db: Session = Depends(get_db),
+):
+    """Agenda de Sebi. Por defecto solo las tareas pendientes (no hechas).
+    Orden: por fecha ascendente (lo más próximo/vencido primero)."""
+    q = db.query(AgendaItem)
+    if not incluir_hechas:
+        q = q.filter(AgendaItem.hecho.is_(False))
+    return q.order_by(AgendaItem.fecha.asc(), AgendaItem.id.asc()).all()
+
+
+@router.post("/agenda", response_model=AgendaItemOut, status_code=status.HTTP_201_CREATED)
+def crear_agenda(body: AgendaItemIn, db: Session = Depends(get_db)):
+    """Alta de una tarea de agenda (desde la app o desde Claude)."""
+    it = AgendaItem(
+        fecha=body.fecha,
+        descripcion=body.descripcion.strip(),
+        origen=body.origen if body.origen in ("sebi", "claude") else "sebi",
+    )
+    db.add(it)
+    db.commit()
+    db.refresh(it)
+    return it
+
+
+@router.patch("/agenda/{item_id}", response_model=AgendaItemOut)
+def editar_agenda(item_id: int, body: AgendaItemUpdate, db: Session = Depends(get_db)):
+    """Edita una tarea (fecha/descripción) o la marca hecha/pendiente. Reagendar
+    = mandar `fecha` nueva. Completar = `hecho=true` (sella hecho_fecha=hoy)."""
+    it = db.get(AgendaItem, item_id)
+    if not it:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No existe esa tarea")
+    if body.fecha is not None:
+        it.fecha = body.fecha
+    if body.descripcion is not None:
+        it.descripcion = body.descripcion.strip()
+    if body.hecho is not None:
+        it.hecho = body.hecho
+        it.hecho_fecha = date.today() if body.hecho else None
+    db.commit()
+    db.refresh(it)
+    return it
+
+
+@router.delete("/agenda/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+def borrar_agenda(item_id: int, db: Session = Depends(get_db)):
+    it = db.get(AgendaItem, item_id)
+    if it:
+        db.delete(it)
+        db.commit()
+
+
+# ── Fixes manuales de Camila (#95): changelog para no duplicar mejoras ──
+@router.get("/camila-fixes", response_model=list[CamilaFixOut])
+def listar_camila_fixes(
+    source: str | None = Query(None),
+    limit: int = Query(200, le=1000),
+    db: Session = Depends(get_db),
+):
+    """Lista de arreglos manuales de Camila (changelog). Más reciente primero.
+    El Especialista de Calidad la consulta antes de reportar para no duplicar."""
+    q = db.query(CamilaFix)
+    if source:
+        q = q.filter(CamilaFix.source == source)
+    return q.order_by(CamilaFix.creado_at.desc()).limit(limit).all()
+
+
+@router.post("/camila-fixes", response_model=CamilaFixOut, status_code=status.HTTP_201_CREATED)
+def crear_camila_fix(body: CamilaFixIn, db: Session = Depends(get_db)):
+    """Registra un arreglo manual de Camila (teléfono opcional + qué se arregló)."""
+    fx = CamilaFix(
+        source=(body.source or "etiguel").strip() or "etiguel",
+        telefono=(body.telefono or "").strip() or None,
+        descripcion=body.descripcion.strip(),
+        categoria=(body.categoria or "").strip() or None,
+    )
+    db.add(fx)
+    db.commit()
+    db.refresh(fx)
+    return fx
+
+
+@router.delete("/camila-fixes/{fix_id}", status_code=status.HTTP_204_NO_CONTENT)
+def borrar_camila_fix(fix_id: int, db: Session = Depends(get_db)):
+    fx = db.get(CamilaFix, fix_id)
+    if fx:
+        db.delete(fx)
         db.commit()
 
 

@@ -19,6 +19,7 @@ export type DrawerParamList = {
   Preguntas: { consultaId?: number } | undefined;
   PreguntasClaude: { preguntaId?: number } | undefined;
   Pendientes: undefined;
+  Agenda: undefined;
   Avisos: { avisoId?: number } | undefined;
   Configuracion: undefined;
   Perfil: undefined;
@@ -42,6 +43,7 @@ export type ErroresProps = DrawerScreenProps<DrawerParamList, "Errores">;
 export type PreguntasProps = DrawerScreenProps<DrawerParamList, "Preguntas">;
 export type PreguntasClaudeProps = DrawerScreenProps<DrawerParamList, "PreguntasClaude">;
 export type PendientesProps = DrawerScreenProps<DrawerParamList, "Pendientes">;
+export type AgendaProps = DrawerScreenProps<DrawerParamList, "Agenda">;
 export type AvisosProps = DrawerScreenProps<DrawerParamList, "Avisos">;
 export type ConfiguracionProps = DrawerScreenProps<DrawerParamList, "Configuracion">;
 export type ClienteNotificacionesProps = DrawerScreenProps<DrawerParamList, "ClienteNotificaciones">;

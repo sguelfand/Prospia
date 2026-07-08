@@ -273,7 +273,30 @@ def _ejemplos_calibracion(db, source: str) -> str:
     return "\n".join(partes)
 
 
-def _system_prompt(source: str, calibracion: str) -> str:
+def _fixes_aplicados(db, source: str, limit: int = 40) -> str:
+    """Changelog de arreglos MANUALES de Camila (#95). El especialista lo lee para
+    NO volver a reportar algo que Sebi ya arregló a mano (evita oportunidades de
+    mejora duplicadas). Incluye teléfono cuando el fix fue por una conversación."""
+    try:
+        from app.models.camila_fix import CamilaFix
+        rows = (db.query(CamilaFix)
+                .filter(CamilaFix.source == source)
+                .order_by(CamilaFix.creado_at.desc())
+                .limit(limit).all())
+    except Exception:
+        return ""
+    if not rows:
+        return ""
+    partes = ["\n\nARREGLOS YA HECHOS A MANO (NO los vuelvas a marcar — ya están resueltos "
+              "en Camila; marcarlos sería una mejora DUPLICADA):"]
+    for fx in rows:
+        tel = f" (tel {fx.telefono})" if fx.telefono else ""
+        cat = f"[{fx.categoria}] " if fx.categoria else ""
+        partes.append(f"- {cat}{fx.descripcion.strip()}{tel}")
+    return "\n".join(partes)
+
+
+def _system_prompt(source: str, calibracion: str, fixes: str = "") -> str:
     negocio = _NEGOCIO.get(source, _NEGOCIO["etiguel"])
     cats = "\n".join(f"  - {k}: {v}" for k, v in CATEGORIAS.items())
     return (
@@ -288,7 +311,8 @@ def _system_prompt(source: str, calibracion: str) -> str:
         "NO se marca.\n\n"
         f"EL NEGOCIO:\n{negocio}\n\n"
         f"CATEGORÍAS de observación:\n{cats}\n"
-        f"{calibracion}\n\n"
+        f"{calibracion}"
+        f"{fixes}\n\n"
         "Respondé SOLO con un JSON válido (sin texto alrededor, sin ```), así:\n"
         '{"revisar": true|false, "categoria": "<una de las categorías>", '
         '"severidad": "alta"|"media"|"baja", "titulo": "<resumen corto, máx 110 car>", '
@@ -325,7 +349,8 @@ def revisar_dia(source: str = "etiguel", fecha: str | None = None, notify: bool 
         if not convs:
             return {"source": source, "fecha": fecha, "conversaciones": 0, "nuevas": 0}
         calibracion = _ejemplos_calibracion(db, source)
-        system = _system_prompt(source, calibracion)
+        fixes = _fixes_aplicados(db, source)
+        system = _system_prompt(source, calibracion, fixes)
         for c in convs:
             revisadas += 1
             user = (f"Conversación de Camila con {c.get('nombre') or 'un cliente'} "
@@ -431,6 +456,16 @@ def confirmar_revision(rev_id: int, veredicto: str, nota: str | None = None,
         if resuelto_directo:
             r.resuelto_directo = True
             r.incorporada_at = ahora   # fuera de la cola de Aprendizajes (ya resuelto)
+            # #95: dejarlo también en el changelog de fixes manuales, así el
+            # especialista no lo re-reporta en días siguientes (dedup duplicados).
+            try:
+                from app.models.camila_fix import CamilaFix
+                db.add(CamilaFix(
+                    source=r.source, telefono=r.telefono, categoria=r.categoria,
+                    descripcion=(r.titulo or "Arreglo manual")[:500],
+                ))
+            except Exception:
+                pass
         db.commit()
         db.refresh(r)
         return _to_dict(r)

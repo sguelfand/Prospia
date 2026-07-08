@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel
 
@@ -412,6 +412,50 @@ class PendienteOut(BaseModel):
     cola_estado: str | None = None
     cola_orden: datetime | None = None
     cola_resultado: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+# ── Agenda (#92): tareas con fecha, fuente única compartida con Claude ──
+class AgendaItemIn(BaseModel):
+    fecha: date                 # AAAA-MM-DD
+    descripcion: str
+    origen: str = "sebi"        # sebi | claude
+
+
+class AgendaItemUpdate(BaseModel):
+    fecha: date | None = None
+    descripcion: str | None = None
+    hecho: bool | None = None
+
+
+class AgendaItemOut(BaseModel):
+    id: int
+    fecha: date
+    descripcion: str
+    hecho: bool
+    hecho_fecha: date | None = None
+    origen: str
+    creado_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── Fixes manuales de Camila (#95): changelog para no duplicar mejoras ──
+class CamilaFixIn(BaseModel):
+    descripcion: str
+    telefono: str | None = None
+    categoria: str | None = None
+    source: str = "etiguel"
+
+
+class CamilaFixOut(BaseModel):
+    id: int
+    source: str
+    telefono: str | None = None
+    descripcion: str
+    categoria: str | None = None
+    creado_at: datetime
 
     model_config = {"from_attributes": True}
 

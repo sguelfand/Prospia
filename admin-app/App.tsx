@@ -31,6 +31,7 @@ import LoginScreen from "./src/screens/LoginScreen";
 import MonitoreoScreen from "./src/screens/MonitoreoScreen";
 import NotificacionesScreen from "./src/screens/NotificacionesScreen";
 import PendientesScreen from "./src/screens/PendientesScreen";
+import AgendaScreen from "./src/screens/AgendaScreen";
 import PerfilScreen from "./src/screens/PerfilScreen";
 import PreguntasScreen from "./src/screens/PreguntasScreen";
 import PreguntasClaudeScreen from "./src/screens/PreguntasClaudeScreen";
@@ -85,6 +86,7 @@ function AppDrawer() {
       <Drawer.Screen name="Preguntas" component={PreguntasScreen} options={{ title: "Preguntas" }} />
       <Drawer.Screen name="PreguntasClaude" component={PreguntasClaudeScreen} options={{ title: "Preguntas de Claude" }} />
       <Drawer.Screen name="Pendientes" component={PendientesScreen} options={{ title: "Pendientes" }} />
+      <Drawer.Screen name="Agenda" component={AgendaScreen} options={{ title: "Agenda" }} />
       <Drawer.Screen name="Avisos" component={AvisosScreen} options={{ title: "Avisos" }} />
       <Drawer.Screen name="Configuracion" component={ConfiguracionScreen} options={{ title: "Configuración" }} />
       <Drawer.Screen name="Perfil" component={PerfilScreen} options={{ title: "Perfil" }} />

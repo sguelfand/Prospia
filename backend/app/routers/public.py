@@ -14,14 +14,16 @@ import json
 import os
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi import Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.database import get_db
+from app.models.agenda import AgendaItem
 from app.models.intake_submission import IntakeSubmission
 from app.models.tenant import Tenant, TenantConfig
 from app.services import info_negocio as info_negocio_svc
@@ -379,3 +381,34 @@ def intake_ayuda(slug: str, body: AyudaBody, request: Request, db: Session = Dep
             detail="El asistente no está disponible en este momento.",
         )
     return {"respuesta": respuesta}
+
+
+# ── Agenda del día para el hook SessionStart de Claude (#92) ──
+# Read-only, protegido por el mirror token (mismo que /chat-log). Lo consulta el
+# hook local de Claude en cada arranque para recordarle a Sebi lo de hoy/vencido.
+def _agenda_token_ok(token: str | None) -> bool:
+    esperado = settings.ETIGUEL_MIRROR_TOKEN or settings.WEBHOOK_TOKEN
+    return bool(esperado) and token == esperado
+
+
+@router.get("/agenda-hoy")
+def agenda_hoy(
+    token: str = Query(...),
+    vencidas: bool = Query(True),
+    db: Session = Depends(get_db),
+):
+    """Tareas de agenda de HOY (y vencidas si `vencidas`), no hechas. Para el
+    hook de Claude. Devuelve `{items:[{id,fecha,descripcion,origen}]}`."""
+    if not _agenda_token_ok(token):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="token inválido")
+    hoy = date.today()
+    q = db.query(AgendaItem).filter(AgendaItem.hecho.is_(False))
+    if vencidas:
+        q = q.filter(AgendaItem.fecha <= hoy)
+    else:
+        q = q.filter(AgendaItem.fecha == hoy)
+    items = q.order_by(AgendaItem.fecha.asc(), AgendaItem.id.asc()).all()
+    return {"items": [
+        {"id": it.id, "fecha": it.fecha.isoformat(), "descripcion": it.descripcion, "origen": it.origen}
+        for it in items
+    ]}
