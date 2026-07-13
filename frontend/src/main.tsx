@@ -13,6 +13,7 @@ import Preguntas from './pages/Preguntas'
 import MonitoreoPage from './pages/MonitoreoPage'
 import Tokens from './pages/Tokens'
 import Calidad from './pages/Calidad'
+import Saldos from './pages/Saldos'
 import TestVisuales from './pages/TestVisuales'
 import TestLlm from './pages/TestLlm'
 import Layout from './components/Layout'
@@ -43,6 +44,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="monitoreo/servicios" element={<MonitoreoPage />} />
           <Route path="monitoreo/tokens" element={<Tokens />} />
           <Route path="monitoreo/calidad" element={<Calidad />} />
+          <Route path="monitoreo/saldos" element={<Saldos />} />
           <Route path="testing" element={<Navigate to="/testing/visuales" replace />} />
           <Route path="testing/visuales" element={<TestVisuales />} />
           <Route path="testing/llm" element={<TestLlm />} />

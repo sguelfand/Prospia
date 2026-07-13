@@ -122,3 +122,71 @@ def obtener_saldos() -> dict:
         "proveedores": [_openrouter(keys["openrouter"]), _myclaw(), _anthropic()],
         "consultado_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
+
+
+# Umbral de aviso de OpenRouter (US$). Configurable por env.
+import os as _os
+OPENROUTER_ALERTA_USD = float(_os.environ.get("OPENROUTER_ALERTA_USD", "1"))
+
+
+def chequear_saldos_y_alertar():
+    """Lo llama el loop de monitoreo. Avisa por push (superadmin) UNA sola vez en la
+    bajada y se rearma al recuperarse:
+      - OpenRouter: saldo ≤ OPENROUTER_ALERTA_USD (US$1 por default).
+      - MyClaw: la API responde 'sin_saldo' (403 balance_depleted).
+    El flag por proveedor (monitor_settings) evita spamear en cada pasada."""
+    from app.database import SessionLocal
+    from app.models.service_health import MonitorSettings
+    from app.services import push
+
+    keys = _get_keys()
+    orr = _openrouter(keys["openrouter"])
+    myc = _myclaw()
+
+    db = SessionLocal()
+    avisos = []
+    try:
+        s = db.query(MonitorSettings).filter(MonitorSettings.id == 1).first()
+        if not s:
+            return
+
+        # ── OpenRouter: saldo bajo ──
+        if orr.get("ok") and orr.get("tipo") == "saldo":
+            saldo = orr.get("saldo_usd")
+            if saldo is not None and saldo <= OPENROUTER_ALERTA_USD:
+                if not s.saldo_or_alertado:
+                    s.saldo_or_alertado = True
+                    avisos.append((
+                        "🟡 OpenRouter casi sin saldo",
+                        f"A OpenRouter le queda US$ {saldo:.2f} (umbral US$ {OPENROUTER_ALERTA_USD:.0f}). "
+                        "Recargá para que no se corte.",
+                    ))
+            elif saldo is not None and saldo > OPENROUTER_ALERTA_USD:
+                s.saldo_or_alertado = False  # se recuperó → rearmar
+
+        # ── MyClaw: sin saldo ──
+        if myc.get("ok") and myc.get("tipo") == "estado":
+            if myc.get("estado") == "sin_saldo":
+                if not s.saldo_myclaw_alertado:
+                    s.saldo_myclaw_alertado = True
+                    avisos.append((
+                        "🔴 MyClaw sin saldo",
+                        "MyClaw se quedó sin saldo. Camila pasa a failover (Anthropic). "
+                        "Recargá MyClaw para que vuelva.",
+                    ))
+            elif myc.get("estado") == "activo":
+                s.saldo_myclaw_alertado = False  # se recuperó → rearmar
+
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"[SALDOS ALERTA ERROR] {type(e).__name__}: {e}")
+        avisos = []
+    finally:
+        db.close()
+
+    for title, body in avisos:
+        try:
+            push.notificar_global_async("saldo_bajo", title, body, {"nav": "saldos"})
+        except Exception as e:
+            print(f"[SALDOS ALERTA] no se pudo avisar: {e}")

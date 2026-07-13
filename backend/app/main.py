@@ -226,6 +226,13 @@ def run_migrations():
         conn.execute(text(
             "ALTER TABLE monitor_settings ADD COLUMN IF NOT EXISTS myclaw_api_key VARCHAR(255)"
         ))
+        # Alertas de saldo bajo (panel Saldos): flag por proveedor (avisar 1× en la bajada).
+        conn.execute(text(
+            "ALTER TABLE monitor_settings ADD COLUMN IF NOT EXISTS saldo_or_alertado BOOLEAN NOT NULL DEFAULT false"
+        ))
+        conn.execute(text(
+            "ALTER TABLE monitor_settings ADD COLUMN IF NOT EXISTS saldo_myclaw_alertado BOOLEAN NOT NULL DEFAULT false"
+        ))
         conn.execute(text(
             "ALTER TABLE monitor_settings ADD COLUMN IF NOT EXISTS apk_version INTEGER NOT NULL DEFAULT 2"
         ))

@@ -155,6 +155,14 @@ observable. Sirve como registro de Pendientes/Realizados de la pantalla
   queda 'acierto' (suma a la calibración del especialista) pero NO entra a la cola
   de Aprendizajes (no re-inyecta al prompt de Camila). Test API: `calidad.spec.ts`
 
+## 14b. Monitoreo / Saldos (N1)
+- Saldo/estado de los proveedores de IA: **OpenRouter** (saldo real US$), **MyClaw**
+  (estado Con saldo / Sin saldo — su API no da el monto), **Anthropic** (consumo del
+  mes; no expone saldo por API). Botón Actualizar. Chip verde/rojo por proveedor.
+- Alertas push "saldo_bajo" (backend, loop de monitoreo): OpenRouter ≤ US$1 y MyClaw
+  sin saldo, 1× en la bajada (se rearma al recuperarse). Test: `saldos.spec.ts`
+  (navegación + forma de `/admin/saldos`).
+
 ## 15. Testing / Visuales (N1)
 - Antes "Test visuales"; ahora vive bajo el grupo desplegable **Testing**.
 - Historial de corridas Playwright (render, expandir corrida, detalle por test).

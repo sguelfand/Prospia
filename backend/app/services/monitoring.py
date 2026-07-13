@@ -656,6 +656,13 @@ def start():
                 barrer_envios_sin_confirmar()
             except Exception as e:
                 print(f"[ENVIO SWEEP ERROR] {type(e).__name__}: {e}")
+            # Alertas de saldo bajo (panel Saldos): avisa 1× en la bajada (OpenRouter
+            # ≤ US$1, MyClaw sin saldo), se rearma al recuperarse.
+            try:
+                from app.services.saldos import chequear_saldos_y_alertar
+                chequear_saldos_y_alertar()
+            except Exception as e:
+                print(f"[SALDOS ALERTA ERROR] {type(e).__name__}: {e}")
             # releer el intervalo cada vuelta (puede cambiar desde la UI)
             try:
                 from app.database import SessionLocal

@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, BarChart2, ChevronDown, ChevronLeft, ChevronRight, Coins, Cpu, Eye, FlaskConical, ListTodo, LogOut, Menu, MessageCircleQuestion, MessageSquareWarning, Search, Server, Settings, ShieldCheck, Users, X } from 'lucide-react'
+import { Activity, AlertTriangle, BarChart2, ChevronDown, ChevronLeft, ChevronRight, Coins, Cpu, Eye, FlaskConical, ListTodo, LogOut, Menu, MessageCircleQuestion, MessageSquareWarning, Search, Server, Settings, ShieldCheck, Users, Wallet, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
@@ -128,6 +128,10 @@ export default function Layout() {
             <Link to="/monitoreo/calidad" onClick={onNav} className={subClass(location.pathname.startsWith('/monitoreo/calidad'))}>
               <MessageSquareWarning size={14} />
               Calidad
+            </Link>
+            <Link to="/monitoreo/saldos" onClick={onNav} className={subClass(location.pathname.startsWith('/monitoreo/saldos'))}>
+              <Wallet size={14} />
+              Saldos
             </Link>
           </>
         )}
