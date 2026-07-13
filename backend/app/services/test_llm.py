@@ -246,7 +246,11 @@ def _call_model(motor, system: str, messages: list[dict], timeout: int = 90) -> 
         "model": motor.model_id,
         "messages": [{"role": "system", "content": system}] + messages,
         "tools": CAMILA_TOOLS,
-        "max_tokens": 700,
+        # 3000 (no 700): los modelos con reasoning gastan el presupuesto "pensando"
+        # antes de escribir la respuesta. Con 700 se quedaban sin cupo y devolvían
+        # content vacío (tokens_out>0 pero texto=""), lo que el juez leía como fallo.
+        # Darles aire para pensar + responder evita ese artefacto.
+        "max_tokens": 3000,
     }
     t0 = time.time()
     resp = requests.post(url, headers={
