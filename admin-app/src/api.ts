@@ -869,6 +869,28 @@ export const crearCamilaFix = (
 export const borrarCamilaFix = (token: string, id: number) =>
   request<void>(`/admin/camila-fixes/${id}`, { method: "DELETE" }, token);
 
+// ── Saldos de proveedores de IA (panel Saldos) ──
+export interface ProveedorSaldo {
+  proveedor: string;              // OpenRouter | MyClaw | Anthropic
+  ok: boolean;
+  tipo?: "saldo" | "estado" | "consumo";
+  estado?: string;                // activo | sin_saldo | desconocido | sin_api_saldo
+  saldo_usd?: number;
+  total_usd?: number;
+  usado_usd?: number;
+  consumo_mes_usd?: number | null;
+  mes_nombre?: string;
+  detalle?: string;
+  error?: string;
+}
+export interface SaldosResp {
+  proveedores: ProveedorSaldo[];
+  consultado_at: string;
+}
+
+export const getSaldos = (token: string) =>
+  request<SaldosResp>("/admin/saldos", {}, token);
+
 export const getPushPref = (token: string, tenantId: number, expoToken: string) =>
   request<{ enabled: boolean }>(
     `/admin/clientes/${tenantId}/push?expo_token=${encodeURIComponent(expoToken)}`,

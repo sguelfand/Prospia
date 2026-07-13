@@ -110,13 +110,13 @@ export default function DrawerContent({ navigation, state }: DrawerContentCompon
 
         {/* Monitoreo desplegable → Servicios + Tokens + Calidad */}
         <TouchableOpacity
-          style={[styles.item, (activeRoute === "Monitoreo" || activeRoute === "Tokens" || activeRoute === "Calidad") ? styles.itemActive : null]}
+          style={[styles.item, (activeRoute === "Monitoreo" || activeRoute === "Tokens" || activeRoute === "Calidad" || activeRoute === "Saldos") ? styles.itemActive : null]}
           onPress={() => setMonOpen((v) => !v)}
         >
           <View style={styles.itemIcon}>
-            <Icon name="pulse" size={18} color={(activeRoute === "Monitoreo" || activeRoute === "Tokens" || activeRoute === "Calidad") ? colors.primary : colors.textDim} />
+            <Icon name="pulse" size={18} color={(activeRoute === "Monitoreo" || activeRoute === "Tokens" || activeRoute === "Calidad" || activeRoute === "Saldos") ? colors.primary : colors.textDim} />
           </View>
-          <Text style={[styles.itemText, (activeRoute === "Monitoreo" || activeRoute === "Tokens" || activeRoute === "Calidad") ? styles.itemTextActive : null]}>
+          <Text style={[styles.itemText, (activeRoute === "Monitoreo" || activeRoute === "Tokens" || activeRoute === "Calidad" || activeRoute === "Saldos") ? styles.itemTextActive : null]}>
             Monitoreo
           </Text>
           <Text style={styles.chevron}>{monOpen ? "▾" : "▸"}</Text>
@@ -140,6 +140,12 @@ export default function DrawerContent({ navigation, state }: DrawerContentCompon
               onPress={() => navigation.navigate("Calidad")}
             >
               <Text style={[styles.subText, activeRoute === "Calidad" ? styles.itemTextActive : null]}>Calidad</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.subItem, activeRoute === "Saldos" ? styles.itemActive : null]}
+              onPress={() => navigation.navigate("Saldos")}
+            >
+              <Text style={[styles.subText, activeRoute === "Saldos" ? styles.itemTextActive : null]}>Saldos</Text>
             </TouchableOpacity>
           </>
         )}

@@ -1443,6 +1443,15 @@ def borrar_camila_fix(fix_id: int, db: Session = Depends(get_db)):
         db.commit()
 
 
+@router.get("/saldos")
+def saldos():
+    """Saldos/estados de los proveedores de IA (panel 'Saldos'): OpenRouter (saldo
+    real USD), MyClaw (estado activo/sin-saldo), Anthropic (consumo del mes; no
+    expone saldo por API). Solo superadmin (dep del router)."""
+    from app.services import saldos as saldos_svc
+    return saldos_svc.obtener_saldos()
+
+
 @router.get("/overview", response_model=AdminOverview)
 def overview(db: Session = Depends(get_db)):
     hoy = date.today()
