@@ -170,6 +170,13 @@ def run_migrations():
         conn.execute(text(
             "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS envio_reintentos INTEGER NOT NULL DEFAULT 0"
         ))
+        # ── prospects: reactivación de conversaciones abandonadas (#100) ──
+        conn.execute(text(
+            "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS reactivacion_intentos INTEGER NOT NULL DEFAULT 0"
+        ))
+        conn.execute(text(
+            "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS reactivacion_base TIMESTAMPTZ"
+        ))
         # backfill: los ya resueltos pasan a 'fixed' (idempotente)
         conn.execute(text(
             "UPDATE agent_errors SET estado = 'fixed' WHERE resuelto = true AND estado = 'nuevo'"

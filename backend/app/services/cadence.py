@@ -111,6 +111,15 @@ def _check_once():
     finally:
         db.close()
 
+    # ── 3) Reactivación de conversaciones abandonadas (#100) ──────────────────
+    # Conversaciones que se colgaron (cliente respondió y dejó de contestar). Corre
+    # con su propia sesión de DB (best-effort, nunca frena la cadencia de arriba).
+    try:
+        from app.services import contact as contact_service
+        contact_service.reactivar_abandonadas()
+    except Exception as e:
+        print(f"[REACTIVACION ERROR] {type(e).__name__}: {e}")
+
 
 def start():
     def loop():

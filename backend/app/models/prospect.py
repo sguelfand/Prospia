@@ -53,6 +53,14 @@ class Prospect(Base):
     # el mensaje hasta WA_CONFIRM_MAX_REINTENTOS veces antes de avisar. Se resetea a 0
     # al confirmar un 'out' real o al iniciar un contacto nuevo.
     envio_reintentos: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Reactivación de conversaciones abandonadas (#100): cliente que respondió y
+    # después dejó de contestar. `reactivacion_intentos` = cuántas veces se lo
+    # re-preguntó "¿viste mi mensaje?"; `reactivacion_base` = fecha del último
+    # mensaje del cliente sobre la que se basan los intentos (si responde algo más
+    # nuevo → revival → se resetea). NO se tocan cant_contactos/ult_contacto (para
+    # no reactivar la cadencia normal, que es un flujo distinto).
+    reactivacion_intentos: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    reactivacion_base: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Lista negra (solo la setea Sebi/superadmin desde la app). Si está bloqueado:
     # la cadencia no lo re-contacta, no se lo puede contactar, y el bloqueo viaja
     # al bot del tenant (deja de escucharlo/responderle) si su webhook está conectado.

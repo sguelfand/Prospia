@@ -291,6 +291,175 @@ def contactar_prospect(prospect_id: int):
         db.close()
 
 
+# ── Reactivación de conversaciones abandonadas (#100) ─────────────────────────
+# Paridad con el webhook de Etiguel. La cadencia normal corre sobre quien NUNCA
+# respondió y se frena apenas el cliente contesta (pasa a 'en_conversacion', sale
+# de la cola). Acá cubrimos el hueco opuesto: el cliente venía HABLANDO y dejó de
+# contestar → lo reactivamos "¿viste mi mensaje?" a los +1/+3 días de su última
+# respuesta (2 intentos). Si igual no contesta → cancelado + aviso a Sebi. Se frena
+# solo apenas el cliente vuelve a escribir (revival). NO toca cant/ult_contacto (el
+# estado lo llevan reactivacion_intentos/_base) → la cadencia normal no se entera.
+REACT_DIAS = [1, 3]          # umbral de silencio (días) para el intento 1 y el 2
+REACT_MAX_INTENTOS = 2
+
+
+def _react_enabled() -> bool:
+    return os.environ.get("REACTIVACION_ENABLED", "true").strip().lower() in ("1", "true", "yes", "on")
+
+
+def reactivacion_decidir(estado, dias_silencio, intentos, tiene_prox_contacto, cliente_escribio_ultimo):
+    """Decisión PURA de reactivación (sin DB ni red). Retorna (accion, motivo) con
+    accion in {'reactivar', 'cerrar', 'nada'}. `dias_silencio` = días desde el
+    último mensaje del cliente; `intentos` = reactivaciones ya mandadas."""
+    if estado != "en_conversacion":
+        return ("nada", f"estado no es en_conversacion: {estado!r}")
+    if tiene_prox_contacto:
+        return ("nada", "callback agendado: reactivación en pausa")
+    if cliente_escribio_ultimo:
+        return ("nada", "el cliente escribió último: la pelota es nuestra")
+    if dias_silencio < REACT_DIAS[0]:
+        return ("nada", f"conversación aún fresca ({dias_silencio}d de silencio)")
+    if intentos >= REACT_MAX_INTENTOS:
+        return ("cerrar", f"{intentos} reactivaciones sin respuesta")
+    umbral = REACT_DIAS[intentos]
+    if dias_silencio >= umbral:
+        return ("reactivar", f"{dias_silencio}d de silencio → intento {intentos + 1}/{REACT_MAX_INTENTOS}")
+    return ("nada", f"esperando intento {intentos + 1} ({dias_silencio}/{umbral}d)")
+
+
+def _dentro_horario_cfg(cfg) -> bool:
+    """True si estamos dentro de la ventana horaria de envío del tenant."""
+    try:
+        from zoneinfo import ZoneInfo
+        ahora = datetime.now(ZoneInfo(cfg.timezone or "America/Argentina/Buenos_Aires"))
+    except Exception:
+        from zoneinfo import ZoneInfo
+        ahora = datetime.now(ZoneInfo("America/Argentina/Buenos_Aires"))
+    return cfg.envio_hora_inicio <= ahora.hour < cfg.envio_hora_fin
+
+
+def reactivar_abandonadas():
+    """Una pasada de reactivación (la llama el cadence job, cada hora). Solo tenants
+    con envío automático habilitado y dentro de su ventana horaria. Manda la
+    reactivación DIRECTO por el gateway (ENVIAR_RECONTACTO) sin tocar los contadores
+    de Monday/estado; los intentos viven en el prospect. Best-effort."""
+    if not _react_enabled():
+        return
+    from sqlalchemy import func
+
+    from app.database import SessionLocal
+    from app.models.mensaje import ProspectMensaje
+    from app.models.prospect import Prospect
+    from app.models.tenant import Tenant, TenantConfig
+    from app.services import push
+
+    db = SessionLocal()
+    envios = []   # (wa, mensaje, gw_url, gw_token, sess, etiqueta)
+    avisos = []
+    try:
+        ahora = datetime.now(timezone.utc)
+        cfgs = {c.tenant_id: c for c in
+                db.query(TenantConfig).filter(TenantConfig.envio_auto_habilitado.is_(True)).all()}
+        if not cfgs:
+            return
+        prospects = (
+            db.query(Prospect)
+            .filter(
+                Prospect.estado == "en_conversacion",
+                Prospect.prox_contacto.is_(None),
+                Prospect.bloqueado.is_(False),
+                Prospect.tenant_id.in_(list(cfgs.keys())),
+            )
+            .all()
+        )
+        for p in prospects:
+            cfg = cfgs.get(p.tenant_id)
+            if not cfg or not _dentro_horario_cfg(cfg):
+                continue
+            wa = (p.whatsapp or "").strip()
+            gateway_url = cfg.openclaw_gateway_url or ""
+            session_key = cfg.openclaw_session_id or ""
+            gateway_token = (cfg.openclaw_gateway_token or os.environ.get("OPENCLAW_GATEWAY_TOKEN", ""))
+            if not (wa and gateway_url and gateway_token and session_key):
+                continue
+
+            # Última respuesta del cliente (último 'in') + dirección del último mensaje.
+            last_in = (
+                db.query(func.max(ProspectMensaje.fecha))
+                .filter(ProspectMensaje.prospect_id == p.id, ProspectMensaje.direccion == "in")
+                .scalar()
+            )
+            if last_in is None:
+                continue
+            ultimo = (
+                db.query(ProspectMensaje.direccion)
+                .filter(ProspectMensaje.prospect_id == p.id)
+                .order_by(ProspectMensaje.fecha.desc())
+                .first()
+            )
+            cliente_escribio_ultimo = bool(ultimo and ultimo[0] == "in")
+
+            # Revival: respondió algo más nuevo que la base → conversación reactivada.
+            if p.reactivacion_base is not None and last_in > p.reactivacion_base:
+                p.reactivacion_intentos = 0
+                p.reactivacion_base = None
+
+            dias = (ahora - last_in).days
+            intentos = p.reactivacion_intentos or 0
+            accion, motivo = reactivacion_decidir(
+                p.estado, dias, intentos, p.prox_contacto is not None, cliente_escribio_ultimo)
+
+            if accion == "reactivar":
+                agente = cfg.agente_nombre or "Camila"
+                empresa = cfg.empresa_nombre_msg or "nuestra empresa"
+                mensaje = _get_template(agente=agente, empresa=empresa, recontacto=True)
+                p.reactivacion_intentos = intentos + 1
+                if p.reactivacion_base is None:
+                    p.reactivacion_base = last_in
+                _registrar_historial(
+                    db, p.id, p.tenant_id, "reactivacion",
+                    f"Reactivación {intentos + 1}/{REACT_MAX_INTENTOS}: {dias}d sin respuesta del "
+                    f"cliente (conversación que se colgó). Re-preguntando si vio el mensaje.")
+                envios.append((wa, mensaje, gateway_url, gateway_token, session_key,
+                               f"reactivación prospect {p.id} ({intentos + 1}/{REACT_MAX_INTENTOS})"))
+            elif accion == "cerrar":
+                p.estado = "cancelado"
+                _registrar_historial(
+                    db, p.id, p.tenant_id, "cancelado_auto",
+                    f"Conversación abandonada: {intentos} reactivaciones sin respuesta. "
+                    "Cancelado para seguimiento manual.")
+                tenant = db.get(Tenant, p.tenant_id)
+                avisos.append({
+                    "prospect_id": p.id, "nombre": p.nombre,
+                    "telefono": wa or p.telefono or "?",
+                    "tenant": (tenant.nombre if tenant else str(p.tenant_id)),
+                })
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"[REACTIVACION ERROR] {type(e).__name__}: {e}")
+        envios, avisos = [], []
+    finally:
+        db.close()
+
+    # Envíos en threads daemon (fuera de la transacción), por la vía del recontacto.
+    for (wa, mensaje, gw_url, gw_token, sess, etiqueta) in envios:
+        _reintentar_envio_async(wa, mensaje, gw_url, gw_token, sess, etiqueta, recontacto=True)
+
+    # Avisos de cierre a Sebi (superadmin/global), best-effort.
+    for a in avisos:
+        try:
+            push.notificar_global_async(
+                "reactivacion_cerrada",
+                "🔄 Conversación abandonada",
+                f"[{a['tenant']}] {a['nombre']} ({a['telefono']}) dejó de contestar tras "
+                f"{REACT_MAX_INTENTOS} reactivaciones. Se marcó Cancelado para seguimiento manual.",
+                {"nav": "prospect_detalle", "prospect_id": a["prospect_id"]},
+            )
+        except Exception as e:
+            print(f"[REACTIVACION] no se pudo avisar cierre prospect {a['prospect_id']}: {e}")
+
+
 # Ventana de confirmación de envío: tras contactar por WA esperamos ver el 'out'
 # real (chat-log). Si no llega en este tiempo, avisamos (default 5 min, holgado
 # para no falsear por demoras del agente). Paridad con el webhook de Etiguel.
