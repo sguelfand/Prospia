@@ -273,6 +273,37 @@ def _ejemplos_calibracion(db, source: str) -> str:
     return "\n".join(partes)
 
 
+def _revisiones_abiertas(db, source: str, extra: list[dict] | None = None, limit: int = 60) -> str:
+    """Errores de calidad YA en la cola (estado 'nuevo', pendientes de que Sebi los
+    revise) para el mismo cliente. El especialista los lee para NO volver a marcar el
+    MISMO problema de fondo aunque aparezca en OTRA conversación (dedup entre charlas).
+
+    `extra` son los hallazgos recién creados en la misma corrida (todavía no commiteados)
+    → así dos conversaciones del mismo día con el mismo error no se duplican."""
+    from app.models.camila_revision import CamilaRevision
+    rows = (db.query(CamilaRevision)
+            .filter(CamilaRevision.source == source,
+                    CamilaRevision.estado == "nuevo")
+            .order_by(CamilaRevision.created_at.desc())
+            .limit(limit).all())
+    items: list[tuple[str, str, str]] = [
+        (r.categoria, (r.titulo or "").strip(), (r.detalle or "").strip()) for r in rows
+    ]
+    for e in (extra or []):
+        items.append((e.get("categoria", "otro"), (e.get("titulo") or "").strip(),
+                      (e.get("detalle") or "").strip()))
+    if not items:
+        return ""
+    partes = ["\n\nERRORES YA EN LA COLA (pendientes de que Sebi los revise). Si esta "
+              "conversación tiene el MISMO problema de fondo que alguno de estos — aunque "
+              "sea otro cliente u otra charla — NO lo vuelvas a marcar (ya está reportado): "
+              "devolvé {\"revisar\": false}. Solo marcá si es un problema DISTINTO:"]
+    for cat, tit, det in items[:limit]:
+        det_corto = (det[:160] + "…") if len(det) > 160 else det
+        partes.append(f"- [{cat}] {tit}" + (f" — {det_corto}" if det_corto else ""))
+    return "\n".join(partes)
+
+
 def _fixes_aplicados(db, source: str, limit: int = 40) -> str:
     """Changelog de arreglos MANUALES de Camila (#95). El especialista lo lee para
     NO volver a reportar algo que Sebi ya arregló a mano (evita oportunidades de
@@ -296,7 +327,7 @@ def _fixes_aplicados(db, source: str, limit: int = 40) -> str:
     return "\n".join(partes)
 
 
-def _system_prompt(source: str, calibracion: str, fixes: str = "") -> str:
+def _system_prompt(source: str, calibracion: str, fixes: str = "", abiertas: str = "") -> str:
     negocio = _NEGOCIO.get(source, _NEGOCIO["etiguel"])
     cats = "\n".join(f"  - {k}: {v}" for k, v in CATEGORIAS.items())
     return (
@@ -312,7 +343,8 @@ def _system_prompt(source: str, calibracion: str, fixes: str = "") -> str:
         f"EL NEGOCIO:\n{negocio}\n\n"
         f"CATEGORÍAS de observación:\n{cats}\n"
         f"{calibracion}"
-        f"{fixes}\n\n"
+        f"{fixes}"
+        f"{abiertas}\n\n"
         "Respondé SOLO con un JSON válido (sin texto alrededor, sin ```), así:\n"
         '{"revisar": true|false, "categoria": "<una de las categorías>", '
         '"severidad": "alta"|"media"|"baja", "titulo": "<resumen corto, máx 110 car>", '
@@ -350,9 +382,15 @@ def revisar_dia(source: str = "etiguel", fecha: str | None = None, notify: bool 
             return {"source": source, "fecha": fecha, "conversaciones": 0, "nuevas": 0}
         calibracion = _ejemplos_calibracion(db, source)
         fixes = _fixes_aplicados(db, source)
-        system = _system_prompt(source, calibracion, fixes)
+        # Hallazgos nuevos de ESTA corrida (para no duplicar entre conversaciones del
+        # mismo día): se van sumando al bloque de "errores ya en la cola".
+        nuevos_run: list[dict] = []
         for c in convs:
             revisadas += 1
+            # Se reconstruye por conversación: incluye la cola persistida + lo recién
+            # detectado en esta misma corrida → dedup entre charlas distintas.
+            abiertas = _revisiones_abiertas(db, source, extra=nuevos_run)
+            system = _system_prompt(source, calibracion, fixes, abiertas)
             user = (f"Conversación de Camila con {c.get('nombre') or 'un cliente'} "
                     f"(tel {c.get('telefono') or '?'}), del {fecha}:\n\n{c['transcript']}")
             data = _parse_json(_post(system, user, source=source))
@@ -366,6 +404,9 @@ def revisar_dia(source: str = "etiguel", fecha: str | None = None, notify: bool 
             sev = (data.get("severidad") or "media").strip()
             if sev not in ("alta", "media", "baja"):
                 sev = "media"
+            nuevos_run.append({"categoria": categoria,
+                               "titulo": (data.get("titulo") or "")[:200],
+                               "detalle": (data.get("detalle") or "")[:400]})
             db.add(CamilaRevision(
                 source=source, mirror_id=c.get("mirror_id"), telefono=c.get("telefono"),
                 nombre=c.get("nombre"), fecha=fecha, categoria=categoria, severidad=sev,
