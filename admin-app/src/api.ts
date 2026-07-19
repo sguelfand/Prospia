@@ -972,3 +972,63 @@ export const changePassword = (token: string, current_password: string, new_pass
     { method: "POST", body: JSON.stringify({ current_password, new_password }) },
     token,
   );
+
+// ── Sesiones de Claude en la Mac (puente mac-bridge) ──────────────────────────
+export interface SesionMensaje {
+  seq: number;
+  rol: "sebi" | "claude" | "tool";
+  texto: string;
+  hora: string;
+}
+
+export interface SesionClaude {
+  id: string;
+  titulo: string;
+  proyecto: string;
+  cwd: string;
+  branch?: string;
+  estado: "procesando" | "esperando" | "pregunta" | "idle";
+  interactivo: boolean;
+  ultima_actividad: string;
+  seq: number;
+  preview: string;
+}
+
+export interface SesionesResumen {
+  mac_online: boolean;
+  last_seen: string | null;
+  sesiones: SesionClaude[];
+  proyectos: { ruta: string; nombre: string }[];
+}
+
+export interface SesionDetalle extends SesionClaude {
+  mensajes: SesionMensaje[];
+  mac_online: boolean;
+}
+
+export const getSesiones = (token: string) =>
+  request<SesionesResumen>("/admin/sesiones", {}, token);
+
+export const getSesionMensajes = (token: string, sesionId: string) =>
+  request<SesionDetalle>(`/admin/sesiones/${encodeURIComponent(sesionId)}/mensajes`, {}, token);
+
+export const enviarMensajeSesion = (token: string, sesionId: string, texto: string) =>
+  request<{ ok: boolean }>(
+    `/admin/sesiones/${encodeURIComponent(sesionId)}/mensaje`,
+    { method: "POST", body: JSON.stringify({ texto }) },
+    token,
+  );
+
+export const continuarSesion = (token: string, sesionId: string) =>
+  request<{ ok: boolean }>(
+    `/admin/sesiones/${encodeURIComponent(sesionId)}/continuar`,
+    { method: "POST", body: "{}" },
+    token,
+  );
+
+export const nuevaSesionClaude = (token: string, cwd: string, texto: string) =>
+  request<{ ok: boolean }>(
+    "/admin/sesiones/nueva",
+    { method: "POST", body: JSON.stringify({ cwd, texto }) },
+    token,
+  );

@@ -279,6 +279,9 @@ app.include_router(public.router)
 app.include_router(me.router)
 app.include_router(calidad.router)
 app.include_router(test_llm.router)
+from app.routers import sesiones as sesiones_router
+app.include_router(sesiones_router.router)
+app.include_router(sesiones_router.admin_router)
 
 
 from app.services import cadence

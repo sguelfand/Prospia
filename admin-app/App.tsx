@@ -36,6 +36,7 @@ import PerfilScreen from "./src/screens/PerfilScreen";
 import PreguntasScreen from "./src/screens/PreguntasScreen";
 import PreguntasClaudeScreen from "./src/screens/PreguntasClaudeScreen";
 import ProspectDetailScreen from "./src/screens/ProspectDetailScreen";
+import SesionesScreen from "./src/screens/SesionesScreen";
 import TokensScreen from "./src/screens/TokensScreen";
 import CalidadScreen from "./src/screens/CalidadScreen";
 import SaldosScreen from "./src/screens/SaldosScreen";
@@ -86,6 +87,7 @@ function AppDrawer() {
       <Drawer.Screen name="Errores" component={ErroresScreen} options={{ title: "Errores" }} />
       <Drawer.Screen name="Preguntas" component={PreguntasScreen} options={{ title: "Preguntas" }} />
       <Drawer.Screen name="PreguntasClaude" component={PreguntasClaudeScreen} options={{ title: "Preguntas de Claude" }} />
+      <Drawer.Screen name="Sesiones" component={SesionesScreen} options={{ title: "Sesiones de Claude" }} />
       <Drawer.Screen name="Pendientes" component={PendientesScreen} options={{ title: "Pendientes" }} />
       <Drawer.Screen name="Agenda" component={AgendaScreen} options={{ title: "Agenda" }} />
       <Drawer.Screen name="Avisos" component={AvisosScreen} options={{ title: "Avisos" }} />
@@ -115,7 +117,7 @@ function Routes() {
       const data = response.notification.request.content.data as {
         tenant_id?: number; tipo?: string; aviso_id?: number; nav?: string;
         prospect_id?: number; mirror_id?: number; cliente?: string; evento?: string;
-        consulta_id?: number; pregunta_id?: number;
+        consulta_id?: number; pregunta_id?: number; sesion_id?: string;
       };
       // Botón de acción del panel de Android: "Desactivar avisos" del push
       // claude_termino → apaga ese evento para este device (no abre nada).
@@ -151,6 +153,9 @@ function Routes() {
           } else if (nav === "pregunta_claude" || data?.tipo === "pregunta_claude" || evento === "pregunta_claude") {
             // Tap en el push de Claude → abrir DIRECTO la pantalla de opciones.
             navigationRef.navigate("PreguntasClaude", data?.pregunta_id != null ? { preguntaId: data.pregunta_id } : undefined);
+          } else if (nav === "sesiones" || data?.tipo === "sesion" || evento === "sesion_termino" || evento === "sesion_espera") {
+            // Tap en un push de sesión → abrir DIRECTO el chat de esa sesión.
+            navigationRef.navigate("Sesiones", data?.sesion_id ? { sesionId: String(data.sesion_id) } : undefined);
           } else if (nav === "tokens" || data?.tipo === "tokens" || evento === "tokens_oportunidad") {
             navigationRef.navigate("Tokens");
           } else if (nav === "calidad" || data?.tipo === "calidad" || evento === "calidad_revision") {
