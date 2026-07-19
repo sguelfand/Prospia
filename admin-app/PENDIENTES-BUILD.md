@@ -20,7 +20,15 @@ Regla: si cambia el **binario nativo** → va acá. Si es solo JS/TS/estilos/ló
 
 ## Cola actual (pendiente de build)
 
-_(vacío — no hay cambios nativos sin buildear)_
+### [2026-07-19] modo-voz-sesiones
+- **Qué:** Modo voz de la pantalla Sesiones (Etapa 2): STT + TTS para hablar con
+  la asistente que maneja las sesiones de Claude. La UI ya viajó por OTA v2.15
+  con guard: hasta este build muestra "necesita el próximo APK".
+- **Por qué necesita build:** deps nativas `@react-native-voice/voice` (micrófono,
+  + config plugin en app.json → permiso RECORD_AUDIO) y `expo-speech ~14.0.8`.
+- **Al buildear:** bumpear `app.json version` (runtimeVersion) + APK_VERSION=3 /
+  OTA_VERSION=0 en src/version.ts + avisar el apk_version al backend.
+- **Sesión:** branch app/2026-07-19-voz
 
 <!--
 Formato de cada item:

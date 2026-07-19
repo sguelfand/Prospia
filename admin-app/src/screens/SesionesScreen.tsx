@@ -30,6 +30,7 @@ import {
 import { useAuth } from "../auth";
 import { Icon } from "../components/Icon";
 import { ErrorBox, Loader } from "../components/ui";
+import VozModal from "../components/VozModal";
 import { SesionesProps } from "../navigation";
 import { colors } from "../theme";
 
@@ -68,6 +69,7 @@ export default function SesionesScreen({ navigation, route }: SesionesProps) {
 
   const [abierta, setAbierta] = useState<string | null>(null); // sesion_id del chat abierto
   const [nuevaVisible, setNuevaVisible] = useState(false);
+  const [vozVisible, setVozVisible] = useState(false); // modo voz: SE ACTIVA, el default es escrito
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -168,6 +170,14 @@ export default function SesionesScreen({ navigation, route }: SesionesProps) {
         })}
       </ScrollView>
 
+      {/* Modo voz (función a activar; el default es escrito) */}
+      <TouchableOpacity
+        style={[styles.fab, styles.fabVoz, { bottom: insets.bottom + 88 }]}
+        onPress={() => setVozVisible(true)}
+      >
+        <Icon name="mic" size={22} color={colors.primary} strokeWidth={2.2} />
+      </TouchableOpacity>
+
       {/* Nueva sesión */}
       <TouchableOpacity
         style={[styles.fab, { bottom: insets.bottom + 24 }]}
@@ -175,6 +185,8 @@ export default function SesionesScreen({ navigation, route }: SesionesProps) {
       >
         <Icon name="plus" size={24} color={colors.onPrimary} strokeWidth={2.5} />
       </TouchableOpacity>
+
+      <VozModal visible={vozVisible} onClose={() => setVozVisible(false)} />
 
       {abierta ? (
         <ChatModal
@@ -538,6 +550,14 @@ const styles = StyleSheet.create({
   badgeTxt: { color: colors.primary, fontSize: 10, fontWeight: "700" },
   preview: { color: colors.textDim, fontSize: 13, marginTop: 7, lineHeight: 18 },
 
+  fabVoz: {
+    backgroundColor: colors.card,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
   fab: {
     position: "absolute",
     right: 20,

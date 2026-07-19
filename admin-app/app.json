@@ -48,7 +48,8 @@
           "photosPermission": "Prospia necesita acceso a tus fotos para adjuntar una captura de la conversación a un registro de calidad."
         }
       ],
-      "expo-font"
+      "expo-font",
+      "@react-native-voice/voice"
     ],
     "runtimeVersion": {
       "policy": "appVersion"

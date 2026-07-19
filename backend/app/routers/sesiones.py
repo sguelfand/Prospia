@@ -110,6 +110,22 @@ class MensajeIn(BaseModel):
     texto: str
 
 
+class VozIn(BaseModel):
+    texto: str
+    reset: bool = False
+
+
+@admin_router.post("/voz/chat")
+def voz_chat(body: VozIn, user=Depends(get_superadmin)):
+    """Asistente de voz de sesiones (Etapa 2): texto transcripto → respuesta
+    corta para leer en voz alta; ejecuta acciones vía el puente."""
+    texto = (body.texto or "").strip()
+    if not texto:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Decime algo")
+    from app.services import voz_ai
+    return {"respuesta": voz_ai.voz_chat(user.id, texto, reset=body.reset)}
+
+
 class NuevaSesionIn(BaseModel):
     cwd: str
     texto: str

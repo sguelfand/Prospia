@@ -34,7 +34,8 @@ export type IconName =
   | "user"
   | "trash"
   | "eye"
-  | "terminal";
+  | "terminal"
+  | "mic";
 
 export function Icon({
   name,
@@ -207,6 +208,13 @@ export function Icon({
         <>
           <Polyline points="4 17 10 11 4 5" {...p} />
           <Line x1="12" y1="19" x2="20" y2="19" {...p} />
+        </>
+      )}
+      {name === "mic" && (
+        <>
+          <Rect x="9" y="2" width="6" height="12" rx="3" {...p} />
+          <Path d="M5 10v2a7 7 0 0 0 14 0v-2" {...p} />
+          <Line x1="12" y1="19" x2="12" y2="22" {...p} />
         </>
       )}
     </Svg>

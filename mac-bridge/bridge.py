@@ -147,17 +147,23 @@ class Tmux:
             if cap.returncode != 0:
                 return False
             txt = cap.stdout or ""
+            # Listo = el input box idle del TUI ("? for shortcuts"). Nada de
+            # marcadores sueltos ("❯"/">"): los diálogos de arranque también
+            # los tienen y el paste se perdía adentro de un chooser.
+            if "? for shortcuts" in txt:
+                time.sleep(1.0)  # margen para que termine de montar
+                return True
             # Diálogo de confianza de carpeta ("Do you trust...") → aceptar.
             if "trust" in txt.lower() and ("proceed" in txt.lower() or "Enter" in txt):
                 self._run("send-keys", "-t", nombre, "Enter")
                 time.sleep(1.5)
                 continue
-            # Listo = el input box del TUI ya está dibujado (marcadores REALES;
-            # un ">" suelto en el banner de arranque daba falso positivo y el
-            # paste se perdía en el vacío).
-            if "? for shortcuts" in txt or "❯" in txt:
-                time.sleep(1.0)  # margen para que termine de montar
-                return True
+            # Cualquier otro chooser de arranque (p.ej. "Try the new fullscreen
+            # renderer?") → Escape lo descarta y deja el input normal.
+            if "Enter to confirm" in txt or "Esc to cancel" in txt:
+                self._run("send-keys", "-t", nombre, "Escape")
+                time.sleep(1.5)
+                continue
             time.sleep(0.7)
         return False
 
@@ -196,6 +202,50 @@ class Tmux:
             self.teclas(nombre, m.group(1))
         else:
             self.escribir(nombre, texto)
+        # Si en la Mac no hay ninguna ventana mirando esta sesión, abrirla:
+        # lo que Sebi hace desde el cel se ve en tiempo real al volver.
+        if not self._hay_cliente(nombre):
+            self._abrir_ventana(nombre)
+
+    # -- ventana visible en la Mac (tiempo real) -------------------------------
+    # Las sesiones del cel se lanzan DENTRO de una ventana de Terminal (un
+    # .command + `open`): Sebi las ve en vivo en la Mac, nada queda "viejo". De
+    # paso, el server de tmux nace con los permisos TCC de Terminal (Documents).
+
+    def _win_file(self, nombre: str) -> Path:
+        return STATE_DIR / f"win-{nombre}.command"
+
+    def _crear_win(self, nombre: str, cwd: str, claude_args: str) -> Path:
+        f = self._win_file(nombre)
+        f.write_text(
+            "#!/bin/bash\n"
+            'export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"\n'
+            "clear\n"
+            # -A: crea la sesión si no existe, o se cuelga de la ya existente.
+            f'exec tmux new-session -A -s {nombre} -c "{cwd}" '
+            f"'\"{self.claude}\" {claude_args}'\n"
+        )
+        f.chmod(0o755)
+        return f
+
+    def _abrir_ventana(self, nombre: str) -> bool:
+        f = self._win_file(nombre)
+        if not f.exists():
+            return False
+        r = subprocess.run(["/usr/bin/open", str(f)], capture_output=True, timeout=10)
+        return r.returncode == 0
+
+    def _hay_cliente(self, nombre: str) -> bool:
+        r = self._run("list-clients", "-t", nombre)
+        return r.returncode == 0 and bool((r.stdout or "").strip())
+
+    def _esperar_sesion(self, nombre: str, seg: int = 25) -> bool:
+        fin = time.time() + seg
+        while time.time() < fin:
+            if self.viva(nombre):
+                return True
+            time.sleep(0.7)
+        return False
 
     def _nombre_libre(self, base: str) -> str:
         base = re.sub(r"[^a-zA-Z0-9_-]", "-", base)[:20] or "sesion"
@@ -214,10 +264,15 @@ class Tmux:
         # para *ver* ~/Documents; si la carpeta no existe, tmux/claude fallan solos.
         sid = str(uuid.uuid4())
         nombre = self._nombre_libre(os.path.basename(cwd))
-        cmd = f'"{self.claude}" --session-id {sid}'
-        r = self._run("new-session", "-d", "-s", nombre, "-c", cwd, cmd)
-        if r.returncode != 0:
-            raise RuntimeError(f"tmux new-session: {r.stderr.strip()}")
+        # Nace en una ventana de Terminal visible (tiempo real en la Mac).
+        # Fallback si `open` falla: tmux directo (sin ventana).
+        self._crear_win(nombre, cwd, f"--session-id {sid}")
+        if not (self._abrir_ventana(nombre) and self._esperar_sesion(nombre)):
+            log(f"nueva {nombre}: sin ventana Terminal, fallback tmux directo")
+            cmd = f'"{self.claude}" --session-id {sid}'
+            r = self._run("new-session", "-d", "-s", nombre, "-c", cwd, cmd)
+            if r.returncode != 0:
+                raise RuntimeError(f"tmux new-session: {r.stderr.strip()}")
         if not self._esperar_listo(nombre):
             raise RuntimeError("Claude no llegó a arrancar en tmux")
         self.escribir(nombre, texto)
@@ -234,10 +289,14 @@ class Tmux:
         proyecto_dir = PROJECTS_DIR / re.sub(r"[^a-zA-Z0-9]", "-", cwd)
         antes = {p.name for p in proyecto_dir.glob("*.jsonl")} if proyecto_dir.is_dir() else set()
         t0 = time.time()
-        cmd = f'"{self.claude}" --resume {sesion_id}'
-        r = self._run("new-session", "-d", "-s", nombre, "-c", cwd, cmd)
-        if r.returncode != 0:
-            raise RuntimeError(f"tmux new-session: {r.stderr.strip()}")
+        # También en ventana de Terminal visible; fallback: tmux directo.
+        self._crear_win(nombre, cwd, f"--resume {sesion_id}")
+        if not (self._abrir_ventana(nombre) and self._esperar_sesion(nombre)):
+            log(f"continuar {nombre}: sin ventana Terminal, fallback tmux directo")
+            cmd = f'"{self.claude}" --resume {sesion_id}'
+            r = self._run("new-session", "-d", "-s", nombre, "-c", cwd, cmd)
+            if r.returncode != 0:
+                raise RuntimeError(f"tmux new-session: {r.stderr.strip()}")
         if not self._esperar_listo(nombre, 25):
             raise RuntimeError("Claude no llegó a resumir la sesión en tmux")
         # ¿Siguió con el mismo id o forkeó a uno nuevo?

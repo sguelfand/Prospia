@@ -1032,3 +1032,10 @@ export const nuevaSesionClaude = (token: string, cwd: string, texto: string) =>
     { method: "POST", body: JSON.stringify({ cwd, texto }) },
     token,
   );
+
+export const vozChat = (token: string, texto: string, reset = false) =>
+  request<{ respuesta: string }>(
+    "/admin/voz/chat",
+    { method: "POST", body: JSON.stringify({ texto, reset }) },
+    token,
+  );
