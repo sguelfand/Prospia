@@ -60,6 +60,10 @@ cat > "$CMD" <<'EOF'
 # Abre las sesiones de Claude creadas/continuadas desde el cel (tmux).
 # Si hay varias, muestra el selector de tmux (flechas + Enter; d = despegar).
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+# Sesión "keeper": mantiene vivo el server de tmux arrancado DESDE Terminal
+# (contexto con permisos TCC a Documents). Si el server lo arrancara el daemon
+# de launchd, las sesiones nuevas no podrían tocar ~/Documents.
+tmux has-session -t keeper 2>/dev/null || tmux new-session -d -s keeper
 if ! tmux ls 2>/dev/null | grep -q '^cc-'; then
   echo "No hay sesiones del cel corriendo ahora."
   echo "(Se crean desde la app Prospia → Sesiones)"

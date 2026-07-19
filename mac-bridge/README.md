@@ -42,3 +42,14 @@ y `SessionEnd`. Conviven con otros hooks del mismo evento (peon-ping, etc.).
 - Reiniciar: `launchctl unload ~/Library/LaunchAgents/com.prospia.mac-bridge.plist && launchctl load ...`
   (o re-correr `install.sh`).
 - La Mac dormida = "Mac offline" en la app; es esperado (no hay keep-awake).
+
+## TCC (permisos de macOS) — importante tras un reinicio
+
+launchd NO tiene acceso a `~/Documents`. Por eso el daemon corre desde
+`~/.claude/mac-bridge/`, y el **server de tmux** tiene que arrancarse desde un
+contexto CON permisos (Terminal/instalación), no desde el daemon. La sesión
+`keeper` (la crea `install.sh` y el `.command` del escritorio) mantiene vivo ese
+server "bendecido". **Si la Mac se reinicia** y las sesiones nuevas del cel no
+pueden leer Documents: doble click al `.command` del escritorio (recrea keeper
+desde Terminal). Fix definitivo opcional: System Settings → Privacy & Security →
+Full Disk Access → agregar `/opt/homebrew/bin/tmux`.
