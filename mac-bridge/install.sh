@@ -21,7 +21,12 @@ if [ ! -x "$VENV/bin/python3" ]; then
 fi
 "$VENV/bin/pip" install --quiet --upgrade pip websockets
 
-# 2. launchd plist (KeepAlive: lo revive si se cae; corre con la Mac despierta)
+# 2. Copia del código a ~/.claude/mac-bridge (fuera de ~/Documents: macOS/TCC
+#    NO deja que un daemon launchd lea Documents → correr desde ahí falla con
+#    "Operation not permitted"). launchd apunta a la copia.
+cp "$BRIDGE_DIR/bridge.py" "$STATE_DIR/bridge.py"
+
+# 3. launchd plist (KeepAlive: lo revive si se cae; corre con la Mac despierta)
 cat > "$PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -31,7 +36,7 @@ cat > "$PLIST" <<EOF
   <key>ProgramArguments</key>
   <array>
     <string>$VENV/bin/python3</string>
-    <string>$BRIDGE_DIR/bridge.py</string>
+    <string>$STATE_DIR/bridge.py</string>
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
