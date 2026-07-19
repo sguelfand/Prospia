@@ -431,7 +431,11 @@ def correr(corrida_id: int, juzgar: bool = True) -> dict:
                        .order_by(TestLlmEscenario.orden).all()]
         src = cor.source
         env = _build_envelope(src)
-        system = env["system"]
+        # Fecha de hoy en el sobre: sin esto el modelo no puede resolver pedidos
+        # relativos ("a fin de mes", "en 3 días") y agenda fechas erróneas. En
+        # producción el harness base de OpenClaw ya la inyecta; acá la replicamos.
+        hoy = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        system = f"Fecha de hoy: {hoy}.\n\n" + env["system"]
         cor.estado = "corriendo"
         db.commit()
     finally:
