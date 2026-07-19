@@ -141,36 +141,50 @@ class Tmux:
         """Espera a que el TUI de Claude esté dibujado antes de tipear."""
         fin = time.time() + seg
         while time.time() < fin:
-            cap = self._run("capture-pane", "-p", "-t", f"={nombre}")
+            # Target SIN "=": el prefijo exact-match vale para sesiones
+            # (has-session) pero capture-pane espera un pane y no lo resuelve.
+            cap = self._run("capture-pane", "-p", "-t", nombre)
             if cap.returncode != 0:
                 return False
             txt = cap.stdout or ""
             # Diálogo de confianza de carpeta ("Do you trust...") → aceptar.
             if "trust" in txt.lower() and ("proceed" in txt.lower() or "Enter" in txt):
-                self._run("send-keys", "-t", f"={nombre}", "Enter")
+                self._run("send-keys", "-t", nombre, "Enter")
                 time.sleep(1.5)
                 continue
-            if "? for shortcuts" in txt or "shortcuts" in txt or "" in txt or ">" in txt:
+            # Listo = el input box del TUI ya está dibujado (marcadores REALES;
+            # un ">" suelto en el banner de arranque daba falso positivo y el
+            # paste se perdía en el vacío).
+            if "? for shortcuts" in txt or "❯" in txt:
                 time.sleep(1.0)  # margen para que termine de montar
                 return True
             time.sleep(0.7)
         return False
 
     def escribir(self, nombre: str, texto: str) -> None:
-        """Pega el texto (bracketed paste, banca multilínea) y manda Enter."""
-        p = subprocess.run([self.tmux, "load-buffer", "-b", "puente", "-"],
-                           input=texto, text=True, capture_output=True, timeout=15)
-        if p.returncode != 0:
-            raise RuntimeError(f"tmux load-buffer: {p.stderr.strip()}")
-        r = self._run("paste-buffer", "-p", "-b", "puente", "-t", f"={nombre}")
-        if r.returncode != 0:
-            raise RuntimeError(f"tmux paste-buffer: {r.stderr.strip()}")
-        time.sleep(0.4)
-        self._run("send-keys", "-t", f"={nombre}", "Enter")
+        """Pega el texto (bracketed paste, banca multilínea), VERIFICA que haya
+        quedado en el input box y recién ahí manda Enter."""
+        marca = texto.strip().splitlines()[0][:25]
+        for intento in range(3):
+            p = subprocess.run([self.tmux, "load-buffer", "-b", "puente", "-"],
+                               input=texto, text=True, capture_output=True, timeout=15)
+            if p.returncode != 0:
+                raise RuntimeError(f"tmux load-buffer: {p.stderr.strip()}")
+            r = self._run("paste-buffer", "-p", "-b", "puente", "-t", nombre)
+            if r.returncode != 0:
+                raise RuntimeError(f"tmux paste-buffer: {r.stderr.strip()}")
+            time.sleep(0.6)
+            cap = self._run("capture-pane", "-p", "-t", nombre)
+            if marca and marca not in (cap.stdout or ""):
+                time.sleep(1.5)  # el TUI todavía no estaba listo; reintentar
+                continue
+            self._run("send-keys", "-t", nombre, "Enter")
+            return
+        raise RuntimeError("El texto no llegó al input de Claude en tmux")
 
     def teclas(self, nombre: str, teclas: str) -> None:
         """Teclas crudas ("1", "Enter", "Escape", "Down") p/ prompts nativos."""
-        self._run("send-keys", "-t", f"={nombre}", *teclas.split())
+        self._run("send-keys", "-t", nombre, *teclas.split())
 
     def mensaje(self, sesion_id: str, texto: str) -> None:
         nombre = self.interactiva(sesion_id)
