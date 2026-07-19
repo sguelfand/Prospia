@@ -145,6 +145,11 @@ class Tmux:
             if cap.returncode != 0:
                 return False
             txt = cap.stdout or ""
+            # Diálogo de confianza de carpeta ("Do you trust...") → aceptar.
+            if "trust" in txt.lower() and ("proceed" in txt.lower() or "Enter" in txt):
+                self._run("send-keys", "-t", f"={nombre}", "Enter")
+                time.sleep(1.5)
+                continue
             if "? for shortcuts" in txt or "shortcuts" in txt or "" in txt or ">" in txt:
                 time.sleep(1.0)  # margen para que termine de montar
                 return True
@@ -191,8 +196,8 @@ class Tmux:
         """Crea sesión nueva de Claude en tmux y le manda el primer mensaje.
         Devuelve el session_id (lo elegimos nosotros con --session-id)."""
         cwd = os.path.expanduser(cwd)
-        if not os.path.isdir(cwd):
-            raise RuntimeError(f"No existe la carpeta {cwd}")
+        # Ojo: no validamos con isdir() — el daemon puede no tener permiso TCC
+        # para *ver* ~/Documents; si la carpeta no existe, tmux/claude fallan solos.
         sid = str(uuid.uuid4())
         nombre = self._nombre_libre(os.path.basename(cwd))
         cmd = f'"{self.claude}" --session-id {sid}'
@@ -507,19 +512,27 @@ class Tracker:
         return {"t": "snapshot", "sesiones": sesiones, "proyectos": self.proyectos()}
 
     def proyectos(self) -> list:
-        """Carpetas candidatas para 'Nueva sesión'."""
+        """Carpetas candidatas para 'Nueva sesión'. Sin validar con isdir():
+        el daemon puede no tener permiso TCC para ver ~/Documents."""
         rutas = {}
-        for proy in (PROJECTS_DIR.iterdir() if PROJECTS_DIR.is_dir() else []):
-            if proy.is_dir():
-                ruta = _decodificar_proyecto(proy.name)
-                if os.path.isdir(ruta):
-                    rutas[ruta] = None
+        # Primero los cwd reales de las sesiones vivas (vienen del transcript).
+        for s in self.sesiones.values():
+            if s.cwd:
+                rutas[s.cwd] = None
+        try:
+            for proy in (PROJECTS_DIR.iterdir() if PROJECTS_DIR.is_dir() else []):
+                if proy.is_dir():
+                    rutas.setdefault(_decodificar_proyecto(proy.name), None)
+        except Exception:
+            pass
         base = HOME / "Documents" / "Claude"
-        if base.is_dir():
-            rutas[str(base)] = None
+        rutas.setdefault(str(base), None)
+        try:
             for d in sorted(base.iterdir()):
                 if d.is_dir() and not d.name.startswith(".") and not d.name.endswith("-sesiones"):
-                    rutas[str(d)] = None
+                    rutas.setdefault(str(d), None)
+        except Exception:
+            pass
         return [{"ruta": r, "nombre": os.path.basename(r) or r} for r in list(rutas)[:30]]
 
 
