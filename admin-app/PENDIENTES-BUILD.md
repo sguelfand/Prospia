@@ -20,15 +20,7 @@ Regla: si cambia el **binario nativo** → va acá. Si es solo JS/TS/estilos/ló
 
 ## Cola actual (pendiente de build)
 
-### [2026-07-19] modo-voz-sesiones
-- **Qué:** Modo voz de la pantalla Sesiones (Etapa 2): STT + TTS para hablar con
-  la asistente que maneja las sesiones de Claude. La UI ya viajó por OTA v2.15
-  con guard: hasta este build muestra "necesita el próximo APK".
-- **Por qué necesita build:** deps nativas `@react-native-voice/voice` (micrófono,
-  + config plugin en app.json → permiso RECORD_AUDIO) y `expo-speech ~14.0.8`.
-- **Al buildear:** bumpear `app.json version` (runtimeVersion) + APK_VERSION=3 /
-  OTA_VERSION=0 en src/version.ts + avisar el apk_version al backend.
-- **Sesión:** branch app/2026-07-19-voz
+_(vacío — no hay cambios nativos sin buildear)_
 
 <!--
 Formato de cada item:
@@ -44,6 +36,16 @@ Formato de cada item:
 
 ## Historial de builds hechos
 _(cuando se hace un build, mover acá los items con la fecha y la URL del APK)_
+
+### [2026-07-20] modo-voz-sesiones (app v3.0 · appVersion 1.2.0 · apk_latest=3)
+- Modo voz de Sesiones: dictado (STT) + lectura (TTS) para hablarle a las sesiones.
+- **STT: `expo-speech-recognition ^56.0.1`** (se DESCARTÓ `@react-native-voice/voice`
+  porque NO compila con la arquitectura nueva de RN en SDK 54 → Gradle error).
+  TTS: `expo-speech ~14.0.8`. Permisos por config plugin (mic + speech).
+- app.json version 1.1.0→**1.2.0** (runtimeVersion=appVersion) → los OTA nuevos
+  van al runtime 1.2.0. APK_VERSION=3, OTA_VERSION=0 (v3.0). apk_latest=3 seteado
+  en el backend (PUT /admin/monitoring/app-version).
+- APK: https://expo.dev/artifacts/eas/ycnqWbjaiYHWMF6HUz_WdQIlkZ92NGV0jTjwwB8brLk.apk
 
 ### [2026-06-30] calidad-subir-imagen (app v24 · appVersion 1.1.0)
 - Adjuntar imagen de la conversación en Nuevo registro de calidad + los 2 "Reportar"
