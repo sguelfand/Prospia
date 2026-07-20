@@ -20,7 +20,7 @@ services:
       DATABASE_URL: postgresql://plataforma:${POSTGRES_PASSWORD}@db:5432/plataforma
       SECRET_KEY: ${SECRET_KEY}
       ALGORITHM: HS256
-      ACCESS_TOKEN_EXPIRE_MINUTES: 43200  # 30 días (app de admin personal; la seguridad real la da el desbloqueo del aparato)
+      ACCESS_TOKEN_EXPIRE_MINUTES: 525600  # 1 año (app de admin personal; la seguridad real la da el desbloqueo del aparato; 30d obligaba a re-loguear cada mes)
       WEBHOOK_TOKEN: ${WEBHOOK_TOKEN}
       MONDAY_API_KEY: ${MONDAY_API_KEY:-}
       # Token del webhook de Etiguel — lo usa el relay de respuesta de consultas
