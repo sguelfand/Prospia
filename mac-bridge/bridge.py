@@ -704,7 +704,7 @@ class Tracker:
 
 # ----------------------------------------------------------------- hooks HTTP
 
-def armar_http(cola_eventos: "queue.Queue"):
+def armar_http(cola_eventos: "queue.Queue", tmux: "Tmux"):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):
             pass
@@ -718,9 +718,20 @@ def armar_http(cola_eventos: "queue.Queue"):
             n = int(self.headers.get("Content-Length") or 0)
             body = self.rfile.read(n) if n else b"{}"
             try:
-                cola_eventos.put(json.loads(body.decode("utf-8", "replace")))
+                data = json.loads(body.decode("utf-8", "replace"))
             except Exception:
-                pass
+                data = {}
+            if self.path == "/registrar":
+                # Lo llama el comando `cs`: registra una sesión tmux creada a
+                # mano para que sea interactiva también desde el cel (espejo).
+                sid, nombre = data.get("sid"), data.get("tmux")
+                if sid and nombre:
+                    tmux.registry[sid] = {"tmux": nombre, "cwd": data.get("cwd") or "",
+                                          "creada": ahora_iso(), "origen": "cs"}
+                    tmux._guardar()
+                    log(f"registrada sesión espejo {nombre} ({sid[:8]})")
+            else:
+                cola_eventos.put(data)
             self.send_response(200)
             self.end_headers()
             self.wfile.write(b'{"ok":true}')
@@ -840,7 +851,7 @@ def main():
     cola_eventos: "queue.Queue" = queue.Queue()
     tmux = Tmux()
     tracker = Tracker(tmux, salida)
-    armar_http(cola_eventos)
+    armar_http(cola_eventos, tmux)
     log(f"mac-bridge arrancando (claude={tmux.claude}, tmux={tmux.tmux})")
     asyncio.get_event_loop().run_until_complete(
         loop_ws(token, tracker, salida, cola_eventos, tmux))

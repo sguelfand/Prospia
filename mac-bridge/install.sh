@@ -82,6 +82,9 @@ chmod +x "$CMD"
 
 chmod +x "$BRIDGE_DIR/hook-evento.sh" "$BRIDGE_DIR/bridge.py" 2>/dev/null || true
 
+# 3.5 Comando `cs` (sesión espejada Mac<->cel) al PATH
+cp "$BRIDGE_DIR/cs" "$HOME/.local/bin/cs" 2>/dev/null && chmod +x "$HOME/.local/bin/cs" || true
+
 # 4. Copia estable del hook (los hooks de settings.json apuntan acá, para que
 #    sigan andando aunque el repo se mueva o el worktree se borre)
 cp "$BRIDGE_DIR/hook-evento.sh" "$STATE_DIR/hook-evento.sh"

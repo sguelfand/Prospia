@@ -1,0 +1,29 @@
+#!/bin/bash
+# cs — sesión de Claude ESPEJADA (Mac ↔ celular) en tmux.
+#
+# Uso, parado en la carpeta del proyecto (Terminal o terminal de VSCode):
+#   cs            → crea (o retoma) la sesión espejo de esta carpeta
+#   cs nombre     → ídem con nombre propio (varias sesiones por carpeta)
+#
+# La sesión queda registrada en el mac-bridge → aparece en la app Prospia como
+# "interactiva": escribís desde el cel o desde acá, los dos lados ven lo mismo.
+# Salir sin cerrarla: Ctrl-b y después d (detach). Volver: `cs` de nuevo.
+set -e
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+BASE=$(basename "$PWD" | sed 's/[^a-zA-Z0-9_-]/-/g' | cut -c1-20)
+NAME="cc-${1:-$BASE}"
+
+# Ya existe → attach directo (es el "volver a la compu" del espejo).
+if tmux has-session -t "=$NAME" 2>/dev/null; then
+  exec tmux attach -t "=$NAME"
+fi
+
+SID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+# Registrar en el puente para que el cel también pueda escribirle (best-effort:
+# si el daemon no corre, la sesión anda igual pero solo-lectura desde la app).
+curl -s -m 2 -X POST http://127.0.0.1:8765/registrar \
+  -H 'Content-Type: application/json' \
+  -d "{\"sid\":\"$SID\",\"tmux\":\"$NAME\",\"cwd\":\"$PWD\"}" >/dev/null 2>&1 || true
+
+exec tmux new-session -A -s "$NAME" -c "$PWD" "claude --session-id $SID"
