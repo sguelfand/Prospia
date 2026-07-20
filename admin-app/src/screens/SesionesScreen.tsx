@@ -19,11 +19,13 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
+  PreguntaClaude,
   SesionClaude,
   SesionDetalle,
   SesionMensaje,
   continuarSesion,
   enviarMensajeSesion,
+  getPreguntasClaude,
   getSesionMensajes,
   getSesiones,
   nuevaSesionClaude,
@@ -32,6 +34,7 @@ import { useAuth } from "../auth";
 import { Icon } from "../components/Icon";
 import { ErrorBox, Loader } from "../components/ui";
 import VozModal from "../components/VozModal";
+import { DetalleModal } from "./PreguntasClaudeScreen";
 import { SesionesProps } from "../navigation";
 import { colors } from "../theme";
 
@@ -253,6 +256,10 @@ function ChatModal({
   const [continuando, setContinuando] = useState(false);
   const listRef = useRef<FlatList<SesionMensaje>>(null);
   const teclado = useAlturaTeclado();
+  // Pregunta pendiente de ESTA sesión → popup en la conversación (misma
+  // estética/mecanismo que la pantalla Preguntas de Claude: reusa DetalleModal).
+  const [pregunta, setPregunta] = useState<PreguntaClaude | null>(null);
+  const descartadaRef = useRef<number | null>(null); // si la cerró, no re-abrir sola
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -260,6 +267,20 @@ function ChatModal({
       const d = await getSesionMensajes(token, sesionId);
       setDetalle(d);
       setError(null);
+      if (d.estado === "pregunta") {
+        try {
+          const pendientes = (await getPreguntasClaude(token)).filter((q) => q.estado === "pendiente");
+          const texto = ((d as any).pregunta_texto || "").trim();
+          const match =
+            pendientes.find((q) => (q.preguntas?.[0]?.pregunta || q.pregunta || "").trim() === texto) ||
+            pendientes[0] ||
+            null;
+          setPregunta(match && descartadaRef.current !== match.id ? match : null);
+        } catch {}
+      } else {
+        setPregunta(null);
+        descartadaRef.current = null;
+      }
       setPendiente((p) => (p && d.mensajes.some((m) => m.rol === "sebi" && m.texto === p) ? null : p));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al cargar.");
@@ -347,8 +368,14 @@ function ChatModal({
 
         {error ? <ErrorBox message={error} onRetry={load} /> : null}
 
-        {detalle?.estado === "pregunta" ? (
-          <TouchableOpacity style={styles.preguntaBanner} onPress={onIrAPregunta}>
+        {detalle?.estado === "pregunta" && !pregunta ? (
+          <TouchableOpacity
+            style={styles.preguntaBanner}
+            onPress={() => {
+              descartadaRef.current = null;
+              onIrAPregunta();
+            }}
+          >
             <Icon name="flag" size={16} color={colors.onPrimary} />
             <Text style={styles.preguntaBannerTxt}>
               Claude te hizo una pregunta — tocá para responder
@@ -411,6 +438,19 @@ function ChatModal({
             </>
           )}
         </View>
+
+        <DetalleModal
+          pregunta={pregunta}
+          token={token}
+          onClose={() => {
+            if (pregunta) descartadaRef.current = pregunta.id;
+            setPregunta(null);
+          }}
+          onResuelta={() => {
+            setPregunta(null);
+            load();
+          }}
+        />
       </KeyboardAvoidingView>
     </Modal>
   );

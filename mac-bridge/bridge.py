@@ -362,6 +362,7 @@ class Sesion:
         self.turno_inicio = None   # epoch del arranque del turno actual
         self.ultimo_aviso_espera = 0.0
         self.pregunta_mcp_abierta = False
+        self.pregunta_texto = ""
         self.oculta = False
         self.entrypoint = ""
 
@@ -390,6 +391,7 @@ class Sesion:
             "ultima_actividad": self.ultima_actividad,
             "seq": self.seq,
             "preview": (prev[:160] + "…") if len(prev) > 160 else prev,
+            "pregunta_texto": self.pregunta_texto if self.estado == "pregunta" else "",
             "oculta": self.oculta,
         }
 
@@ -469,6 +471,7 @@ class Tracker:
             # input: si había una pregunta abierta, ya fue respondida.
             if s.pregunta_mcp_abierta or s.estado == "pregunta":
                 s.pregunta_mcp_abierta = False
+                s.pregunta_texto = ""
                 s.estado = "procesando"
                 s.turno_inicio = s.turno_inicio or time.time()
             msg = obj.get("message") or {}
@@ -503,6 +506,14 @@ class Tracker:
                     if "preguntar_a_sebi" in nombre or nombre == "AskUserQuestion":
                         s.pregunta_mcp_abierta = True
                         s.estado = "pregunta"
+                        # Texto de la 1ra pregunta: la app lo usa para matchear
+                        # la pendiente del backend y mostrarla como popup.
+                        inp = b.get("input") or {}
+                        qs = inp.get("preguntas") or inp.get("questions") or []
+                        primera = (qs[0] if qs else inp) or {}
+                        s.pregunta_texto = str(primera.get("pregunta")
+                                               or primera.get("question")
+                                               or inp.get("pregunta") or "")[:300]
 
     def _leer_incremental(self, s: Sesion, path: Path):
         try:

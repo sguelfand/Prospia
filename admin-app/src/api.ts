@@ -992,6 +992,7 @@ export interface SesionClaude {
   ultima_actividad: string;
   seq: number;
   preview: string;
+  pregunta_texto?: string;
 }
 
 export interface SesionesResumen {

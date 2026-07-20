@@ -176,7 +176,7 @@ function Tab({ label, active, onPress }: { label: string; active: boolean; onPre
   );
 }
 
-function DetalleModal({ pregunta, token, onClose, onResuelta }: {
+export function DetalleModal({ pregunta, token, onClose, onResuelta }: {
   pregunta: PreguntaClaude | null;
   token: string | null;
   onClose: () => void;

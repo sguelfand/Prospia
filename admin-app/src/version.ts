@@ -9,5 +9,5 @@
 // hay que reinstalar), el 2º dice si bajaste el último OTA (si no coincide con el
 // que avisé, cerrá y reabrí la app).
 export const APK_VERSION = 2;
-export const OTA_VERSION = 17;
+export const OTA_VERSION = 18;
 export const APP_VERSION = `v${APK_VERSION}.${OTA_VERSION}`;
