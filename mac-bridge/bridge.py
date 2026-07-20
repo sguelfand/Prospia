@@ -47,7 +47,7 @@ WS_URL = os.environ.get("PROSPIA_SESIONES_WS", "wss://prospia.app/api/sesiones/w
 HOOK_PORT = int(os.environ.get("BRIDGE_HOOK_PORT", "8765"))
 
 # Sesiones "activas" = transcript tocado en esta ventana.
-VENTANA_ACTIVA_H = 24
+VENTANA_ACTIVA_H = 72  # 24 quedaba corto: con la Mac durmiendo de noche, la lista amanecía vacía
 MAX_SESIONES = 25
 TAIL_SNAPSHOT = 60          # mensajes por sesión en el snapshot inicial
 MIN_SEG_AVISO_TERMINO = 60  # solo avisar "terminó" si el turno duró al menos esto
@@ -477,8 +477,14 @@ class Tracker:
                     self._parsear_linea(s, json.loads(line))
                 except Exception:
                     continue
-            s.ultima_actividad = datetime.fromtimestamp(path.stat().st_mtime,
-                                                        timezone.utc).isoformat()
+            mtime = path.stat().st_mtime
+            s.ultima_actividad = datetime.fromtimestamp(mtime, timezone.utc).isoformat()
+            # Inferir estado al re-leer (tras un restart no hay hooks que lo
+            # digan): si lo último es texto de Claude, el turno terminó.
+            if (s.mensajes and s.mensajes[-1]["rol"] == "claude"
+                    and s.estado not in ("pregunta", "esperando")):
+                s.estado = "idle"
+                s.turno_inicio = None
             return True
         except FileNotFoundError:
             return False
@@ -509,9 +515,23 @@ class Tracker:
             if s is None:
                 s = Sesion(sid, proy_nombre)
                 self.sesiones[sid] = s
+            # Volvió a la ventana (p.ej. la Mac durmió y la sesión revivió):
+            # sacarle la marca y REMANDAR todo el buffer (el backend la había
+            # descartado). Sin esto, una sesión oculta quedaba oculta para
+            # siempre aunque tuviera actividad nueva.
+            revivida = s.oculta
+            if revivida:
+                s.oculta = False
+                self.enviado_seq[sid] = 0
             cambio = self._leer_incremental(s, f)
-            if cambio:
-                self._emitir_delta(s)
+            # Sin actividad 15 min = ese turno ya no está corriendo (el
+            # transcript se escribe seguido mientras procesa).
+            if s.estado in ("procesando", "esperando") and time.time() - mt > 900:
+                s.estado = "idle"
+                s.turno_inicio = None
+                cambio = True
+            if cambio or revivida:
+                self._emitir_delta(s, forzar=revivida)
         # sesiones que salieron de la ventana → ocultarlas en el backend
         for sid, s in list(self.sesiones.items()):
             if sid not in vistos and not s.oculta:

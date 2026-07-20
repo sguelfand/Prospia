@@ -133,7 +133,7 @@ export default function SesionesScreen({ navigation, route }: SesionesProps) {
 
         {sesiones.length === 0 && !error ? (
           <Text style={styles.vacio}>
-            No hay sesiones de Claude activas en la Mac (últimas 24 h).
+            No hay sesiones de Claude activas en la Mac (últimos 3 días).
           </Text>
         ) : null}
 
