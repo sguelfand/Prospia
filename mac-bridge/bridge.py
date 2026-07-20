@@ -40,6 +40,7 @@ HOME = Path.home()
 PROJECTS_DIR = HOME / ".claude" / "projects"
 STATE_DIR = HOME / ".claude" / "mac-bridge"
 REGISTRY_FILE = STATE_DIR / "registry.json"
+ABIERTAS_FILE = STATE_DIR / "abiertas.json"
 LOG_FILE = STATE_DIR / "bridge.log"
 SECRETS_FILE = HOME / ".config" / "claude" / "secrets.env"
 
@@ -394,7 +395,17 @@ class Sesion:
 
 
 class Tracker:
-    """Lee los transcripts en forma incremental y mantiene el estado."""
+    """Lee los transcripts en forma incremental y mantiene el estado.
+
+    Solo se muestran sesiones ABIERTAS en la Mac (pedido de Sebi 20/7: las
+    cerradas no van al cel). "Abierta" se decide así:
+    - cualquier evento de hook de esa sesión (menos SessionEnd) la marca
+      abierta (persistido en abiertas.json, sobrevive restarts);
+    - actividad fresca del transcript (<10 min) también la marca;
+    - SessionEnd la cierra; una sesión tmux del puente muerta también;
+    - si NO queda ningún proceso `claude` corriendo, se cierran todas;
+    - sin actividad por 72 h se poda del registro.
+    """
 
     def __init__(self, tmux: Tmux, salida: "queue.Queue"):
         self.tmux = tmux
@@ -402,6 +413,43 @@ class Tracker:
         self.sesiones: dict = {}
         self.enviado_seq: dict = {}   # sid -> último seq mandado
         self.enviado_meta: dict = {}  # sid -> json de meta mandada
+        try:
+            self.abiertas: dict = json.loads(ABIERTAS_FILE.read_text())
+        except Exception:
+            self.abiertas = {}         # sid -> iso del último indicio de vida
+
+    def _guardar_abiertas(self):
+        try:
+            STATE_DIR.mkdir(parents=True, exist_ok=True)
+            ABIERTAS_FILE.write_text(json.dumps(self.abiertas, indent=2))
+        except Exception:
+            pass
+
+    def _marcar_abierta(self, sid: str):
+        if sid not in self.abiertas:
+            self.abiertas[sid] = ahora_iso()
+            self._guardar_abiertas()
+        s = self.sesiones.get(sid)
+        if s is not None and s.oculta:
+            s.oculta = False
+            self.enviado_seq[sid] = 0
+            self._emitir_delta(s, forzar=True)
+
+    def _cerrar(self, sid: str):
+        self.abiertas.pop(sid, None)
+        self._guardar_abiertas()
+        s = self.sesiones.get(sid)
+        if s is not None and not s.oculta:
+            s.oculta = True
+            self._emitir_delta(s, forzar=True)
+
+    def _hay_procesos_claude(self) -> bool:
+        try:
+            r = subprocess.run(["/usr/bin/pgrep", "-x", "claude"],
+                               capture_output=True, text=True, timeout=5)
+            return bool((r.stdout or "").strip())
+        except Exception:
+            return True  # ante la duda, no cerrar nada
 
     # ---- parseo ----
 
@@ -508,8 +556,24 @@ class Tracker:
                 if mt >= limite and f.stat().st_size > 200:
                     candidatos.append((mt, proy.name, f))
         candidatos.sort(reverse=True)
+        hay_claude = self._hay_procesos_claude()
+        sids_candidatos = {f.stem for _, _, f in candidatos}
         for mt, proy_nombre, f in candidatos[:MAX_SESIONES]:
             sid = f.stem
+            interactiva_viva = bool(self.tmux.interactiva(sid))
+            tmux_muerta = sid in self.tmux.registry and not interactiva_viva
+            # ¿Está ABIERTA en la Mac? (ver docstring de la clase)
+            if tmux_muerta or not hay_claude:
+                self.abiertas.pop(sid, None)
+            elif time.time() - mt < 600:
+                self.abiertas.setdefault(sid, ahora_iso())
+            abierta = interactiva_viva or (sid in self.abiertas and not tmux_muerta)
+            if not abierta:
+                s = self.sesiones.get(sid)
+                if s is not None and not s.oculta:
+                    s.oculta = True
+                    self._emitir_delta(s, forzar=True)
+                continue
             vistos.add(sid)
             s = self.sesiones.get(sid)
             if s is None:
@@ -537,12 +601,23 @@ class Tracker:
             if sid not in vistos and not s.oculta:
                 s.oculta = True
                 self._emitir_delta(s, forzar=True)
+        # podar del registro de abiertas lo que ya ni transcript vigente tiene
+        muertos = [sid for sid in self.abiertas if sid not in sids_candidatos]
+        if muertos:
+            for sid in muertos:
+                self.abiertas.pop(sid, None)
+        self._guardar_abiertas()
 
     # ---- hooks ----
 
     def evento_hook(self, ev: dict):
         sid = ev.get("session_id") or ""
         nombre = ev.get("hook_event_name") or ""
+        if nombre == "SessionEnd":
+            self._cerrar(sid)  # Sebi cerró esa sesión en la Mac → chau del cel
+            return
+        if sid:
+            self._marcar_abierta(sid)  # cualquier otro evento = está viva
         s = self.sesiones.get(sid)
         if s is None:
             return
@@ -571,8 +646,6 @@ class Tracker:
                                  "sesion_id": sid,
                                  "titulo": f"⏸ {s.meta(False)['titulo'][:60]}",
                                  "cuerpo": str(detalle)[:250]})
-        elif nombre == "SessionEnd":
-            s.estado = "idle"
         self._emitir_delta(s, forzar=True)
 
     # ---- emisión ----
