@@ -20,20 +20,22 @@ import { colors } from "../theme";
 // Modo VOZ de Sesiones (Etapa 2). FUNCIÓN A ACTIVAR: el default de la app es
 // escrito; esto se abre solo si Sebi toca el micrófono.
 //
-// STT y TTS son módulos NATIVOS (@react-native-voice/voice + expo-speech):
-// hasta que salga el próximo APK no existen en el binario, por eso el require
-// es lazy y con guard — así este archivo puede viajar por OTA sin crashear.
-let Voice: any = null;
+// STT y TTS son módulos NATIVOS (expo-speech-recognition + expo-speech): hasta
+// que salga el APK con ellos no existen en el binario, por eso el require es
+// lazy y con guard — así este archivo puede viajar por OTA sin crashear.
+// (STT: se cambió @react-native-voice/voice → expo-speech-recognition, la vieja
+//  no compilaba con la arquitectura nueva de RN en Expo SDK 54.)
+let SpeechRec: any = null;
 let Speech: any = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  Voice = require("@react-native-voice/voice").default;
+  SpeechRec = require("expo-speech-recognition").ExpoSpeechRecognitionModule;
 } catch {}
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   Speech = require("expo-speech");
 } catch {}
-const VOZ_DISPONIBLE = !!(Voice && Speech);
+const VOZ_DISPONIBLE = !!(SpeechRec && Speech);
 
 type Fase = "idle" | "escuchando" | "pensando" | "hablando";
 
@@ -93,7 +95,13 @@ export default function VozModal({ visible, onClose }: { visible: boolean; onClo
     if (!VOZ_DISPONIBLE || cerradoRef.current) return;
     try {
       Speech.stop();
-      await Voice.start("es-AR");
+      const permiso = await SpeechRec.requestPermissionsAsync();
+      if (!permiso?.granted) {
+        setUltimaResp("Necesito permiso de micrófono para escucharte (Ajustes → Prospia).");
+        setFaseOk("idle");
+        return;
+      }
+      SpeechRec.start({ lang: "es-AR", interimResults: true, continuous: false });
       setFaseOk("escuchando");
     } catch {
       setFaseOk("idle");
@@ -102,8 +110,8 @@ export default function VozModal({ visible, onClose }: { visible: boolean; onClo
 
   const pararTodo = useCallback(() => {
     try {
-      Voice?.stop?.();
-      Voice?.destroy?.();
+      SpeechRec?.stop?.();
+      SpeechRec?.abort?.();
       Speech?.stop?.();
     } catch {}
   }, []);
@@ -111,23 +119,34 @@ export default function VozModal({ visible, onClose }: { visible: boolean; onClo
   useEffect(() => {
     if (!visible || !VOZ_DISPONIBLE) return;
     cerradoRef.current = false;
-    Voice.onSpeechPartialResults = (e: any) => setParcial(e?.value?.[0] ?? "");
-    Voice.onSpeechResults = (e: any) => {
-      const texto = e?.value?.[0] ?? "";
-      if (faseRef.current === "escuchando" && texto) procesar(texto);
-    };
-    Voice.onSpeechError = () => {
-      if (faseRef.current === "escuchando") setFaseOk("idle");
-    };
+    // expo-speech-recognition emite eventos como EventEmitter nativo.
+    const subs: { remove: () => void }[] = [];
+    subs.push(
+      SpeechRec.addListener("result", (e: any) => {
+        const texto = e?.results?.[0]?.transcript ?? "";
+        if (faseRef.current !== "escuchando") return;
+        if (e?.isFinal) {
+          if (texto) procesar(texto);
+        } else {
+          setParcial(texto);
+        }
+      }),
+    );
+    subs.push(
+      SpeechRec.addListener("error", () => {
+        if (faseRef.current === "escuchando") setFaseOk("idle");
+      }),
+    );
     return () => {
       cerradoRef.current = true;
+      subs.forEach((s) => s.remove?.());
       pararTodo();
     };
   }, [visible, procesar, pararTodo]);
 
   const onOrbe = () => {
     if (fase === "escuchando") {
-      Voice.stop();
+      SpeechRec.stop();
       setFaseOk("idle");
     } else if (fase === "hablando") {
       Speech.stop();

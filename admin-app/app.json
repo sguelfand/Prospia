@@ -52,7 +52,16 @@
         }
       ],
       "expo-font",
-      "@react-native-voice/voice"
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Prospia usa el microfono para hablarle por voz a las sesiones de Claude.",
+          "speechRecognitionPermission": "Prospia transcribe tu voz para mandarle mensajes a las sesiones de Claude.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
+        }
+      ]
     ],
     "runtimeVersion": {
       "policy": "appVersion"
