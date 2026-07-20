@@ -87,7 +87,7 @@ function AppDrawer() {
       <Drawer.Screen name="Errores" component={ErroresScreen} options={{ title: "Errores" }} />
       <Drawer.Screen name="Preguntas" component={PreguntasScreen} options={{ title: "Preguntas" }} />
       <Drawer.Screen name="PreguntasClaude" component={PreguntasClaudeScreen} options={{ title: "Preguntas de Claude" }} />
-      <Drawer.Screen name="Sesiones" component={SesionesScreen} options={{ title: "Sesiones de Claude" }} />
+      <Drawer.Screen name="Sesiones" component={SesionesScreen} options={{ title: "Claude" }} />
       <Drawer.Screen name="Pendientes" component={PendientesScreen} options={{ title: "Pendientes" }} />
       <Drawer.Screen name="Agenda" component={AgendaScreen} options={{ title: "Agenda" }} />
       <Drawer.Screen name="Avisos" component={AvisosScreen} options={{ title: "Avisos" }} />

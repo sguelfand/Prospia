@@ -109,7 +109,7 @@ export default function DrawerContent({ navigation, state }: DrawerContentCompon
         />
         <NavItem
           icon="terminal"
-          label="Sesiones"
+          label="Claude"
           active={activeRoute === "Sesiones"}
           onPress={() => navigation.navigate("Sesiones")}
         />
