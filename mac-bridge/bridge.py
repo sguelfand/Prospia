@@ -562,6 +562,13 @@ class Tracker:
             sid = f.stem
             interactiva_viva = bool(self.tmux.interactiva(sid))
             tmux_muerta = sid in self.tmux.registry and not interactiva_viva
+            if tmux_muerta and time.time() - mt < 600:
+                # El tmux murió pero la sesión SIGUE con actividad: se mudó a
+                # otro lado (p.ej. Sebi la retomó en el panel de Antigravity).
+                # Desligarla del tmux muerto en vez de darla por cerrada.
+                self.tmux.registry.pop(sid, None)
+                self.tmux._guardar()
+                tmux_muerta = False
             # ¿Está ABIERTA en la Mac? (ver docstring de la clase)
             if tmux_muerta or not hay_claude:
                 self.abiertas.pop(sid, None)
