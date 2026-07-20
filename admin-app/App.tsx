@@ -8,7 +8,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { Sora_600SemiBold, Sora_700Bold, Sora_800ExtraBold, useFonts } from "@expo-google-fonts/sora";
 import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
@@ -112,8 +112,24 @@ function Routes() {
   }, [token, locked]);
 
   // Al tocar una notificación, ir al feed de Avisos.
+  const tapsProcesados = useRef<Set<string>>(new Set());
   useEffect(() => {
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+    // (fix 20/7) Con la app CERRADA, la nav no está lista cuando llega el tap:
+    // en vez de descartarlo, reintentamos hasta ~10s.
+    const esperarNavYSeguir = (fn: () => void) => {
+      if (navigationRef.isReady()) { fn(); return; }
+      let intentos = 0;
+      const t = setInterval(() => {
+        intentos += 1;
+        if (navigationRef.isReady()) { clearInterval(t); fn(); }
+        else if (intentos > 40) clearInterval(t);
+      }, 250);
+    };
+    const procesarTap = (response: Notifications.NotificationResponse) => {
+      // Dedup: el mismo tap puede llegar por el listener Y por el cold start.
+      const idTap = `${response.notification.request.identifier}:${response.actionIdentifier}`;
+      if (tapsProcesados.current.has(idTap)) return;
+      tapsProcesados.current.add(idTap);
       const data = response.notification.request.content.data as {
         tenant_id?: number; tipo?: string; aviso_id?: number; nav?: string;
         prospect_id?: number; mirror_id?: number; cliente?: string; evento?: string;
@@ -134,7 +150,7 @@ function Routes() {
         return;
       }
 
-      if (!navigationRef.isReady()) return;
+      esperarNavYSeguir(() => {
       const { nav, evento } = data ?? {};
       const avisosFallback = () =>
         data?.aviso_id != null ? navigationRef.navigate("Avisos", { avisoId: data.aviso_id }) : navigationRef.navigate("Avisos");
@@ -179,7 +195,14 @@ function Routes() {
           avisosFallback();
         }
       })();
-    });
+      });
+    };
+    const sub = Notifications.addNotificationResponseReceivedListener(procesarTap);
+    // Cold start: si la app se ABRIÓ tocando una notificación, el listener no
+    // llega a dispararse — lo levantamos a mano.
+    Notifications.getLastNotificationResponseAsync()
+      .then((r) => { if (r) procesarTap(r); })
+      .catch(() => {});
     return () => sub.remove();
   }, [token]);
 
