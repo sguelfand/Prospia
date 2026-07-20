@@ -483,6 +483,7 @@ class AvisoOut(BaseModel):
     tenant_id: int | None = None
     cliente: str | None = None
     prospect_id: int | None = None
+    sesion_id: str | None = None
     fecha: datetime
 
     model_config = {"from_attributes": True}

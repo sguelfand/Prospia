@@ -195,11 +195,18 @@ export default function AvisosScreen({ navigation, route }: AvisosProps) {
     calidad_revision: { pantalla: "Calidad", icon: "eye", label: "Ver" },
     tokens_oportunidad: { pantalla: "Tokens", icon: "eye", label: "Ver" },
   };
-  const irAPantalla = (a: Aviso) => {
+  // Destino del botón "Ver": una sesión (abre su chat) o una pantalla fija.
+  const verDestino = (a: Aviso): { icon: IconName; label: string; go: () => void } | null => {
+    if (a.sesion_id) {
+      return {
+        icon: "eye",
+        label: "Ver sesión",
+        go: () => { setDetalle(null); navigation.navigate("Sesiones", { sesionId: a.sesion_id! }); },
+      };
+    }
     const dest = PANTALLA_POR_TIPO[a.tipo];
-    if (!dest) return;
-    setDetalle(null);
-    navigation.navigate(dest.pantalla);
+    if (!dest) return null;
+    return { icon: dest.icon, label: dest.label, go: () => { setDetalle(null); navigation.navigate(dest.pantalla); } };
   };
 
   if (loading) return <Loader />;
@@ -335,14 +342,10 @@ export default function AvisosScreen({ navigation, route }: AvisosProps) {
                   {detalle.tenant_id != null && (
                     <Accion icon="user" label="Cliente" onPress={() => irACliente(detalle)} />
                   )}
-                  {PANTALLA_POR_TIPO[detalle.tipo] && (
-                    <Accion
-                      icon={PANTALLA_POR_TIPO[detalle.tipo].icon}
-                      label={PANTALLA_POR_TIPO[detalle.tipo].label}
-                      primary
-                      onPress={() => irAPantalla(detalle)}
-                    />
-                  )}
+                  {(() => {
+                    const v = verDestino(detalle);
+                    return v ? <Accion icon={v.icon} label={v.label} primary onPress={v.go} /> : null;
+                  })()}
                   {!expandido && tieneDetalle && (
                     <Accion icon="list" label="Detalle" onPress={() => setExpandido(true)} />
                   )}

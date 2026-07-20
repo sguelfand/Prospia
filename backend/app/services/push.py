@@ -120,7 +120,7 @@ def _enviar(tokens: list[str], title: str, body: str, data: dict) -> None:
         print(f"[PUSH] error enviando: {type(e).__name__}: {e}")
 
 
-def _log_aviso(db, tipo: str, title: str, body: str, tenant_id=None, cliente=None, prospect_id=None, detalle=None) -> int | None:
+def _log_aviso(db, tipo: str, title: str, body: str, tenant_id=None, cliente=None, prospect_id=None, detalle=None, sesion_id=None) -> int | None:
     """Persiste el push como Aviso (#42) para que quede en el historial de la app.
     Devuelve el id del aviso creado (para deep-link desde la push) o None si falla.
     `detalle` = conclusión completa (texto largo) que se ve al tocar "Detalle".
@@ -129,7 +129,8 @@ def _log_aviso(db, tipo: str, title: str, body: str, tenant_id=None, cliente=Non
     try:
         av = Aviso(tipo=tipo, title=title[:160], body=(body or "")[:2000],
                    tenant_id=tenant_id, cliente=cliente, prospect_id=prospect_id,
-                   detalle=(detalle or None) and detalle[:8000])
+                   detalle=(detalle or None) and detalle[:8000],
+                   sesion_id=(sesion_id or None) and str(sesion_id)[:64])
         db.add(av)
         db.commit()
         return av.id
@@ -378,7 +379,7 @@ def _notificar_global(evento: str, title: str, body: str, data: dict, detalle=No
     db = SessionLocal()
     try:
         tokens = _tokens_para_evento(db, evento)
-        aviso_id = _log_aviso(db, evento, title, body, detalle=detalle) if tokens else None
+        aviso_id = _log_aviso(db, evento, title, body, detalle=detalle, sesion_id=data.get("sesion_id")) if tokens else None
         _enviar(tokens, title, body, {**data, "evento": evento, "aviso_id": aviso_id})
     except Exception as e:
         print(f"[PUSH] error armando push global {evento}: {type(e).__name__}: {e}")
@@ -397,7 +398,7 @@ def notificar_global(evento: str, title: str, body: str, data: dict | None = Non
     db = SessionLocal()
     try:
         tokens = _tokens_para_evento(db, evento)
-        aviso_id = _log_aviso(db, evento, title, body, detalle=detalle) if tokens else None
+        aviso_id = _log_aviso(db, evento, title, body, detalle=detalle, sesion_id=(data or {}).get("sesion_id")) if tokens else None
         _enviar(tokens, title, body, {**(data or {}), "evento": evento, "aviso_id": aviso_id})
         return len(tokens)
     finally:

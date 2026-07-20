@@ -252,6 +252,10 @@ def run_migrations():
         conn.execute(text(
             "ALTER TABLE test_llm_corrida ADD COLUMN IF NOT EXISTS conclusiones TEXT NOT NULL DEFAULT '[]'"
         ))
+        # Deep-link a la sesión de Claude desde un aviso (botón "Ver").
+        conn.execute(text(
+            "ALTER TABLE avisos ADD COLUMN IF NOT EXISTS sesion_id VARCHAR(64)"
+        ))
 
 
 Base.metadata.create_all(bind=engine)

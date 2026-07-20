@@ -25,6 +25,8 @@ class Aviso(Base):
     tenant_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # cliente, si aplica
     cliente: Mapped[str | None] = mapped_column(String(160), nullable=True)  # nombre del tenant
     prospect_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Deep-link a una sesión de Claude (avisos sesion_espera/sesion_termino) → botón "Ver".
+    sesion_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     fecha: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
     )

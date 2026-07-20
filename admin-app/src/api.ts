@@ -322,6 +322,7 @@ export interface Aviso {
   tenant_id: number | null;
   cliente: string | null;
   prospect_id: number | null;
+  sesion_id?: string | null; // deep-link a la sesión de Claude (botón "Ver")
   fecha: string;
 }
 
