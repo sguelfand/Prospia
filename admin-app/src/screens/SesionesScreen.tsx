@@ -118,11 +118,15 @@ export default function SesionesScreen({ navigation, route }: SesionesProps) {
     return () => clearInterval(t);
   }, [isFocused, abierta, load]);
 
-  // Deep-link desde un push: abrir directo el chat de esa sesión.
+  // Deep-link desde un push: abrir directo el chat de esa sesión. Limpiamos el
+  // param al consumirlo (si no, tocar la MISMA notif dos veces no reabre: el
+  // param no cambia y el efecto no vuelve a correr).
   useEffect(() => {
     const sid = route.params?.sesionId;
-    if (sid) setAbierta(sid);
-  }, [route.params?.sesionId]);
+    if (!sid) return;
+    setAbierta(sid);
+    navigation.setParams({ sesionId: undefined });
+  }, [route.params?.sesionId, navigation]);
 
   if (loading) return <Loader />;
 
