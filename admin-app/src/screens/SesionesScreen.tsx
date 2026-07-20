@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -53,6 +54,22 @@ function horaCorta(iso?: string): string {
   const esHoy = d.toDateString() === hoy.toDateString();
   const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   return esHoy ? hm : `${d.getDate()}/${d.getMonth() + 1} ${hm}`;
+}
+
+function useAlturaTeclado(): number {
+  const [altura, setAltura] = useState(0);
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const show = Keyboard.addListener("keyboardDidShow", (e) =>
+      setAltura(e.endCoordinates?.height ?? 0),
+    );
+    const hide = Keyboard.addListener("keyboardDidHide", () => setAltura(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  return altura;
 }
 
 export default function SesionesScreen({ navigation, route }: SesionesProps) {
@@ -235,6 +252,7 @@ function ChatModal({
   const [pendiente, setPendiente] = useState<string | null>(null); // mandado, aún no en transcript
   const [continuando, setContinuando] = useState(false);
   const listRef = useRef<FlatList<SesionMensaje>>(null);
+  const teclado = useAlturaTeclado();
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -352,7 +370,7 @@ function ChatModal({
           }
         />
 
-        <View style={[styles.inputRow, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+        <View style={[styles.inputRow, { paddingBottom: Math.max(insets.bottom, 10) + teclado }]}>
           {detalle && !detalle.interactivo ? (
             <TouchableOpacity
               style={styles.continuarBtn}
@@ -435,6 +453,7 @@ function NuevaSesionModal({
   const [ruta, setRuta] = useState<string | null>(null);
   const [texto, setTexto] = useState("");
   const [creando, setCreando] = useState(false);
+  const teclado = useAlturaTeclado();
 
   useEffect(() => {
     if (visible && !ruta && proyectos.length) setRuta(proyectos[0].ruta);
@@ -460,7 +479,7 @@ function NuevaSesionModal({
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.modalBackdrop}
       >
-        <View style={[styles.modalCard, { marginBottom: insets.bottom + 20 }]}>
+        <View style={[styles.modalCard, { marginBottom: insets.bottom + 20 + teclado }]}>
           <Text style={styles.modalTitulo}>Nueva sesión de Claude</Text>
           {!macOnline ? (
             <Text style={styles.modalAviso}>La Mac está offline — no se puede crear ahora.</Text>
