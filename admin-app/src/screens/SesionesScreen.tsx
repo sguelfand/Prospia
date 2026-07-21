@@ -256,7 +256,10 @@ function ChatModal({
   const [error, setError] = useState<string | null>(null);
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
-  const [pendiente, setPendiente] = useState<string | null>(null); // mandado, aún no en transcript
+  // Mensajes ya mandados (entregados al TUI de la Mac) que todavía no aparecen en
+  // el transcript porque Claude está procesando y los levanta cuando puede. Se
+  // encolan varios seguidos, igual que tipeando en la Mac mientras procesa.
+  const [pendientes, setPendientes] = useState<string[]>([]);
   const [continuando, setContinuando] = useState(false);
   const listRef = useRef<FlatList<SesionMensaje>>(null);
   const teclado = useAlturaTeclado();
@@ -285,7 +288,12 @@ function ChatModal({
         setPregunta(null);
         descartadaRef.current = null;
       }
-      setPendiente((p) => (p && d.mensajes.some((m) => m.rol === "sebi" && m.texto === p) ? null : p));
+      // Sacar de la cola los que ya cayeron en el transcript (Claude los levantó).
+      setPendientes((ps) =>
+        ps.filter(
+          (p) => !d.mensajes.some((m) => m.rol === "sebi" && m.texto.trim() === p.trim()),
+        ),
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al cargar.");
     }
@@ -303,7 +311,9 @@ function ChatModal({
     setEnviando(true);
     try {
       await enviarMensajeSesion(token, sesionId, t);
-      setPendiente(t);
+      // Entregado al TUI: lo muestro como enviado al toque (aunque Claude esté
+      // procesando y lo levante después). Podés mandar varios seguidos.
+      setPendientes((ps) => [...ps, t]);
       setTexto("");
       load();
     } catch (e) {
@@ -395,8 +405,20 @@ function ChatModal({
           contentContainerStyle={styles.chatLista}
           renderItem={({ item }) => <Burbuja m={item} />}
           ListHeaderComponent={
-            pendiente ? (
-              <Burbuja m={{ seq: -1, rol: "sebi", texto: pendiente, hora: "" }} enviando />
+            pendientes.length ? (
+              <>
+                {pendientes
+                  .filter(
+                    (p) => !mensajes.some((m) => m.rol === "sebi" && m.texto.trim() === p.trim()),
+                  )
+                  .map((p, i) => (
+                    <Burbuja
+                      key={`pend-${i}`}
+                      m={{ seq: -(i + 1), rol: "sebi", texto: p, hora: "" }}
+                      entregado
+                    />
+                  ))}
+              </>
             ) : null
           }
         />
@@ -460,7 +482,7 @@ function ChatModal({
   );
 }
 
-function Burbuja({ m, enviando }: { m: SesionMensaje; enviando?: boolean }) {
+function Burbuja({ m, entregado }: { m: SesionMensaje; entregado?: boolean }) {
   if (m.rol === "tool") {
     return (
       <Text style={styles.tool} numberOfLines={2}>
@@ -473,7 +495,7 @@ function Burbuja({ m, enviando }: { m: SesionMensaje; enviando?: boolean }) {
     <View style={[styles.burbuja, esSebi ? styles.burbujaSebi : styles.burbujaClaude]}>
       <Text style={esSebi ? styles.burbujaSebiTxt : styles.burbujaClaudeTxt}>{m.texto}</Text>
       <Text style={[styles.burbujaHora, esSebi && { color: "rgba(12,23,48,0.55)" }]}>
-        {enviando ? "enviando…" : horaCorta(m.hora)}
+        {entregado ? "✓ enviado" : horaCorta(m.hora)}
       </Text>
     </View>
   );
