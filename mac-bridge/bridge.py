@@ -39,6 +39,9 @@ from pathlib import Path
 HOME = Path.home()
 PROJECTS_DIR = HOME / ".claude" / "projects"
 STATE_DIR = HOME / ".claude" / "mac-bridge"
+# Claude Code deja un archivo por proceso vivo: ~/.claude/sessions/<pid>.json
+# con {"pid","sessionId",...}. Es la verdad de "esta sesión EXISTE en la Mac".
+SESSIONS_DIR = HOME / ".claude" / "sessions"
 REGISTRY_FILE = STATE_DIR / "registry.json"
 ABIERTAS_FILE = STATE_DIR / "abiertas.json"
 LOG_FILE = STATE_DIR / "bridge.log"
@@ -453,6 +456,42 @@ class Tracker:
         except Exception:
             return True  # ante la duda, no cerrar nada
 
+    def _sids_con_proceso_vivo(self) -> set:
+        """SIDs cuyo proceso `claude` sigue corriendo, según los archivos
+        ~/.claude/sessions/<pid>.json que deja Claude Code. Es la verdad de
+        "la sesión existe en la Mac": si el proceso murió (Sebi cerró el panel
+        de Antigravity sin que dispare SessionEnd), su sid NO está acá y el
+        scan la cierra en la app. Verifica que el pid siga siendo un `claude`
+        para no confundirse con un pid reciclado por otro programa."""
+        vivos = set()
+        try:
+            archivos = list(SESSIONS_DIR.glob("*.json"))
+        except Exception:
+            return vivos
+        for f in archivos:
+            try:
+                pid = int(f.stem)
+            except ValueError:
+                continue
+            try:
+                os.kill(pid, 0)  # ¿existe el proceso?
+            except OSError:
+                continue  # muerto (ProcessLookupError) o sin permiso
+            try:
+                r = subprocess.run(["/bin/ps", "-o", "comm=", "-p", str(pid)],
+                                   capture_output=True, text=True, timeout=3)
+                if "claude" not in (r.stdout or "").lower():
+                    continue  # pid reciclado por otro proceso
+            except Exception:
+                pass
+            try:
+                sid = (json.loads(f.read_text()) or {}).get("sessionId")
+            except Exception:
+                sid = None
+            if sid:
+                vivos.add(sid)
+        return vivos
+
     # ---- parseo ----
 
     def _parsear_linea(self, s: Sesion, obj: dict):
@@ -568,6 +607,13 @@ class Tracker:
                     candidatos.append((mt, proy.name, f))
         candidatos.sort(reverse=True)
         hay_claude = self._hay_procesos_claude()
+        # Verdad de "existe en la Mac": sids con proceso claude vivo. Si el
+        # mapeo devolvió algo, lo usamos para cerrar las que ya no existen;
+        # si vino vacío pese a haber procesos claude (mecanismo indisponible
+        # en esta versión/permisos), caemos al viejo heurístico por actividad
+        # para no cerrar de más.
+        vivos = self._sids_con_proceso_vivo()
+        filtrar_por_proc = bool(vivos) or not hay_claude
         sids_candidatos = {f.stem for _, _, f in candidatos}
         for mt, proy_nombre, f in candidatos[:MAX_SESIONES]:
             sid = f.stem
@@ -581,7 +627,11 @@ class Tracker:
                 self.tmux._guardar()
                 tmux_muerta = False
             # ¿Está ABIERTA en la Mac? (ver docstring de la clase)
-            if tmux_muerta or not hay_claude:
+            # Si el proceso claude de esta sesión ya no existe, se cierra
+            # (aunque el transcript sea reciente): evita "fantasmas" que
+            # quedaban abiertos hasta las 72 h por no dispararse SessionEnd.
+            muerta_por_proc = filtrar_por_proc and sid not in vivos
+            if tmux_muerta or not hay_claude or muerta_por_proc:
                 self.abiertas.pop(sid, None)
             elif time.time() - mt < 600:
                 self.abiertas.setdefault(sid, ahora_iso())
