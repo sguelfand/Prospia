@@ -116,7 +116,19 @@ class Tmux:
         self.tmux = _which_tmux()
         self.claude = _which_claude()
         self.registry: dict = {}
+        # sid -> deadline: sesiones con un "continuar" EN CURSO. Mientras el
+        # claude nuevo arranca en tmux no hay ningún proceso con ese sid y el
+        # auto-cierre de fantasmas del scan() la daría por muerta (la sesión
+        # "desaparecía" de la app en el medio del continuar).
+        self.continuando: dict = {}
         self._cargar()
+
+    def en_transicion(self, sesion_id: str) -> bool:
+        dl = self.continuando.get(sesion_id)
+        if dl and time.time() < dl:
+            return True
+        self.continuando.pop(sesion_id, None)
+        return False
 
     def _cargar(self):
         try:
@@ -196,13 +208,62 @@ class Tmux:
         """Teclas crudas ("1", "Enter", "Escape", "Down") p/ prompts nativos."""
         self._run("send-keys", "-t", nombre, *teclas.split())
 
+    def responder_pregunta(self, nombre: str, entradas: list) -> None:
+        """Contesta el prompt nativo de AskUserQuestion en el TUI. Por cada
+        pregunta de la tanda: el número de la opción elegida, o el número de
+        "Other" seguido del texto libre. El dígito puede seleccionar y enviar
+        solo; el Enter extra cae en el input vacío del chat y es inocuo."""
+        for e in entradas:
+            if not isinstance(e, dict):
+                continue
+            n = str(e.get("n") or "").strip()
+            if not n.isdigit():
+                continue
+            self._run("send-keys", "-t", nombre, n)
+            time.sleep(0.5)
+            libre = str(e.get("texto") or "").strip()
+            if libre:
+                self._run("send-keys", "-t", nombre, "-l", libre)
+                time.sleep(0.3)
+            self._run("send-keys", "-t", nombre, "Enter")
+            time.sleep(1.0)
+
+    def cerrar(self, nombre: str) -> None:
+        """Cierra la sesión tmux prolijo: /exit al TUI (Claude corre sus hooks
+        de SessionEnd y el proceso muere solo, con lo que la sesión tmux
+        también). Si en unos segundos sigue viva, kill-session de respaldo.
+        La conversación queda en el transcript: se retoma desde el Historial
+        del panel (relojito) sin perder nada."""
+        try:
+            self.escribir(nombre, "/exit")
+        except Exception:
+            pass  # TUI colgado o sin input: cae al kill de respaldo
+        fin = time.time() + 8
+        while time.time() < fin:
+            if not self.viva(nombre):
+                return
+            time.sleep(0.5)
+        self._run("kill-session", "-t", f"={nombre}")
+
     def mensaje(self, sesion_id: str, texto: str) -> None:
         nombre = self.interactiva(sesion_id)
         if not nombre:
             raise RuntimeError("Esa sesión no es interactiva desde el cel. "
                                "Usá 'Continuar desde el cel' primero.")
+        if texto.strip() == "/exit":
+            # Botón "Cerrar tmux" de la app: cerrar sin reabrir ventana.
+            self.cerrar(nombre)
+            return
+        mr = re.match(r"^/respuestas\s+(.+)$", texto.strip(), re.S)
         m = re.match(r"^/key\s+(.+)$", texto.strip())
-        if m:
+        if mr:
+            try:
+                entradas = json.loads(mr.group(1))
+                assert isinstance(entradas, list)
+            except Exception:
+                raise RuntimeError("Formato de /respuestas inválido")
+            self.responder_pregunta(nombre, entradas)
+        elif m:
             self.teclas(nombre, m.group(1))
         else:
             self.escribir(nombre, texto)
@@ -288,37 +349,55 @@ class Tmux:
         """Reabre una sesión de VSCode/terminal en tmux con --resume.
         Devuelve (nuevo_sid | None, nombre_tmux): si claude forkea el id al
         resumir, detectamos el jsonl nuevo y mapeamos."""
+        # Idempotente: si YA tiene un tmux vivo (doble tap del botón mientras
+        # el primero arrancaba), devolver ese en vez de crear un segundo tmux
+        # sobre la misma sesión (pisaba el registry apuntando a uno roto).
+        existente = self.interactiva(sesion_id)
+        if existente:
+            log(f"continuar {sesion_id[:8]}: ya interactiva en {existente}, no duplico")
+            return None, existente
         cwd = os.path.expanduser(cwd)
         nombre = self._nombre_libre("cont-" + sesion_id[:8])
-        proyecto_dir = PROJECTS_DIR / re.sub(r"[^a-zA-Z0-9]", "-", cwd)
-        antes = {p.name for p in proyecto_dir.glob("*.jsonl")} if proyecto_dir.is_dir() else set()
-        t0 = time.time()
-        # También en ventana de Terminal visible; fallback: tmux directo.
-        self._crear_win(nombre, cwd, f"--resume {sesion_id}")
-        if not (self._abrir_ventana(nombre) and self._esperar_sesion(nombre)):
-            log(f"continuar {nombre}: sin ventana Terminal, fallback tmux directo")
-            cmd = f'"{self.claude}" --resume {sesion_id}'
-            r = self._run("new-session", "-d", "-s", nombre, "-c", cwd, cmd)
-            if r.returncode != 0:
-                raise RuntimeError(f"tmux new-session: {r.stderr.strip()}")
-        if not self._esperar_listo(nombre, 25):
-            raise RuntimeError("Claude no llegó a resumir la sesión en tmux")
-        # ¿Siguió con el mismo id o forkeó a uno nuevo?
-        nuevo_sid = None
-        fin = time.time() + 10
-        while time.time() < fin and proyecto_dir.is_dir():
-            for p in proyecto_dir.glob("*.jsonl"):
-                if p.name not in antes and p.stat().st_mtime >= t0:
-                    nuevo_sid = p.stem
+        log(f"continuar {sesion_id[:8]} → {nombre} (cwd={cwd})")
+        self.continuando[sesion_id] = time.time() + 90
+        try:
+            proyecto_dir = PROJECTS_DIR / re.sub(r"[^a-zA-Z0-9]", "-", cwd)
+            antes = {p.name for p in proyecto_dir.glob("*.jsonl")} if proyecto_dir.is_dir() else set()
+            t0 = time.time()
+            # También en ventana de Terminal visible; fallback: tmux directo.
+            self._crear_win(nombre, cwd, f"--resume {sesion_id}")
+            if not (self._abrir_ventana(nombre) and self._esperar_sesion(nombre)):
+                log(f"continuar {nombre}: sin ventana Terminal, fallback tmux directo")
+                cmd = f'"{self.claude}" --resume {sesion_id}'
+                r = self._run("new-session", "-d", "-s", nombre, "-c", cwd, cmd)
+                if r.returncode != 0:
+                    raise RuntimeError(f"tmux new-session: {r.stderr.strip()}")
+            if not self._esperar_listo(nombre, 25):
+                raise RuntimeError("Claude no llegó a resumir la sesión en tmux")
+            # ¿Siguió con el mismo id o forkeó a uno nuevo?
+            nuevo_sid = None
+            fin = time.time() + 10
+            while time.time() < fin and proyecto_dir.is_dir():
+                for p in proyecto_dir.glob("*.jsonl"):
+                    if p.name not in antes and p.stat().st_mtime >= t0:
+                        nuevo_sid = p.stem
+                        break
+                if nuevo_sid:
                     break
+                time.sleep(1)
+            sid_final = nuevo_sid or sesion_id
+            self.registry[sid_final] = {"tmux": nombre, "cwd": cwd, "creada": ahora_iso(),
+                                        "continuada_de": sesion_id if nuevo_sid else None}
+            self._guardar()
+            log(f"continuar {sesion_id[:8]}: listo en {nombre}"
+                + (f", forkeó a {nuevo_sid[:8]}" if nuevo_sid else ", mismo id"))
             if nuevo_sid:
-                break
-            time.sleep(1)
-        sid_final = nuevo_sid or sesion_id
-        self.registry[sid_final] = {"tmux": nombre, "cwd": cwd, "creada": ahora_iso(),
-                                    "continuada_de": sesion_id if nuevo_sid else None}
-        self._guardar()
-        return nuevo_sid, nombre
+                # proteger también al fork mientras dispara sus primeros hooks
+                self.continuando[nuevo_sid] = time.time() + 90
+            return nuevo_sid, nombre
+        except Exception:
+            self.continuando.pop(sesion_id, None)
+            raise
 
 
 # ----------------------------------------------------------------- transcripts
@@ -366,6 +445,7 @@ class Sesion:
         self.ultimo_aviso_espera = 0.0
         self.pregunta_mcp_abierta = False
         self.pregunta_texto = ""
+        self.pregunta_items = []   # [{pregunta, header, multiselect, opciones:[{label,description}]}]
         self.oculta = False
         self.entrypoint = ""
 
@@ -395,6 +475,7 @@ class Sesion:
             "seq": self.seq,
             "preview": (prev[:160] + "…") if len(prev) > 160 else prev,
             "pregunta_texto": self.pregunta_texto if self.estado == "pregunta" else "",
+            "pregunta_items": self.pregunta_items if self.estado == "pregunta" else [],
             "oculta": self.oculta,
         }
 
@@ -511,6 +592,7 @@ class Tracker:
             if s.pregunta_mcp_abierta or s.estado == "pregunta":
                 s.pregunta_mcp_abierta = False
                 s.pregunta_texto = ""
+                s.pregunta_items = []
                 s.estado = "procesando"
                 s.turno_inicio = s.turno_inicio or time.time()
             msg = obj.get("message") or {}
@@ -553,6 +635,29 @@ class Tracker:
                         s.pregunta_texto = str(primera.get("pregunta")
                                                or primera.get("question")
                                                or inp.get("pregunta") or "")[:300]
+                        # Tanda completa con opciones: la app la muestra como
+                        # popup respondible aunque no exista pendiente en el
+                        # backend (pregunta NATIVA, switch del cel apagado).
+                        items = []
+                        for q in (qs if isinstance(qs, list) and qs else [inp]):
+                            if not isinstance(q, dict):
+                                continue
+                            ops = q.get("opciones") or q.get("options") or []
+                            items.append({
+                                "pregunta": str(q.get("pregunta")
+                                                or q.get("question") or "")[:300],
+                                "header": str(q.get("header") or "")[:40] or None,
+                                "multiselect": bool(q.get("multiselect")
+                                                    or q.get("multiSelect")),
+                                "opciones": [
+                                    {"label": str(o.get("label"))[:120],
+                                     "description": str(o.get("description")
+                                                        or "")[:300]}
+                                    for o in ops
+                                    if isinstance(o, dict) and o.get("label")
+                                ][:6],
+                            })
+                        s.pregunta_items = [i for i in items if i["pregunta"]][:4]
 
     def _leer_incremental(self, s: Sesion, path: Path):
         try:
@@ -630,12 +735,17 @@ class Tracker:
             # Si el proceso claude de esta sesión ya no existe, se cierra
             # (aunque el transcript sea reciente): evita "fantasmas" que
             # quedaban abiertos hasta las 72 h por no dispararse SessionEnd.
+            # Excepción: un "continuar" en curso — entre que muere el proceso
+            # viejo y arranca el claude del tmux no hay proceso con este sid
+            # y la sesión desaparecía de la app en el medio de la transición.
+            en_transicion = self.tmux.en_transicion(sid)
             muerta_por_proc = filtrar_por_proc and sid not in vivos
-            if tmux_muerta or not hay_claude or muerta_por_proc:
+            if (tmux_muerta or not hay_claude or muerta_por_proc) and not en_transicion:
                 self.abiertas.pop(sid, None)
-            elif time.time() - mt < 600:
+            elif time.time() - mt < 600 or en_transicion:
                 self.abiertas.setdefault(sid, ahora_iso())
-            abierta = interactiva_viva or (sid in self.abiertas and not tmux_muerta)
+            abierta = (interactiva_viva or en_transicion
+                       or (sid in self.abiertas and not tmux_muerta))
             if not abierta:
                 s = self.sesiones.get(sid)
                 if s is not None and not s.oculta:
@@ -825,6 +935,15 @@ def ejecutar_cmd(tracker: Tracker, tmux: Tmux, cmd: dict) -> dict:
             nuevo, _ = tmux.continuar(cmd["sesion_id"], cwd)
             if nuevo and s:
                 s.oculta = True  # la sesión vieja sigue en el fork nuevo
+                tracker._emitir_delta(s, forzar=True)
+            # Delta forzado del sid final: el registry recién se escribió, y
+            # sin esto la app seguía viendo interactivo=false (el último delta
+            # había salido durante el arranque) → Sebi tocaba "Continuar" de
+            # nuevo y se creaba un segundo tmux sobre la misma sesión.
+            sfin = tracker.sesiones.get(nuevo or cmd["sesion_id"])
+            if sfin:
+                sfin.oculta = False
+                tracker._emitir_delta(sfin, forzar=True)
         else:
             return {"ok": False, "error": f"Comando desconocido: {que}"}
         return {"ok": True, "error": None}

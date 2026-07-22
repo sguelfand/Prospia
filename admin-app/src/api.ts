@@ -994,6 +994,9 @@ export interface SesionClaude {
   seq: number;
   preview: string;
   pregunta_texto?: string;
+  // Pregunta NATIVA (AskUserQuestion sin pendiente en el backend): la tanda
+  // completa con opciones, capturada del transcript por el mac-bridge.
+  pregunta_items?: PreguntaItem[];
 }
 
 export interface SesionesResumen {
