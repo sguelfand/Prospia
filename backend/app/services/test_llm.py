@@ -252,6 +252,19 @@ def _call_model(motor, system: str, messages: list[dict], timeout: int = 90) -> 
         # Darles aire para pensar + responder evita ese artefacto.
         "max_tokens": 3000,
     }
+    # Params extra por motor: si `notas` es un JSON con clave "body", se mergea al
+    # payload. Permite variantes del mismo modelo sin tocar código, ej. MiniMax sin
+    # reasoning y con proveedor pinneado:
+    #   {"body": {"reasoning": {"exclude": true},
+    #             "provider": {"order": ["minimax"], "allow_fallbacks": false}}}
+    notas = (motor.notas or "").strip()
+    if notas.startswith("{"):
+        try:
+            extra = json.loads(notas).get("body") or {}
+            if isinstance(extra, dict):
+                body.update(extra)
+        except Exception:
+            pass  # notas no-JSON = texto libre, comportamiento de siempre
     t0 = time.time()
     resp = requests.post(url, headers={
         "Authorization": f"Bearer {key}",
