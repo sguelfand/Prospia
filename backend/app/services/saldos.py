@@ -125,8 +125,10 @@ def obtener_saldos() -> dict:
 
 
 # Umbral de aviso de OpenRouter (US$). Configurable por env.
+# Default US$5 (subido desde 1 el 22/7): OpenRouter pasó a cargar el 100% del tráfico
+# de Camila (pin CAMILA_MYCLAW_OFF, MyClaw fuera) → más margen antes de saltar a Anthropic.
 import os as _os
-OPENROUTER_ALERTA_USD = float(_os.environ.get("OPENROUTER_ALERTA_USD", "1"))
+OPENROUTER_ALERTA_USD = float(_os.environ.get("OPENROUTER_ALERTA_USD", "5"))
 
 
 def chequear_saldos_y_alertar():
