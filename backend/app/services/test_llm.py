@@ -257,7 +257,7 @@ def _call_model(motor, system: str, messages: list[dict], timeout: int = 90) -> 
     # reasoning y con proveedor pinneado:
     #   {"body": {"reasoning": {"exclude": true},
     #             "provider": {"order": ["minimax"], "allow_fallbacks": false}}}
-    notas = (motor.notas or "").strip()
+    notas = (getattr(motor, "notas", "") or "").strip()
     if notas.startswith("{"):
         try:
             extra = json.loads(notas).get("body") or {}
@@ -435,7 +435,7 @@ def correr(corrida_id: int, juzgar: bool = True) -> dict:
             id=m.id, nombre=m.nombre, provider=m.provider, model_id=m.model_id,
             base_url=m.base_url, api_key=m.api_key, precio_in=m.precio_in,
             precio_out=m.precio_out, precio_cache_read=m.precio_cache_read,
-            precio_cache_write=m.precio_cache_write)
+            precio_cache_write=m.precio_cache_write, notas=m.notas)
             for m in db.query(TestLlmMotor).filter(TestLlmMotor.id.in_(motor_ids)).all()]
         escs = [SimpleNamespace(
             id=e.id, slug=e.slug, nombre=e.nombre, caso_uso=e.caso_uso,
