@@ -108,6 +108,10 @@ def _build_envelope(source: str = "etiguel", force: bool = False) -> dict:
         "\n\n# Identidad\n" + files.get("IDENTITY.md", ""),
         "\n\n# Usuario / empresa\n" + files.get("USER.md", ""),
         "\n\n# Instrucciones de comportamiento (systemPromptOverride)\n" + override,
+        # AGENTS.md es el prompt de reglas REAL de Camila desde el upgrade de
+        # OpenClaw 2026.6.11 (systemPromptOverride quedó vacío). Sin esto, el
+        # banco midió a los motores sin ninguna regla (corridas 4-9).
+        "\n\n# Reglas operativas del agente (workspace AGENTS.md)\n" + files.get("AGENTS.md", ""),
         "\n\n# Herramientas disponibles\n" + files.get("TOOLS.md", ""),
         "\n\n# Precios de sublimación (workspace)\n" + files.get("sublimacion.md", ""),
         "\n\n# Precios de etiquetas (workspace)\n" + files.get("etiquetas.md", ""),
