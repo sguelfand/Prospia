@@ -15,7 +15,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
 
-DIAS_MES = 30.4
+# Días laborales por mes: Sebi cuenta 22 (sin fines de semana — el bot casi no
+# tiene movimiento sábado/domingo), no 30,4 corridos.
+DIAS_MES = 22
 # Umbral de la alerta: desvío del $/conv medido vs el cotizado que dispara
 # oportunidad + push (pedido de Sebi 22/7: "si el promedio está cambiando a lo
 # cotizado, avisame con una notificación").
@@ -38,7 +40,7 @@ _SEED_SERVICIOS = [
     # (nombre, tipo, costo_mensual_usd | None = falta el dato, detalle)
     ("Tokens del bot (motor LLM)", "variable", None,
      "Costo de las conversaciones del agente (GLM/MyClaw/OpenRouter según motor). "
-     "Se calcula solo: conversaciones/día × 30,4 × costo por conversación. No se carga a mano."),
+     "Se calcula solo: conversaciones/día × 22 (días laborales) × costo por conversación. No se carga a mano."),
     ("Tokens internos Anthropic", "variable", None,
      "Especialistas de Calidad y Negocio (1×/día), diagnóstico IA de costos, asistentes "
      "Haiku (ayuda web + relevamiento). Se toma del gasto real del mes (monitor Tokens → Anthropic)."),

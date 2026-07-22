@@ -413,7 +413,7 @@ export default function Precios() {
               <div className="flex items-center justify-between gap-3 border-b border-line/50 pb-2">
                 <div className="min-w-0">
                   <span className="text-sm text-ink">Tokens del bot (motor LLM)</span>
-                  <p className="text-xs text-muted">{form.conv || '¿?'} conv/día × 30,4 × {p?.costo_conv_usd != null ? usd4(p.costo_conv_usd) : '¿?'} — calculado solo</p>
+                  <p className="text-xs text-muted">{form.conv || '¿?'} conv/día × 22 días laborales × {p?.costo_conv_usd != null ? usd4(p.costo_conv_usd) : '¿?'} — calculado solo</p>
                 </div>
                 <span className="text-sm font-medium text-ink-soft whitespace-nowrap">{usd(c?.tokens_bot_mes)}</span>
               </div>
