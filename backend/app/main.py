@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine
 import app.models  # noqa: F401  (registra todas las tablas para create_all)
-from app.routers import admin, auth, calidad, dashboard, etiguel_mirror, me, monitoring, prospects, public, terminos, test_llm, tokens
+from app.routers import admin, auth, calidad, dashboard, etiguel_mirror, me, monitoring, precios, prospects, public, terminos, test_llm, tokens
 
 
 def run_migrations():
@@ -283,6 +283,7 @@ app.include_router(public.router)
 app.include_router(me.router)
 app.include_router(calidad.router)
 app.include_router(test_llm.router)
+app.include_router(precios.router)
 from app.routers import sesiones as sesiones_router
 app.include_router(sesiones_router.router)
 app.include_router(sesiones_router.admin_router)
@@ -316,6 +317,13 @@ camila_cost_ai.start()
 
 from app.services import camila_aprendizaje
 camila_aprendizaje.start()
+
+# Seed de la pantalla Precios (pricing de etiguel + catálogo de servicios; idempotente).
+try:
+    from app.services import pricing as _pricing_svc
+    _pricing_svc.seed()
+except Exception as _e:
+    print(f"[PRECIOS] seed al arranque: {type(_e).__name__}: {_e}")
 
 
 @app.get("/")
