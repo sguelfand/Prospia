@@ -358,7 +358,7 @@ function ChatModal({
     Alert.alert(
       "Continuar desde el cel",
       "La sesión se reabre en tmux en la Mac y pasa a ser interactiva desde acá. " +
-        "La ventana de VSCode queda desactualizada (en la compu la seguís por la terminal).",
+        "Tarda unos segundos (abre la ventana y Claude resume la conversación).",
       [
         { text: "Cancelar", style: "cancel" },
         {
@@ -368,19 +368,30 @@ function ChatModal({
             setContinuando(true);
             try {
               await continuarSesion(token, sesionId);
-              // Si claude forkeó el id, esta sesión se oculta y aparece la nueva:
-              // volvemos a la lista para que Sebi entre a la que quedó viva.
-              onClose();
+              // NO cerramos el chat: si mantuvo el id, este mismo chat pasa a
+              // interactivo solo (el bridge fuerza el delta y el polling lo ve).
+              // Si forkeó, esta sesión llega "oculta" y load() cierra a la lista
+              // para entrar a la nueva. El spinner sigue hasta ahí.
             } catch (e) {
-              Alert.alert("No se pudo continuar", e instanceof Error ? e.message : "Error");
-            } finally {
               setContinuando(false);
+              Alert.alert("No se pudo continuar", e instanceof Error ? e.message : "Error");
             }
           },
         },
       ],
     );
   };
+
+  // Cierre del "continuando": cuando la sesión ya es interactiva (mantuvo el
+  // id) o quedó oculta (forkeó → volvemos a la lista a entrar a la nueva).
+  useEffect(() => {
+    if (!continuando || !detalle) return;
+    if (detalle.interactivo) setContinuando(false);
+    else if ((detalle as any).oculta) {
+      setContinuando(false);
+      onClose();
+    }
+  }, [continuando, detalle?.interactivo, (detalle as any)?.oculta]);
 
   // Pregunta NATIVA: la respuesta viaja como teclas al TUI en tmux — el número
   // de la opción (o el de "Other" + texto libre), una pregunta por vez.
@@ -531,7 +542,10 @@ function ChatModal({
               disabled={continuando || !detalle.mac_online}
             >
               {continuando ? (
-                <ActivityIndicator size="small" color={colors.onPrimary} />
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <ActivityIndicator size="small" color={colors.onPrimary} />
+                  <Text style={styles.continuarTxt}>Abriendo en tmux…</Text>
+                </View>
               ) : (
                 <Text style={styles.continuarTxt}>
                   {detalle.mac_online
