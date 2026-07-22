@@ -61,6 +61,15 @@ class Prospect(Base):
     # no reactivar la cadencia normal, que es un flujo distinto).
     reactivacion_intentos: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     reactivacion_base: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Escalera de seguimiento (interesado que difiere a futuro sin fecha: "voy a sacar
+    # los costos y te aviso"). El bot arranca la escalera con /agendar-seguimiento; se
+    # recontacta a +7d → +1mes → +3meses retomando el `seguimiento_contexto`. Activo =
+    # seguimiento_proxima IS NOT NULL. `seguimiento_base` = ts de la última acción (si el
+    # cliente escribe algo más nuevo → revival → se limpia). No toca cant/ult_contacto.
+    seguimiento_etapa: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    seguimiento_proxima: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    seguimiento_contexto: Mapped[str | None] = mapped_column(Text, nullable=True)
+    seguimiento_base: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Lista negra (solo la setea Sebi/superadmin desde la app). Si está bloqueado:
     # la cadencia no lo re-contacta, no se lo puede contactar, y el bloqueo viaja
     # al bot del tenant (deja de escucharlo/responderle) si su webhook está conectado.

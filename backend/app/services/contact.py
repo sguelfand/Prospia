@@ -90,12 +90,14 @@ def _get_template(
 
 
 def _send_whatsapp(numero: str, mensaje: str, gateway_url: str, gateway_token: str,
-                   session_key: str, recontacto: bool = False) -> tuple[bool, str]:
+                   session_key: str, recontacto: bool = False, prefijo: str | None = None) -> tuple[bool, str]:
     target = numero.lstrip('+').replace(' ', '').replace('-', '')
     # recontacto=True → prefijo ENVIAR_RECONTACTO: señal explícita al bot del tenant
     # de que es un recontacto intencional (mandarlo aunque ya haya contactado el
     # número, NO dedupear). 1er contacto → ENVIAR_PROSPECCION como siempre.
-    prefijo = "ENVIAR_RECONTACTO" if recontacto else "ENVIAR_PROSPECCION"
+    # `prefijo` explícito (ej. ENVIAR_SEGUIMIENTO) tiene prioridad sobre `recontacto`.
+    if prefijo is None:
+        prefijo = "ENVIAR_RECONTACTO" if recontacto else "ENVIAR_PROSPECCION"
     payload_message = f"{prefijo}|{target}|{mensaje}"
 
     # Anti-ráfaga: espaciar envíos para no saturar la sesión del agente del tenant.
@@ -134,7 +136,7 @@ def _send_whatsapp(numero: str, mensaje: str, gateway_url: str, gateway_token: s
     return False, f"HTTP {resp.status_code}: {resp.text[:200]}"
 
 
-def _send_whatsapp_con_retry(numero: str, mensaje: str, gateway_url: str, gateway_token: str, session_key: str, recontacto: bool = False) -> tuple[bool, str]:
+def _send_whatsapp_con_retry(numero: str, mensaje: str, gateway_url: str, gateway_token: str, session_key: str, recontacto: bool = False, prefijo: str | None = None) -> tuple[bool, str]:
     """_send_whatsapp con reintentos + backoff ante fallo transitorio del gateway.
 
     Reintenta hasta WA_SEND_MAX_INTENTOS veces con WA_SEND_RETRY_DELAY_S de espera
@@ -142,7 +144,7 @@ def _send_whatsapp_con_retry(numero: str, mensaje: str, gateway_url: str, gatewa
     espera no bloquea el response. Si se agotan los intentos retorna (False, motivo)."""
     ultimo_info = ""
     for intento in range(1, WA_SEND_MAX_INTENTOS + 1):
-        ok, info = _send_whatsapp(numero, mensaje, gateway_url, gateway_token, session_key, recontacto=recontacto)
+        ok, info = _send_whatsapp(numero, mensaje, gateway_url, gateway_token, session_key, recontacto=recontacto, prefijo=prefijo)
         if ok:
             if intento > 1:
                 return True, f"{info} (OK en intento {intento}/{WA_SEND_MAX_INTENTOS})"
@@ -367,6 +369,7 @@ def reactivar_abandonadas():
             .filter(
                 Prospect.estado == "en_conversacion",
                 Prospect.prox_contacto.is_(None),
+                Prospect.seguimiento_proxima.is_(None),  # en escalera de seguimiento → exento
                 Prospect.bloqueado.is_(False),
                 Prospect.tenant_id.in_(list(cfgs.keys())),
             )
@@ -460,20 +463,169 @@ def reactivar_abandonadas():
             print(f"[REACTIVACION] no se pudo avisar cierre prospect {a['prospect_id']}: {e}")
 
 
+# ── Escalera de seguimiento (interesado que difiere a futuro) ─────────────────
+# Hueco distinto de la cadencia (nunca respondió), la reactivación (se colgó
+# mid-charla) y el callback (dio fecha exacta): el cliente INTERESADO cerró bien
+# pero difirió sin fecha ("voy a sacar los costos y te aviso"). El bot lo detecta y
+# llama /agendar-seguimiento con el contexto. Recontactamos a +7d → +1mes → +3meses
+# retomando ese contexto; se frena solo si el cliente vuelve a escribir; tras el 3ro
+# sin respuesta (+gracia) → cancelado + aviso a Sebi. El estado vive en el prospect
+# (seguimiento_*), no toca cant/ult_contacto. Kill switch SEGUIMIENTO_ENABLED.
+SEG_DIAS = [7, 30, 90]           # gap a cada recontacto: +7d, +1mes, +3meses
+SEG_MAX_ETAPAS = len(SEG_DIAS)   # 3
+SEG_CIERRE_DIAS = 14             # gracia tras el 3ro antes de cerrar por agotado
+_SEG_ESTADOS_CIERRA = {"cancelado", "no_le_interesa"}
+
+
+def _seg_enabled() -> bool:
+    return os.environ.get("SEGUIMIENTO_ENABLED", "true").strip().lower() in ("1", "true", "yes", "on")
+
+
+def seguimiento_decidir(etapa, respondio, vencio):
+    """Decisión PURA de la escalera (sin DB ni red). Retorna (accion, motivo) con
+    accion in {'cerrar_revival', 'enviar', 'cerrar_agotado', 'nada'}."""
+    if respondio:
+        return ("cerrar_revival", "el cliente volvió a escribir → re-enganchado")
+    if not vencio:
+        return ("nada", "aún no vence la próxima fecha")
+    if etapa >= SEG_MAX_ETAPAS:
+        return ("cerrar_agotado", f"{SEG_MAX_ETAPAS} seguimientos sin respuesta")
+    return ("enviar", f"etapa {etapa + 1}/{SEG_MAX_ETAPAS} vencida")
+
+
+def _seg_proxima(etapa_nueva, ahora):
+    """Cuándo cae el próximo evento tras dejar al cliente en `etapa_nueva`: si quedan
+    etapas → gap de esa etapa; si ya salió el último → gracia antes del cierre."""
+    dias = SEG_DIAS[etapa_nueva] if etapa_nueva < SEG_MAX_ETAPAS else SEG_CIERRE_DIAS
+    return ahora + timedelta(days=dias)
+
+
+def seguir_interesados():
+    """Una pasada de la escalera de seguimiento (la llama el cadence job, cada hora).
+    Best-effort; nunca frena la cadencia. Solo manda dentro de la ventana horaria del
+    tenant; los cierres (revival/agotado) corren siempre (son DB-only)."""
+    if not _seg_enabled():
+        return
+    from sqlalchemy import func
+
+    from app.database import SessionLocal
+    from app.models.mensaje import ProspectMensaje
+    from app.models.prospect import Prospect
+    from app.models.tenant import Tenant, TenantConfig
+    from app.services import push
+
+    db = SessionLocal()
+    envios = []   # (wa, contexto, gw_url, gw_token, sess, etiqueta)
+    avisos = []
+    try:
+        ahora = datetime.now(timezone.utc)
+        cfgs = {c.tenant_id: c for c in
+                db.query(TenantConfig).filter(TenantConfig.envio_auto_habilitado.is_(True)).all()}
+        if not cfgs:
+            return
+        prospects = (
+            db.query(Prospect)
+            .filter(
+                Prospect.seguimiento_proxima.isnot(None),
+                Prospect.bloqueado.is_(False),
+                Prospect.tenant_id.in_(list(cfgs.keys())),
+            )
+            .all()
+        )
+        for p in prospects:
+            cfg = cfgs.get(p.tenant_id)
+            if not cfg:
+                continue
+            # Estado terminal → cortar la escalera (no molestar a un cancelado / no interesado).
+            if p.estado in _SEG_ESTADOS_CIERRA:
+                p.seguimiento_proxima = None
+                _registrar_historial(db, p.id, p.tenant_id, "seguimiento_cerrado",
+                                     f"Seguimiento cerrado: el prospect pasó a {p.estado}.")
+                continue
+
+            last_in = (
+                db.query(func.max(ProspectMensaje.fecha))
+                .filter(ProspectMensaje.prospect_id == p.id, ProspectMensaje.direccion == "in")
+                .scalar()
+            )
+            respondio = bool(last_in and p.seguimiento_base and last_in > p.seguimiento_base)
+            vencio = ahora >= p.seguimiento_proxima
+            etapa = p.seguimiento_etapa or 0
+            accion, motivo = seguimiento_decidir(etapa, respondio, vencio)
+
+            if accion == "cerrar_revival":
+                p.seguimiento_proxima = None
+                p.seguimiento_etapa = 0
+                p.seguimiento_base = None
+                _registrar_historial(db, p.id, p.tenant_id, "seguimiento_cerrado", f"Seguimiento cerrado: {motivo}.")
+
+            elif accion == "enviar":
+                wa = (p.whatsapp or "").strip()
+                gateway_url = cfg.openclaw_gateway_url or ""
+                session_key = cfg.openclaw_session_id or ""
+                gateway_token = (cfg.openclaw_gateway_token or os.environ.get("OPENCLAW_GATEWAY_TOKEN", ""))
+                if not (wa and gateway_url and gateway_token and session_key) or not _dentro_horario_cfg(cfg):
+                    continue  # falta gateway o fuera de horario → se reintenta en la próxima pasada
+                etapa_nueva = etapa + 1
+                p.seguimiento_etapa = etapa_nueva
+                p.seguimiento_base = ahora
+                p.seguimiento_proxima = _seg_proxima(etapa_nueva, ahora)
+                _registrar_historial(db, p.id, p.tenant_id, "seguimiento",
+                                     f"Seguimiento {etapa_nueva}/{SEG_MAX_ETAPAS}: {motivo}. "
+                                     f"Retomando: {(p.seguimiento_contexto or '')[:120]}")
+                envios.append((wa, (p.seguimiento_contexto or ""), gateway_url, gateway_token, session_key,
+                               f"seguimiento prospect {p.id} ({etapa_nueva}/{SEG_MAX_ETAPAS})"))
+
+            elif accion == "cerrar_agotado":
+                p.estado = "cancelado"
+                p.seguimiento_proxima = None
+                _registrar_historial(db, p.id, p.tenant_id, "cancelado_auto",
+                                     f"Seguimiento agotado: {motivo}. Interesado que difirió y no retomó. "
+                                     "Cancelado para seguimiento manual.")
+                tenant = db.get(Tenant, p.tenant_id)
+                avisos.append({"prospect_id": p.id, "nombre": p.nombre,
+                               "telefono": (p.whatsapp or p.telefono or "?"),
+                               "tenant": (tenant.nombre if tenant else str(p.tenant_id))})
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"[SEGUIMIENTO ERROR] {type(e).__name__}: {e}")
+        envios, avisos = [], []
+    finally:
+        db.close()
+
+    # Envíos en threads daemon (fuera de la transacción), con prefijo ENVIAR_SEGUIMIENTO.
+    for (wa, contexto, gw_url, gw_token, sess, etiqueta) in envios:
+        _reintentar_envio_async(wa, contexto, gw_url, gw_token, sess, etiqueta, prefijo="ENVIAR_SEGUIMIENTO")
+
+    # Avisos de cierre por agotado a Sebi (global), best-effort.
+    for a in avisos:
+        try:
+            push.notificar_global_async(
+                "seguimiento_cerrado",
+                "🗓️ Seguimiento agotado",
+                f"[{a['tenant']}] {a['nombre']} ({a['telefono']}) no retomó tras {SEG_MAX_ETAPAS} "
+                "seguimientos. Se marcó Cancelado para seguimiento manual.",
+                {"nav": "prospect_detalle", "prospect_id": a["prospect_id"]},
+            )
+        except Exception as e:
+            print(f"[SEGUIMIENTO] no se pudo avisar cierre prospect {a['prospect_id']}: {e}")
+
+
 # Ventana de confirmación de envío: tras contactar por WA esperamos ver el 'out'
 # real (chat-log). Si no llega en este tiempo, avisamos (default 5 min, holgado
 # para no falsear por demoras del agente). Paridad con el webhook de Etiguel.
 WA_CONFIRM_WINDOW_S = int(os.environ.get("WA_CONFIRM_WINDOW_S", "300"))
 
 
-def _reintentar_envio_async(wa, mensaje, gateway_url, gateway_token, session_key, etiqueta, recontacto=False):
+def _reintentar_envio_async(wa, mensaje, gateway_url, gateway_token, session_key, etiqueta, recontacto=False, prefijo=None):
     """Re-inyecta un envío en un thread daemon (no bloquea el loop de monitoreo).
     Pasa por el mismo throttle anti-ráfaga. Si falla, el próximo barrido lo agarra
     (ya con los reintentos agotados → avisa)."""
     def _run():
         try:
             ok, info = _send_whatsapp_con_retry(wa, mensaje, gateway_url, gateway_token, session_key,
-                                                recontacto=recontacto)
+                                                recontacto=recontacto, prefijo=prefijo)
             print(f"[CONTACT SWEEP] reintento {etiqueta} → ok={ok} {info}")
         except Exception as e:
             print(f"[CONTACT SWEEP] reintento {etiqueta} ERROR: {e}")

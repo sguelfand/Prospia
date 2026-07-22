@@ -120,6 +120,14 @@ def _check_once():
     except Exception as e:
         print(f"[REACTIVACION ERROR] {type(e).__name__}: {e}")
 
+    # ── 4) Escalera de seguimiento (interesado que difiere a futuro) ───────────
+    # Recontacta a +7d → +1mes → +3meses al interesado que quedó en avisar.
+    try:
+        from app.services import contact as contact_service
+        contact_service.seguir_interesados()
+    except Exception as e:
+        print(f"[SEGUIMIENTO ERROR] {type(e).__name__}: {e}")
+
 
 def start():
     def loop():

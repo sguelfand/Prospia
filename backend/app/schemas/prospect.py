@@ -74,6 +74,12 @@ class AgendarContactoBody(BaseModel):
     resumen: str | None = None
 
 
+class AgendarSeguimientoBody(BaseModel):
+    # Interesado que difiere a futuro SIN fecha exacta ("voy a sacar los costos y te
+    # aviso"). Arranca la escalera de seguimiento (+7d → +1mes → +3meses).
+    contexto: str | None = None   # qué quedó pendiente de definir, para retomarlo
+
+
 class InteresResumenBody(BaseModel):
     resumen: str | None = None   # resumen de la charla que deja Camila
 

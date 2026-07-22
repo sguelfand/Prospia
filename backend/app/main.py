@@ -36,6 +36,20 @@ def run_migrations():
         conn.execute(text(
             "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS prox_contacto TIMESTAMPTZ"
         ))
+        # Escalera de seguimiento (interesado que difiere): etapa + próxima fecha +
+        # contexto de lo pendiente + base para detectar revival.
+        conn.execute(text(
+            "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS seguimiento_etapa INTEGER NOT NULL DEFAULT 0"
+        ))
+        conn.execute(text(
+            "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS seguimiento_proxima TIMESTAMPTZ"
+        ))
+        conn.execute(text(
+            "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS seguimiento_contexto TEXT"
+        ))
+        conn.execute(text(
+            "ALTER TABLE prospects ADD COLUMN IF NOT EXISTS seguimiento_base TIMESTAMPTZ"
+        ))
 
         # ── tenant_config: config por cliente (escalar en columnas, variable en JSONB) ──
         tenant_config_cols = [

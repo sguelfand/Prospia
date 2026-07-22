@@ -1,5 +1,6 @@
 from __future__ import annotations
 import threading
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy import func
@@ -11,7 +12,7 @@ from app.models.historial import ProspectHistorial
 from app.models.mensaje import ProspectMensaje
 from app.models.prospect import ESTADOS, Prospect
 from app.models.user import User
-from app.schemas.prospect import AgendarContactoBody, ChatLogBody, HistorialCreate, HistorialOut, HistorialUpdate, InteresResumenBody, MensajeOut, ProspectClasificacionUpdate, ProspectEstadoUpdate, ProspectOut, ProspectsPage
+from app.schemas.prospect import AgendarContactoBody, AgendarSeguimientoBody, ChatLogBody, HistorialCreate, HistorialOut, HistorialUpdate, InteresResumenBody, MensajeOut, ProspectClasificacionUpdate, ProspectEstadoUpdate, ProspectOut, ProspectsPage
 from app.services import contact as contact_service
 from app.services import push
 
@@ -246,6 +247,39 @@ def agendar_contacto(
     ))
     db.commit()
     return {"ok": True, "prox_contacto": body.fecha.isoformat()}
+
+
+@router.post("/{prospect_id}/agendar-seguimiento")
+def agendar_seguimiento(
+    prospect_id: int,
+    body: AgendarSeguimientoBody,
+    x_webhook_token: str = Header(...),
+    db: Session = Depends(get_db),
+):
+    """El bot arranca la escalera de seguimiento para un INTERESADO que difiere a futuro
+    sin dar fecha ("voy a sacar los costos y te aviso"). Recontacta a +7d → +1mes →
+    +3meses retomando el contexto; se frena solo si el cliente vuelve a escribir. Distinto
+    de /agendar-contacto (ése es para una fecha exacta)."""
+    prospect = db.get(Prospect, prospect_id)
+    if not prospect:
+        raise HTTPException(status_code=404, detail="Prospect no encontrado")
+    _validar_webhook_tenant(db, prospect, x_webhook_token)
+
+    ahora = datetime.now(timezone.utc)
+    proxima = ahora + timedelta(days=contact_service.SEG_DIAS[0])
+    prospect.seguimiento_etapa = 0
+    prospect.seguimiento_proxima = proxima
+    prospect.seguimiento_contexto = (body.contexto or "").strip() or None
+    prospect.seguimiento_base = ahora
+    detalle = f"Seguimiento agendado (interesado que difiere) → 1er recontacto {proxima.date().isoformat()}"
+    if body.contexto:
+        detalle += f" — {body.contexto.strip()[:120]}"
+    db.add(ProspectHistorial(
+        prospect_id=prospect.id, tenant_id=prospect.tenant_id,
+        tipo="seguimiento_agendado", detalle=detalle,
+    ))
+    db.commit()
+    return {"ok": True, "seguimiento_proxima": proxima.isoformat()}
 
 
 @router.post("/{prospect_id}/interesado")
