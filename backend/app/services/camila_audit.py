@@ -33,6 +33,10 @@ _PRICES = {
     "opus":   (4.50e-6, 22.50e-6, 0.45e-6, 5.63e-6),   # opus 4.5 / 4.6 / 4.7 / 4.8
     "gpt":    (2.25e-6, 13.50e-6, 0.23e-6, 0.0),        # gpt-5.4 (sin cache write)
     "haiku":  (0.90e-6,  4.50e-6, 0.90e-6, 1.13e-6),   # ⚠️ cacheRead haiku NO descontado
+    # GLM 5.2 vía MyClaw: cache automático (cached input a $0, sin write)
+    "glm_myclaw":     (0.736e-6, 2.313e-6, 0.0, 0.0),
+    # GLM 5.2 vía OpenRouter (nombre "z-ai/glm-5.2"): el cacheRead SÍ se cobra
+    "glm_openrouter": (0.8176e-6, 2.5696e-6, 0.1518e-6, 0.0),
 }
 _PRICE_DEFAULT = _PRICES["sonnet"]
 
@@ -45,6 +49,8 @@ def _price_for(model_id: str):
         return _PRICES["haiku"]
     if "gpt" in m:
         return _PRICES["gpt"]
+    if "glm" in m:
+        return _PRICES["glm_openrouter"] if "z-ai/" in m else _PRICES["glm_myclaw"]
     return _PRICE_DEFAULT
 
 
@@ -495,6 +501,15 @@ def run_audit(source: str, fecha: str, notify: bool = True,
         row.generated_at = datetime.now(timezone.utc)
         if gestionar_oportunidades:
             detectadas = _cap_severidad_por_monto(_detectar(resumen), t["costo_usd"])
+            # Alerta de Precios: $/conv real del mes vs lo cotizado en la pantalla
+            # Precios (pedido Sebi 22/7). Va como oportunidad → push si es nueva.
+            try:
+                from app.services import pricing as _pricing
+                op_desvio = _pricing.check_desvio(source)
+                if op_desvio:
+                    detectadas.append(op_desvio)
+            except Exception as e:
+                print(f"[CAMILA-AUDIT] check_desvio: {type(e).__name__}: {e}")
             nuevas = _upsert_oportunidades(source, detectadas)
             _auto_resolver_inactivas(source, detectadas)
         row.oportunidades = len(get_oportunidades(source))

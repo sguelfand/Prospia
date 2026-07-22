@@ -1044,3 +1044,131 @@ export const vozChat = (token: string, texto: string, reset = false) =>
     { method: "POST", body: JSON.stringify({ texto, reset }) },
     token,
   );
+
+// ── Precios: pricing por cliente (qué cobra, qué le cuesta, margen) ──────────
+
+export type PrecioCostoOrigen = "medido" | "simulado" | "manual" | "estimado_etiguel";
+
+export interface PrecioPricing {
+  abono_mensual_usd: number | null;
+  conversaciones_dia: number | null;
+  costo_conv_usd: number | null;
+  costo_conv_origen: PrecioCostoOrigen;
+  motor_primario: string | null;
+  motor_fallback: string | null;
+  notas: string | null;
+}
+
+// $/conv medido del mes (real, sale del auditor de tokens).
+export interface PrecioMedido {
+  valor: number;
+  mes: string;
+  conversaciones: number;
+  costo_mes: number;
+}
+
+export interface PrecioMotor {
+  id: string;
+  nombre: string;
+  provider: string;
+  model_id: string;
+  es_actual: boolean;
+  // Precios en USD por token → multiplicar ×1e6 para mostrar $/M.
+  precio_in: number;
+  precio_out: number;
+  precio_cache_read: number;
+  precio_cache_write: number;
+}
+
+export interface PrecioServicio {
+  id: number | string;
+  nombre: string;
+  tipo: string;
+  source?: string | null;
+  costo_mensual_usd: number | null;
+  detalle?: string | null;
+  es_plantilla?: boolean;
+}
+
+export interface PrecioCostos {
+  tokens_bot_mes: number;
+  anthropic_mes: number;
+  variables: PrecioServicio[];
+  fijos_cliente: PrecioServicio[];
+  fijos_cliente_total: number;
+  total: number;
+}
+
+export interface PrecioMargen {
+  abono: number;
+  costo_total: number;
+  ganancia: number;
+  pct: number;
+}
+
+export interface PrecioEstructura {
+  servicios: PrecioServicio[];
+  total: number;
+  n_clientes: number;
+  prorrateo_por_cliente: number;
+}
+
+export interface PreciosResumen {
+  pricing: PrecioPricing;
+  medido: PrecioMedido | null;
+  motores_registrados: PrecioMotor[];
+  costos: PrecioCostos;
+  margen: PrecioMargen | null;
+  estructura: PrecioEstructura;
+  datos_faltantes: string[];
+  desvio_alerta_pct: number;
+}
+
+// Campos editables del pricing del cliente (PUT parcial).
+export interface PreciosClientePatch {
+  abono_mensual_usd?: number | null;
+  conversaciones_dia?: number | null;
+  costo_conv_usd?: number | null;
+  motor_primario?: string | null;
+  motor_fallback?: string | null;
+  notas?: string | null;
+}
+
+export interface PreciosGeneralCliente {
+  source: string;
+  nombre: string;
+  abono: number | null;
+  costo_total: number;
+  margen: number | null;
+  faltantes: number;
+}
+
+export interface PreciosGeneral {
+  clientes: PreciosGeneralCliente[];
+  estructura: PrecioEstructura;
+}
+
+export const getPreciosResumen = (token: string, source: string) =>
+  request<PreciosResumen>(`/admin/precios/resumen?source=${encodeURIComponent(source)}`, {}, token);
+
+export const putPreciosCliente = (token: string, source: string, campos: PreciosClientePatch) =>
+  request<{ ok?: boolean }>(
+    `/admin/precios/cliente/${encodeURIComponent(source)}`,
+    { method: "PUT", body: JSON.stringify(campos) },
+    token,
+  );
+
+// Override del costo mensual de un servicio para ESTE cliente.
+export const postPreciosServicioCliente = (
+  token: string,
+  source: string,
+  body: { nombre: string; costo_mensual_usd: number; tipo: string; detalle?: string },
+) =>
+  request<{ ok?: boolean }>(
+    `/admin/precios/cliente/${encodeURIComponent(source)}/servicio`,
+    { method: "POST", body: JSON.stringify(body) },
+    token,
+  );
+
+export const getPreciosGeneral = (token: string) =>
+  request<PreciosGeneral>("/admin/precios/general", {}, token);

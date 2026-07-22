@@ -191,6 +191,35 @@ observable. Sirve como registro de Pendientes/Realizados de la pantalla
   muestran Comparar y —si la corrida está juzgada— "Ver veredicto").
   ⚠️ El test NO corre comparaciones reales ni toca el switch (respeta el gate global).
 
+## 17. Precios (N1)
+- Ítem "Precios" en el menú lateral (nivel superior, solo N1) → ruta `/precios`
+  (acepta deep-link `?source=<cliente>`).
+- Selector cliente / General + definir por defecto (igual que Tokens).
+- **Parámetros comerciales**: abono mensual (USD), conversaciones diarias
+  estimadas y $/conversación cotizado — editables, guardan al salir del campo.
+  Chip de ORIGEN del costo (medido verde / simulado azul / manual gris /
+  estimación Etiguel ámbar). Si es estimación: leyenda ámbar + botón **"Simular
+  costo real"** (POST crea corrida estimada del Test LLM sin gastar tokens y
+  navega a Testing → Motores LLM). Muestra además el $/conv MEDIDO real del
+  monitor (valor, mes, n conv.) y la nota del desvío ±X% que dispara alerta.
+- **Motores LLM**: primario/fallback editables (datalist de motores registrados)
+  + tabla de precios por 1M tokens con chip "actual".
+- **Costos mensuales del cliente**: Tokens del bot (calculado: conv/día × 30,4 ×
+  $/conv), Tokens internos Anthropic (real del mes), y cada servicio
+  variable/fijo con costo editable (override por cliente; costo null = input con
+  placeholder "falta cargar"). Total en negrita.
+- **Margen de ganancia**: Abono − Costos = Ganancia + % margen con barra SVG
+  (verde ganancia / rojo pérdida). Sin abono → aviso "Cargá el abono…".
+- **Datos faltantes para cotizar bien**: lista ámbar; vacía → "✓ No falta ningún dato".
+- **Costo de estructura (compartido)**: servicios de plantilla editables, total y
+  prorrateo informativo por cliente (NO entra al margen por cliente).
+- **Vista General**: tabla comparativa (abono, costo, ganancia, % margen,
+  faltantes) + widget estructura.
+- Widgets movibles (DashboardGrid, igual que Tokens).
+- Tests — ✅ `precios.spec.ts`: carga + widgets + chip de origen; edición del
+  abono persistente tras reload (aislada en `?source=qa-test`); leyenda/botón de
+  estimación Etiguel. ⚠️ No corre simulaciones ni toca el pricing de etiguel.
+
 ---
 
 ## Notas para el runner

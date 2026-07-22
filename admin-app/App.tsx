@@ -40,6 +40,7 @@ import SesionesScreen from "./src/screens/SesionesScreen";
 import TokensScreen from "./src/screens/TokensScreen";
 import CalidadScreen from "./src/screens/CalidadScreen";
 import SaldosScreen from "./src/screens/SaldosScreen";
+import PreciosScreen from "./src/screens/PreciosScreen";
 import { colors } from "./src/theme";
 
 const Drawer = createDrawerNavigator<DrawerParamList>();
@@ -98,6 +99,7 @@ function AppDrawer() {
       <Drawer.Screen name="Tokens" component={TokensScreen} options={{ title: "Tokens" }} />
       <Drawer.Screen name="Calidad" component={CalidadScreen} options={{ title: "Calidad" }} />
       <Drawer.Screen name="Saldos" component={SaldosScreen} options={{ title: "Saldos" }} />
+      <Drawer.Screen name="Precios" component={PreciosScreen} options={{ title: "Precios" }} />
       <Drawer.Screen name="ClienteNotificaciones" component={ClienteNotificacionesScreen} options={{ title: "" }} />
     </Drawer.Navigator>
   );
