@@ -216,11 +216,32 @@ class Tmux:
             self._run("send-keys", "-t", nombre, "Enter")
             time.sleep(1.0)
 
+    def cerrar(self, nombre: str) -> None:
+        """Cierra la sesión tmux prolijo: /exit al TUI (Claude corre sus hooks
+        de SessionEnd y el proceso muere solo, con lo que la sesión tmux
+        también). Si en unos segundos sigue viva, kill-session de respaldo.
+        La conversación queda en el transcript: se retoma desde el Historial
+        del panel (relojito) sin perder nada."""
+        try:
+            self.escribir(nombre, "/exit")
+        except Exception:
+            pass  # TUI colgado o sin input: cae al kill de respaldo
+        fin = time.time() + 8
+        while time.time() < fin:
+            if not self.viva(nombre):
+                return
+            time.sleep(0.5)
+        self._run("kill-session", "-t", f"={nombre}")
+
     def mensaje(self, sesion_id: str, texto: str) -> None:
         nombre = self.interactiva(sesion_id)
         if not nombre:
             raise RuntimeError("Esa sesión no es interactiva desde el cel. "
                                "Usá 'Continuar desde el cel' primero.")
+        if texto.strip() == "/exit":
+            # Botón "Cerrar tmux" de la app: cerrar sin reabrir ventana.
+            self.cerrar(nombre)
+            return
         mr = re.match(r"^/respuestas\s+(.+)$", texto.strip(), re.S)
         m = re.match(r"^/key\s+(.+)$", texto.strip())
         if mr:

@@ -408,6 +408,36 @@ function ChatModal({
             ? "No llegaron las opciones de esta pregunta: respondela en la Mac (o por el chat con /key 1, /key 2…)."
             : undefined;
 
+  // Botón "Cerrar tmux" (solo sesiones interactivas): manda /exit al TUI.
+  // La conversación queda en el transcript y se retoma desde el Historial
+  // del panel (relojito) con todo el contexto.
+  const cerrarTmux = () => {
+    Alert.alert(
+      "Cerrar tmux",
+      (detalle?.estado === "procesando"
+        ? "⚠ La sesión está procesando: si la cerrás ahora se corta el turno en curso.\n\n"
+        : "") +
+        "Se manda /exit y la sesión se cierra en la Mac (desaparece de esta lista). " +
+        "La conversación queda guardada: la retomás en el panel desde el Historial (relojito).",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Cerrar tmux",
+          style: "destructive",
+          onPress: async () => {
+            if (!token) return;
+            try {
+              await enviarMensajeSesion(token, sesionId, "/exit");
+              onClose();
+            } catch (e) {
+              Alert.alert("No se pudo cerrar", e instanceof Error ? e.message : "Error");
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const mensajes = detalle ? [...detalle.mensajes].reverse() : [];
   const est = detalle ? ESTADOS[detalle.estado] || ESTADOS.idle : null;
 
@@ -434,6 +464,15 @@ function ChatModal({
           </View>
           {detalle?.estado === "procesando" ? (
             <ActivityIndicator size="small" color={colors.blue} />
+          ) : null}
+          {detalle?.interactivo && detalle.mac_online ? (
+            <TouchableOpacity
+              onPress={cerrarTmux}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={{ marginLeft: 12 }}
+            >
+              <Icon name="terminal" size={20} color={colors.red} />
+            </TouchableOpacity>
           ) : null}
         </View>
 
