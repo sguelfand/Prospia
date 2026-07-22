@@ -28,6 +28,12 @@ MIN_CONV_ALERTA = 15  # conversaciones mínimas del mes para que el promedio sea
 # cache automático 76% de hit, cached input a $0 — memoria project_prospia_costos).
 COSTO_CONV_ETIGUEL_USD = 0.052
 
+# Fallback de modelo UNIVERSAL para todo cliente: cuando el primario (MyClaw/
+# OpenRouter) se cae, el guardián del bot cae a Anthropic directo con la MISMA key
+# de Sebi (cuenta única para todos — baseline implementador punto 22). Por eso el
+# fallback es conocido de antemano en cualquier cliente.
+MOTOR_FALLBACK_DEFAULT = "anthropic/claude-sonnet-4-6"
+
 
 def _db():
     from app.database import SessionLocal
@@ -77,7 +83,7 @@ def seed() -> None:
                 costo_conv_usd=COSTO_CONV_ETIGUEL_USD,
                 costo_conv_origen="medido",
                 motor_primario="myclaw/GLM 5.2",
-                motor_fallback=None,  # confirmar contra la config viva → dato faltante
+                motor_fallback=MOTOR_FALLBACK_DEFAULT,
                 notas="Costo/conv = GLM 5.2 por MyClaw con cache automático (medición 22/7)."))
         for nombre, tipo, costo, detalle in _SEED_SERVICIOS:
             if not (db.query(ServicioCosto)
@@ -180,9 +186,11 @@ def get_resumen(source: str) -> dict:
     try:
         p = db.query(ClientePricing).filter(ClientePricing.source == source).first()
         if not p:
-            # cliente nuevo: arranca con la estimación de Etiguel + leyenda
+            # cliente nuevo: arranca con la estimación de Etiguel + leyenda y el
+            # fallback universal ya cargado (mismo para todos, ver punto 22 baseline)
             p = ClientePricing(source=source, costo_conv_usd=COSTO_CONV_ETIGUEL_USD,
-                               costo_conv_origen="estimado_etiguel")
+                               costo_conv_origen="estimado_etiguel",
+                               motor_fallback=MOTOR_FALLBACK_DEFAULT)
             db.add(p); db.commit(); db.refresh(p)
         pricing = _pricing_dict(p)
         medido = costo_conv_medido(source)
