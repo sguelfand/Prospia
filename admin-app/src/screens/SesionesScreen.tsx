@@ -267,6 +267,8 @@ function ChatModal({
   // estética/mecanismo que la pantalla Preguntas de Claude: reusa DetalleModal).
   const [pregunta, setPregunta] = useState<PreguntaClaude | null>(null);
   const descartadaRef = useRef<number | null>(null); // si la cerró, no re-abrir sola
+  const esNativaRef = useRef(false); // pregunta sin pendiente en el backend (cajita nativa)
+  const supresionRef = useRef(0);    // tras responder, no re-abrir el popup unos seg
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -276,17 +278,46 @@ function ChatModal({
       setError(null);
       if (d.estado === "pregunta") {
         try {
-          const pendientes = (await getPreguntasClaude(token)).filter((q) => q.estado === "pendiente");
-          const texto = ((d as any).pregunta_texto || "").trim();
+          const pendQ = (await getPreguntasClaude(token)).filter((q) => q.estado === "pendiente");
+          const texto = (d.pregunta_texto || "").trim();
           const match =
-            pendientes.find((q) => (q.preguntas?.[0]?.pregunta || q.pregunta || "").trim() === texto) ||
-            pendientes[0] ||
+            pendQ.find((q) => (q.preguntas?.[0]?.pregunta || q.pregunta || "").trim() === texto) ||
+            pendQ[0] ||
             null;
-          setPregunta(match && descartadaRef.current !== match.id ? match : null);
+          esNativaRef.current = !match;
+          // Sin pendiente en el backend = pregunta NATIVA (cajita de la Mac,
+          // switch "Preguntas al cel" apagado): popup con la tanda que manda
+          // el bridge en pregunta_items. Antes esto dejaba el banner apuntando
+          // a la pantalla de Preguntas vacía.
+          let elegida: PreguntaClaude | null = match;
+          if (!match) {
+            const items = d.pregunta_items?.length
+              ? d.pregunta_items
+              : texto
+                ? [{ pregunta: texto, opciones: [], header: null, multiselect: false }]
+                : [];
+            elegida = items.length
+              ? {
+                  id: -1,
+                  preguntas: items,
+                  respuestas: null,
+                  contexto: null,
+                  estado: "pendiente",
+                  fecha: "",
+                  fecha_respuesta: null,
+                  header: items[0].header,
+                  pregunta: items[0].pregunta,
+                  elegida: null,
+                }
+              : null;
+          }
+          const suprimida = Date.now() < supresionRef.current;
+          setPregunta(elegida && !suprimida && descartadaRef.current !== elegida.id ? elegida : null);
         } catch {}
       } else {
         setPregunta(null);
         descartadaRef.current = null;
+        supresionRef.current = 0;
       }
       // Sacar de la cola los que ya cayeron en el transcript (Claude los levantó).
       setPendientes((ps) =>
@@ -351,6 +382,32 @@ function ChatModal({
     );
   };
 
+  // Pregunta NATIVA: la respuesta viaja como teclas al TUI en tmux — el número
+  // de la opción (o el de "Other" + texto libre), una pregunta por vez.
+  const responderNativa = async (respuestas: string[]) => {
+    if (!token) throw new Error("Sin sesión.");
+    const items = pregunta?.id === -1 ? pregunta.preguntas : [];
+    const entradas = respuestas.map((r, i) => {
+      const ops = items[i]?.opciones || [];
+      const idx = ops.findIndex((o) => o.label === r);
+      return idx >= 0 ? { n: idx + 1 } : { n: ops.length + 1, texto: r };
+    });
+    await enviarMensajeSesion(token, sesionId, "/respuestas " + JSON.stringify(entradas));
+  };
+
+  // Casos donde la nativa NO se puede contestar desde el cel → popup informativo.
+  const nativaBloqueada =
+    pregunta?.id !== -1
+      ? undefined
+      : detalle && !detalle.interactivo
+        ? "Esta sesión no es interactiva desde el cel: respondé la pregunta en la Mac. " +
+          "Tip: con el switch \"Preguntas al cel\" prendido, las preguntas te llegan al celular."
+        : pregunta.preguntas.some((q) => q.multiselect)
+          ? "Esta pregunta permite elegir varias opciones: respondela en la Mac."
+          : !pregunta.preguntas.some((q) => q.opciones?.length)
+            ? "No llegaron las opciones de esta pregunta: respondela en la Mac (o por el chat con /key 1, /key 2…)."
+            : undefined;
+
   const mensajes = detalle ? [...detalle.mensajes].reverse() : [];
   const est = detalle ? ESTADOS[detalle.estado] || ESTADOS.idle : null;
 
@@ -387,7 +444,11 @@ function ChatModal({
             style={styles.preguntaBanner}
             onPress={() => {
               descartadaRef.current = null;
-              onIrAPregunta();
+              supresionRef.current = 0;
+              // Nativa: reabrir el popup acá mismo (en la pantalla Preguntas
+              // no existe). Con pendiente del backend: ir a esa pantalla.
+              if (esNativaRef.current) load();
+              else onIrAPregunta();
             }}
           >
             <Icon name="flag" size={16} color={colors.onPrimary} />
@@ -468,11 +529,16 @@ function ChatModal({
         <DetalleModal
           pregunta={pregunta}
           token={token}
+          responder={pregunta?.id === -1 ? responderNativa : undefined}
+          soloLectura={pregunta?.id === -1 ? nativaBloqueada : undefined}
           onClose={() => {
             if (pregunta) descartadaRef.current = pregunta.id;
             setPregunta(null);
           }}
           onResuelta={() => {
+            // La respuesta tarda unos seg en caer al transcript (estado sigue
+            // "pregunta"): no re-abrir el popup mientras tanto.
+            supresionRef.current = Date.now() + 10000;
             setPregunta(null);
             load();
           }}

@@ -196,13 +196,41 @@ class Tmux:
         """Teclas crudas ("1", "Enter", "Escape", "Down") p/ prompts nativos."""
         self._run("send-keys", "-t", nombre, *teclas.split())
 
+    def responder_pregunta(self, nombre: str, entradas: list) -> None:
+        """Contesta el prompt nativo de AskUserQuestion en el TUI. Por cada
+        pregunta de la tanda: el número de la opción elegida, o el número de
+        "Other" seguido del texto libre. El dígito puede seleccionar y enviar
+        solo; el Enter extra cae en el input vacío del chat y es inocuo."""
+        for e in entradas:
+            if not isinstance(e, dict):
+                continue
+            n = str(e.get("n") or "").strip()
+            if not n.isdigit():
+                continue
+            self._run("send-keys", "-t", nombre, n)
+            time.sleep(0.5)
+            libre = str(e.get("texto") or "").strip()
+            if libre:
+                self._run("send-keys", "-t", nombre, "-l", libre)
+                time.sleep(0.3)
+            self._run("send-keys", "-t", nombre, "Enter")
+            time.sleep(1.0)
+
     def mensaje(self, sesion_id: str, texto: str) -> None:
         nombre = self.interactiva(sesion_id)
         if not nombre:
             raise RuntimeError("Esa sesión no es interactiva desde el cel. "
                                "Usá 'Continuar desde el cel' primero.")
+        mr = re.match(r"^/respuestas\s+(.+)$", texto.strip(), re.S)
         m = re.match(r"^/key\s+(.+)$", texto.strip())
-        if m:
+        if mr:
+            try:
+                entradas = json.loads(mr.group(1))
+                assert isinstance(entradas, list)
+            except Exception:
+                raise RuntimeError("Formato de /respuestas inválido")
+            self.responder_pregunta(nombre, entradas)
+        elif m:
             self.teclas(nombre, m.group(1))
         else:
             self.escribir(nombre, texto)
@@ -366,6 +394,7 @@ class Sesion:
         self.ultimo_aviso_espera = 0.0
         self.pregunta_mcp_abierta = False
         self.pregunta_texto = ""
+        self.pregunta_items = []   # [{pregunta, header, multiselect, opciones:[{label,description}]}]
         self.oculta = False
         self.entrypoint = ""
 
@@ -395,6 +424,7 @@ class Sesion:
             "seq": self.seq,
             "preview": (prev[:160] + "…") if len(prev) > 160 else prev,
             "pregunta_texto": self.pregunta_texto if self.estado == "pregunta" else "",
+            "pregunta_items": self.pregunta_items if self.estado == "pregunta" else [],
             "oculta": self.oculta,
         }
 
@@ -511,6 +541,7 @@ class Tracker:
             if s.pregunta_mcp_abierta or s.estado == "pregunta":
                 s.pregunta_mcp_abierta = False
                 s.pregunta_texto = ""
+                s.pregunta_items = []
                 s.estado = "procesando"
                 s.turno_inicio = s.turno_inicio or time.time()
             msg = obj.get("message") or {}
@@ -553,6 +584,29 @@ class Tracker:
                         s.pregunta_texto = str(primera.get("pregunta")
                                                or primera.get("question")
                                                or inp.get("pregunta") or "")[:300]
+                        # Tanda completa con opciones: la app la muestra como
+                        # popup respondible aunque no exista pendiente en el
+                        # backend (pregunta NATIVA, switch del cel apagado).
+                        items = []
+                        for q in (qs if isinstance(qs, list) and qs else [inp]):
+                            if not isinstance(q, dict):
+                                continue
+                            ops = q.get("opciones") or q.get("options") or []
+                            items.append({
+                                "pregunta": str(q.get("pregunta")
+                                                or q.get("question") or "")[:300],
+                                "header": str(q.get("header") or "")[:40] or None,
+                                "multiselect": bool(q.get("multiselect")
+                                                    or q.get("multiSelect")),
+                                "opciones": [
+                                    {"label": str(o.get("label"))[:120],
+                                     "description": str(o.get("description")
+                                                        or "")[:300]}
+                                    for o in ops
+                                    if isinstance(o, dict) and o.get("label")
+                                ][:6],
+                            })
+                        s.pregunta_items = [i for i in items if i["pregunta"]][:4]
 
     def _leer_incremental(self, s: Sesion, path: Path):
         try:

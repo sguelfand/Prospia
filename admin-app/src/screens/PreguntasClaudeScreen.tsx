@@ -176,11 +176,17 @@ function Tab({ label, active, onPress }: { label: string; active: boolean; onPre
   );
 }
 
-export function DetalleModal({ pregunta, token, onClose, onResuelta }: {
+export function DetalleModal({ pregunta, token, onClose, onResuelta, responder, soloLectura }: {
   pregunta: PreguntaClaude | null;
   token: string | null;
   onClose: () => void;
   onResuelta: (p: PreguntaClaude) => void;
+  // Envío custom (pregunta NATIVA de una sesión: la respuesta va por tmux,
+  // no por el backend de preguntas). Si no se pasa, flujo normal.
+  responder?: (respuestas: string[]) => Promise<void>;
+  // Si viene, la pregunta se muestra pero NO se puede responder desde acá
+  // (sesión no interactiva, multiselect nativo, etc.): nota con el motivo.
+  soloLectura?: string;
 }) {
   const qs: PreguntaItem[] = pregunta?.preguntas?.length
     ? pregunta.preguntas
@@ -240,13 +246,18 @@ export function DetalleModal({ pregunta, token, onClose, onResuelta }: {
   };
 
   const enviar = async (override?: string[]) => {
-    if (!token || enviando) return;
+    if (!token || enviando || soloLectura) return;
     const respuestas = override ?? qs.map((_, i) => respuestaDe(i));
     if (respuestas.some((r) => !r)) { setErr("Respondé todas las preguntas."); return; }
     setEnviando(true);
     setErr(null);
     try {
-      const actualizada = await responderPreguntaClaude(token, pregunta.id, respuestas);
+      let actualizada = pregunta;
+      if (responder) {
+        await responder(respuestas);
+      } else {
+        actualizada = await responderPreguntaClaude(token, pregunta.id, respuestas);
+      }
       // Cartel de "respuesta enviada" antes de cerrar (que se note que se registró).
       setEnviando(false);
       setExito(respuestas.join(", "));
@@ -299,9 +310,9 @@ export function DetalleModal({ pregunta, token, onClose, onResuelta }: {
                       return (
                         <TouchableOpacity
                           key={`${o.label}-${k}`}
-                          style={[styles.opt, on && styles.optSel]}
+                          style={[styles.opt, on && styles.optSel, soloLectura ? { opacity: 0.55 } : null]}
                           onPress={() => toggle(i, o.label)}
-                          disabled={enviando}
+                          disabled={enviando || !!soloLectura}
                           activeOpacity={0.8}
                         >
                           <Text style={styles.optK}>{k + 1}</Text>
@@ -314,24 +325,27 @@ export function DetalleModal({ pregunta, token, onClose, onResuelta }: {
                       );
                     })}
 
-                    <TextInput
-                      style={styles.input}
-                      value={otra[i] ?? ""}
-                      onChangeText={(v) => setOtraI(i, v)}
-                      placeholder={q.opciones.length ? "Otra opción (texto libre)…" : "Escribí tu respuesta…"}
-                      placeholderTextColor={colors.textDim}
-                      multiline
-                    />
+                    {soloLectura ? null : (
+                      <TextInput
+                        style={styles.input}
+                        value={otra[i] ?? ""}
+                        onChangeText={(v) => setOtraI(i, v)}
+                        placeholder={q.opciones.length ? "Otra opción (texto libre)…" : "Escribí tu respuesta…"}
+                        placeholderTextColor={colors.textDim}
+                        multiline
+                      />
+                    )}
                   </Animated.View>
                 ))}
               </ScrollView>
 
+              {soloLectura ? <Text style={styles.soloLectura}>{soloLectura}</Text> : null}
               {err ? <Text style={styles.errText}>{err}</Text> : null}
               <View style={styles.modalActions}>
                 <TouchableOpacity style={styles.modalBtnGhost} onPress={onClose}>
                   <Text style={styles.modalBtnGhostText}>Cerrar</Text>
                 </TouchableOpacity>
-                {!unaSingle || todasRespondidas ? (
+                {!soloLectura && (!unaSingle || todasRespondidas) ? (
                   <TouchableOpacity
                     style={[styles.modalBtnPrimary, (enviando || !todasRespondidas) && styles.btnOff]}
                     onPress={() => enviar()}
@@ -438,6 +452,7 @@ const styles = StyleSheet.create({
   label: { color: colors.textDim, fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5, marginTop: 8, marginBottom: 6 },
   input: { backgroundColor: colors.cardAlt, borderRadius: 10, padding: 12, color: colors.text, fontSize: 15, minHeight: 48, textAlignVertical: "top", borderWidth: 1, borderColor: colors.border },
   errText: { color: colors.red, fontSize: 13, marginTop: 10 },
+  soloLectura: { color: colors.amber, fontSize: 13, marginTop: 10, lineHeight: 18 },
   modalActions: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8, marginTop: 16 },
   modalBtnGhost: { paddingVertical: 11, paddingHorizontal: 16, borderRadius: 10, borderWidth: 1, borderColor: colors.border, alignItems: "center" },
   modalBtnGhostText: { color: colors.text, fontSize: 14, fontWeight: "700" },
