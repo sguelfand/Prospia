@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, BarChart2, ChevronDown, ChevronLeft, ChevronRight, Coins, Cpu, Eye, FlaskConical, ListTodo, LogOut, Menu, MessageCircleQuestion, MessageSquareWarning, Search, Server, Settings, ShieldCheck, Users, Wallet, X } from 'lucide-react'
+import { Activity, AlertTriangle, BadgeDollarSign, BarChart2, ChevronDown, ChevronLeft, ChevronRight, Coins, Cpu, Eye, FlaskConical, ListTodo, LogOut, Menu, MessageCircleQuestion, MessageSquareWarning, Search, Server, Settings, ShieldCheck, Users, Wallet, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
@@ -276,6 +276,16 @@ export default function Layout() {
                 Admin clientes
               </Link>
             )}
+            {nivel === 1 && (
+              <Link
+                to="/precios"
+                onClick={() => setMobileOpen(false)}
+                className={navClass(location.pathname.startsWith('/precios'))}
+              >
+                <BadgeDollarSign size={16} />
+                Precios
+              </Link>
+            )}
             {nivel === 1 && renderTesting(false, () => setMobileOpen(false))}
             {nivel === 1 && renderMonitoreo(false, () => setMobileOpen(false))}
             <Link
@@ -383,6 +393,16 @@ export default function Layout() {
           >
             <ShieldCheck size={16} />
             {!collapsed && 'Admin clientes'}
+          </Link>
+        )}
+        {nivel === 1 && (
+          <Link
+            to="/precios"
+            title={collapsed ? 'Precios' : undefined}
+            className={navClass(location.pathname.startsWith('/precios'), collapsed)}
+          >
+            <BadgeDollarSign size={16} />
+            {!collapsed && 'Precios'}
           </Link>
         )}
         {nivel === 1 && renderTesting(collapsed)}

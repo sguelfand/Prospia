@@ -11,6 +11,7 @@ import Pendientes from './pages/Pendientes'
 import Errores from './pages/Errores'
 import Preguntas from './pages/Preguntas'
 import MonitoreoPage from './pages/MonitoreoPage'
+import Precios from './pages/Precios'
 import Tokens from './pages/Tokens'
 import Calidad from './pages/Calidad'
 import Saldos from './pages/Saldos'
@@ -40,6 +41,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="pendientes" element={<Pendientes />} />
           <Route path="errores" element={<Errores />} />
           <Route path="preguntas" element={<Preguntas />} />
+          <Route path="precios" element={<Precios />} />
           <Route path="monitoreo" element={<Navigate to="/monitoreo/servicios" replace />} />
           <Route path="monitoreo/servicios" element={<MonitoreoPage />} />
           <Route path="monitoreo/tokens" element={<Tokens />} />
