@@ -423,8 +423,12 @@ def reactivar_abandonadas():
                     db, p.id, p.tenant_id, "reactivacion",
                     f"Reactivación {intentos + 1}/{REACT_MAX_INTENTOS}: {dias}d sin respuesta del "
                     f"cliente (conversación que se colgó). Re-preguntando si vio el mensaje.")
-                envios.append((wa, mensaje, gateway_url, gateway_token, session_key,
-                               f"reactivación prospect {p.id} ({intentos + 1}/{REACT_MAX_INTENTOS})"))
+                envios.append({
+                    "prospect_id": p.id, "tenant_id": p.tenant_id, "nombre": p.nombre,
+                    "wa": wa, "mensaje": mensaje, "gateway_url": gateway_url,
+                    "gateway_token": gateway_token, "session_key": session_key,
+                    "etiqueta": f"reactivación prospect {p.id} ({intentos + 1}/{REACT_MAX_INTENTOS})",
+                })
             elif accion == "cerrar":
                 p.estado = "cancelado"
                 _registrar_historial(
@@ -445,9 +449,11 @@ def reactivar_abandonadas():
     finally:
         db.close()
 
-    # Envíos en threads daemon (fuera de la transacción), por la vía del recontacto.
-    for (wa, mensaje, gw_url, gw_token, sess, etiqueta) in envios:
-        _reintentar_envio_async(wa, mensaje, gw_url, gw_token, sess, etiqueta, recontacto=True)
+    # Envíos en threads daemon (fuera de la transacción). Sender DEDICADO: si el
+    # gateway falla, revierte el intento (Bug A — no quemar la cuota por una caída
+    # del canal) y avisa CLARO (el cliente NO recibió el recontacto).
+    for e in envios:
+        _enviar_reactivacion_async(e)
 
     # Avisos de cierre a Sebi (superadmin/global), best-effort.
     for a in avisos:
@@ -616,6 +622,60 @@ def seguir_interesados():
 # real (chat-log). Si no llega en este tiempo, avisamos (default 5 min, holgado
 # para no falsear por demoras del agente). Paridad con el webhook de Etiguel.
 WA_CONFIRM_WINDOW_S = int(os.environ.get("WA_CONFIRM_WINDOW_S", "300"))
+
+
+def _enviar_reactivacion_async(e: dict):
+    """Envía una reactivación en thread daemon. Si el gateway falla tras los reintentos
+    de red (canal caído), NO quema el intento: revierte `reactivacion_intentos` (Bug A)
+    y avisa CLARO a Sebi (el cliente NO recibió el recontacto). Espejo del hardening de
+    Etiguel. `e` = dict con prospect_id/tenant_id/nombre/wa/mensaje/gateway_*/session_key."""
+    def _run():
+        ok, info = False, ""
+        try:
+            ok, info = _send_whatsapp_con_retry(
+                e["wa"], e["mensaje"], e["gateway_url"], e["gateway_token"],
+                e["session_key"], recontacto=True)
+            print(f"[REACTIVACION] envío {e['etiqueta']} → ok={ok} {info}")
+        except Exception as ex:
+            info = f"{type(ex).__name__}: {ex}"
+            print(f"[REACTIVACION] envío {e['etiqueta']} ERROR: {info}")
+        if ok:
+            return
+        # Falló el envío (gateway/canal). Rollback del intento + alerta clara.
+        from app.database import SessionLocal
+        from app.models.prospect import Prospect
+        from app.models.tenant import Tenant
+        from app.services import push
+        db = SessionLocal()
+        try:
+            p = db.get(Prospect, e["prospect_id"])
+            if p and (p.reactivacion_intentos or 0) > 0:
+                p.reactivacion_intentos = (p.reactivacion_intentos or 0) - 1
+                if p.reactivacion_intentos == 0:
+                    p.reactivacion_base = None   # vuelve a intento 0 → se re-dispara
+                _registrar_historial(
+                    db, p.id, p.tenant_id, "reactivacion_fallida",
+                    f"El recontacto de reactivación NO se pudo entregar ({info}). No se "
+                    f"consumió el intento; se reintenta en la próxima pasada.")
+                tenant = db.get(Tenant, p.tenant_id)
+                db.commit()
+                try:
+                    push.notificar_global_async(
+                        "reactivacion_no_entregada",
+                        "⚠️ Recontacto no entregado",
+                        f"[{tenant.nombre if tenant else p.tenant_id}] No le llegó el recontacto a "
+                        f"{p.nombre or e['wa']} (falló el canal). El intento NO se consumió, se "
+                        f"reintenta solo. Si sigue, revisá el gateway del cliente.",
+                        {"nav": "prospect_detalle", "prospect_id": p.id},
+                    )
+                except Exception as ex:
+                    print(f"[REACTIVACION] no se pudo avisar fallo prospect {p.id}: {ex}")
+        except Exception as ex:
+            db.rollback()
+            print(f"[REACTIVACION] rollback/alerta falló prospect {e['prospect_id']}: {ex}")
+        finally:
+            db.close()
+    threading.Thread(target=_run, daemon=True).start()
 
 
 def _reintentar_envio_async(wa, mensaje, gateway_url, gateway_token, session_key, etiqueta, recontacto=False, prefijo=None):
