@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { useAuth } from "../auth";
@@ -15,11 +15,10 @@ export default function LockScreen() {
     if (!ok) setError(true);
   };
 
-  // Dispara el prompt biométrico apenas se muestra la pantalla.
-  useEffect(() => {
-    intentar();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // NO auto-disparar la huella al montar: si el módulo biométrico crashea
+  // (crash nativo, no atrapable en JS), auto-dispararlo al abrir deja la app
+  // en un loop de crasheo que impide hasta aplicar un OTA. Ahora la huella se
+  // dispara SOLO al tocar el botón; "Usar contraseña" siempre queda disponible.
 
   return (
     <View style={styles.container}>
