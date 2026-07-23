@@ -17,6 +17,7 @@ import { AuthProvider, useAuth } from "./src/auth";
 import DrawerContent from "./src/components/DrawerContent";
 import { ProspiaMark } from "./src/components/Logo";
 import { Loader } from "./src/components/ui";
+import UpdateBanner from "./src/components/UpdateBanner";
 import { AuthStackParamList, DrawerParamList } from "./src/navigation";
 import { getCachedExpoToken, getExpoTokenAsync, registerForPush } from "./src/push";
 import AvisosScreen from "./src/screens/AvisosScreen";
@@ -248,7 +249,12 @@ function Routes() {
     );
   }
 
-  return <AppDrawer />;
+  return (
+    <View style={{ flex: 1 }}>
+      <AppDrawer />
+      <UpdateBanner />
+    </View>
+  );
 }
 
 export default function App() {
