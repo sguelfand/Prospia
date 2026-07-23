@@ -16,6 +16,7 @@ from app.models.camila_fix import CamilaFix
 from app.models.intake_submission import IntakeSubmission
 from app.models.pregunta_claude import PreguntaClaude
 from app.models.camila_revision import CamilaRevision, CamilaConsolidacion, CamilaPromptAudit
+from app.models.camila_triage import CamilaTriage
 from app.models.anthropic_usage import AnthropicUsage
 from app.models.dashboard_layout import DashboardLayout
 from app.models.user_preference import UserPreference
@@ -23,4 +24,4 @@ from app.models.test_run import TestRun
 from app.models.test_llm import TestLlmMotor, TestLlmEscenario, TestLlmCorrida, TestLlmResultado
 from app.models.pricing import ClientePricing, ServicioCosto
 
-__all__ = ["Tenant", "TenantConfig", "User", "Rubro", "Termino", "Prospect", "ProspectHistorial", "ProspectMensaje", "Device", "PushMute", "EtiguelMirror", "EtiguelMirrorMensaje", "AgentError", "Consulta", "Pendiente", "AgendaItem", "CamilaFix", "IntakeSubmission", "PreguntaClaude", "CamilaRevision", "CamilaConsolidacion", "CamilaPromptAudit", "AnthropicUsage", "DashboardLayout", "UserPreference", "TestRun", "TestLlmMotor", "TestLlmEscenario", "TestLlmCorrida", "TestLlmResultado", "ClientePricing", "ServicioCosto"]
+__all__ = ["Tenant", "TenantConfig", "User", "Rubro", "Termino", "Prospect", "ProspectHistorial", "ProspectMensaje", "Device", "PushMute", "EtiguelMirror", "EtiguelMirrorMensaje", "AgentError", "Consulta", "Pendiente", "AgendaItem", "CamilaFix", "IntakeSubmission", "PreguntaClaude", "CamilaRevision", "CamilaConsolidacion", "CamilaPromptAudit", "CamilaTriage", "AnthropicUsage", "DashboardLayout", "UserPreference", "TestRun", "TestLlmMotor", "TestLlmEscenario", "TestLlmCorrida", "TestLlmResultado", "ClientePricing", "ServicioCosto"]

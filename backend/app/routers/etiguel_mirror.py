@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, Header, HTTPException, status
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 import json
@@ -491,3 +492,147 @@ def guard_check(body: GuardCheckIn, x_mirror_token: str | None = Header(None)):
         return {"block": False, "enabled": False}
     # Hoy sólo el bot de Etiguel llega acá (token global) → el costo se atribuye a 'etiguel'.
     return {"block": camila_guard.es_interno(body.content, source="etiguel"), "enabled": True}
+
+
+# ── Auditoría de calidad "Opus en sesión" ($0) ────────────────────────────────
+# La red de seguridad diaria dejó de correr con Sonnet (batch, tokens). Ahora, cada
+# vez que Sebi abre una sesión de Claude, el hook SessionStart le avisa cuántas
+# conversaciones hay sin auditar; Claude (Opus, en el plan, $0) las repasa y sube
+# los hallazgos. Independiente del motor de Camila (GLM) y del triage (MiniMax) →
+# tercer ojo limpio + detecta 'escapes' del triage para calibrarlo. Auth: token global.
+
+@router.get("/qa-audit/pendientes")
+def qa_audit_pendientes(
+    source: str = "etiguel",
+    count: int = 0,
+    x_mirror_token: str | None = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Conversaciones con actividad desde la última auditoría Opus (qa_audit_last_at;
+    si nunca corrió, últimas 24h). Por cada una: transcript + el veredicto que le dio
+    el triage (para ver qué dejó pasar como 'verde'). Claude las juzga y sube hallazgos
+    con POST /qa-audit/hallazgo. `desde` es el corte usado. Con ?count=1 devuelve solo
+    {n} (barato, para el hook SessionStart)."""
+    _check_token(x_mirror_token)
+    from datetime import timedelta
+    from app.models.service_health import MonitorSettings
+    from app.models.camila_triage import CamilaTriage
+    from app.services import camila_quality
+
+    s = db.query(MonitorSettings).filter(MonitorSettings.id == 1).first()
+    desde = getattr(s, "qa_audit_last_at", None) if s else None
+    if desde is None:
+        desde = datetime.now(timezone.utc) - timedelta(hours=24)
+
+    rows = db.execute(text(
+        """
+        SELECT DISTINCT mirror_id
+        FROM etiguel_mirror_mensajes
+        WHERE fecha > :desde
+        ORDER BY mirror_id DESC
+        """
+    ), {"desde": desde}).fetchall()
+    mids = [r[0] for r in rows]
+    if count:
+        return {"source": source, "desde": desde.isoformat(), "n": len(mids)}
+
+    triage = {t.mirror_id: t for t in
+              db.query(CamilaTriage).filter(CamilaTriage.source == source).all()}
+    # Revisiones abiertas por mirror → para NO duplicar lo que ya está en la cola
+    # (lo que detectó el real-time o Sebi cargó a mano).
+    from app.models.camila_revision import CamilaRevision
+    abiertas: dict[int, list[str]] = {}
+    for rv in (db.query(CamilaRevision)
+               .filter(CamilaRevision.source == source, CamilaRevision.estado == "nuevo")
+               .all()):
+        if rv.mirror_id:
+            abiertas.setdefault(rv.mirror_id, []).append(f"[{rv.categoria}] {rv.titulo}")
+    convs = []
+    for mid in mids:
+        conv = camila_quality._transcript_de_mirror(db, mid)
+        if not conv:
+            continue
+        t = triage.get(mid)
+        convs.append({
+            "mirror_id": mid,
+            "telefono": conv.get("telefono"),
+            "nombre": conv.get("nombre"),
+            "transcript": conv["transcript"],
+            "triage_nivel": (t.veredicto if t else None),
+            "triage_motivo": (t.motivo if t else None),
+            "triage_escalado": (bool(t.escalado) if t else None),
+            "revisiones_abiertas": abiertas.get(mid, []),
+        })
+    return {"source": source, "desde": desde.isoformat(), "n": len(convs), "conversaciones": convs}
+
+
+@router.post("/qa-audit/hallazgo")
+def qa_audit_hallazgo(
+    body: dict,
+    x_mirror_token: str | None = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Claude (Opus) sube un hallazgo de la auditoría: crea una CamilaRevision
+    'nuevo' (origen 'especialista') que Sebi confirma como cualquier otra. Si el
+    triage había dejado pasar esta charla (triage_escape), se marca en el detalle
+    para calibrarlo. Body: {source?, mirror_id?, telefono?, nombre?, categoria,
+    severidad?, titulo, detalle?, fragmento?, sugerencia?, triage_escape?}.
+    Auth: token global. Devuelve el id creado."""
+    _check_token(x_mirror_token)
+    from app.services.camila_quality import CATEGORIAS, _hoy_ba
+    from app.models.camila_revision import CamilaRevision
+
+    body = body or {}
+    source = (body.get("source") or "etiguel").strip()
+    titulo = (body.get("titulo") or "").strip()
+    if not titulo:
+        raise HTTPException(status_code=422, detail="mandá 'titulo'")
+    categoria = (body.get("categoria") or "otro").strip()
+    if categoria not in CATEGORIAS:
+        categoria = "otro"
+    sev = (body.get("severidad") or "media").strip()
+    if sev not in ("alta", "media", "baja"):
+        sev = "media"
+    mirror_id = body.get("mirror_id")
+    telefono = body.get("telefono")
+    nombre = body.get("nombre")
+    # Resolver teléfono/nombre desde el mirror si no vinieron.
+    if mirror_id and (telefono is None or nombre is None):
+        m = db.get(EtiguelMirror, mirror_id)
+        if m:
+            telefono = telefono if telefono is not None else m.telefono
+            nombre = nombre if nombre is not None else m.nombre
+    detalle = (body.get("detalle") or "")
+    if body.get("triage_escape"):
+        detalle = (detalle + "\n\n" if detalle else "") + "⚠️ El triage (filtro rápido) dejó pasar esta conversación como OK — escape para calibrar el filtro."
+    r = CamilaRevision(
+        source=source, mirror_id=mirror_id, telefono=telefono, nombre=nombre,
+        fecha=(body.get("fecha") or _hoy_ba()), categoria=categoria, severidad=sev,
+        titulo=titulo[:200], detalle=detalle[:4000],
+        fragmento=(body.get("fragmento") or "")[:4000],
+        sugerencia=(body.get("sugerencia") or "")[:4000],
+        origen="especialista", estado="nuevo",
+    )
+    db.add(r)
+    db.commit()
+    db.refresh(r)
+    return {"ok": True, "id": r.id}
+
+
+@router.post("/qa-audit/cerrar")
+def qa_audit_cerrar(
+    body: dict | None = None,
+    x_mirror_token: str | None = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Marca la auditoría Opus como hecha hasta ahora (setea qa_audit_last_at=now).
+    La próxima sesión solo verá conversaciones nuevas. Opcional {n_hallazgos} para el
+    log. Auth: token global."""
+    _check_token(x_mirror_token)
+    from app.models.service_health import MonitorSettings
+    s = db.query(MonitorSettings).filter(MonitorSettings.id == 1).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="monitor_settings no existe")
+    s.qa_audit_last_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"ok": True, "qa_audit_last_at": s.qa_audit_last_at.isoformat()}

@@ -75,6 +75,17 @@ class MonitorSettings(Base):
     # "hay un APK nuevo, instalalo". Se bumpea +1 en cada build EAS nuevo (junto con
     # app.json version, para el runtime gating). Ver [[project_prospia_admin_app]].
     apk_version: Mapped[int] = mapped_column(Integer, nullable=False, default=2, server_default="2")
+    # ── Monitor de calidad en TIEMPO REAL + auditoría Opus en sesión ──
+    # qa_realtime_on: prende el motor en vivo (triage MiniMax → juez Sonnet → push).
+    #   Arranca APAGADO hasta validar el triage con el banco Test LLM.
+    # qa_daily_batch_on: el viejo batch diario Sonnet. Arranca APAGADO: lo reemplaza la
+    #   auditoría Opus que corre en sesión (a $0, mejor motor, e independiente).
+    # qa_triage_model: modelo del filtro rápido (id de OpenRouter).
+    # qa_audit_last_at: hasta cuándo ya auditó Opus (la próxima sesión revisa lo nuevo).
+    qa_realtime_on: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    qa_daily_batch_on: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    qa_triage_model: Mapped[str] = mapped_column(String(80), nullable=False, default="minimax/minimax-m3", server_default="minimax/minimax-m3")
+    qa_audit_last_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

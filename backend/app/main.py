@@ -270,6 +270,23 @@ def run_migrations():
         conn.execute(text(
             "ALTER TABLE avisos ADD COLUMN IF NOT EXISTS sesion_id VARCHAR(64)"
         ))
+        # ── Monitor de calidad en TIEMPO REAL (triage + juez) + auditoría Opus ──
+        # qa_realtime_on: prende el motor en vivo (arranca APAGADO hasta validar el triage).
+        # qa_daily_batch_on: el batch diario Sonnet (arranca APAGADO: lo reemplaza la
+        #   auditoría Opus en sesión a $0). qa_triage_model: modelo del filtro (OpenRouter).
+        # qa_audit_last_at: hasta cuándo ya auditó Opus (la próxima sesión revisa lo nuevo).
+        conn.execute(text(
+            "ALTER TABLE monitor_settings ADD COLUMN IF NOT EXISTS qa_realtime_on BOOLEAN NOT NULL DEFAULT false"
+        ))
+        conn.execute(text(
+            "ALTER TABLE monitor_settings ADD COLUMN IF NOT EXISTS qa_daily_batch_on BOOLEAN NOT NULL DEFAULT false"
+        ))
+        conn.execute(text(
+            "ALTER TABLE monitor_settings ADD COLUMN IF NOT EXISTS qa_triage_model VARCHAR(80) NOT NULL DEFAULT 'minimax/minimax-m3'"
+        ))
+        conn.execute(text(
+            "ALTER TABLE monitor_settings ADD COLUMN IF NOT EXISTS qa_audit_last_at TIMESTAMPTZ"
+        ))
 
 
 Base.metadata.create_all(bind=engine)
@@ -325,6 +342,11 @@ camila_audit.start()
 
 from app.services import camila_quality
 camila_quality.start()
+
+# Monitor de calidad en TIEMPO REAL (triage barato → juez Sonnet → push). Gate
+# qa_realtime_on (arranca APAGADO hasta validar el triage). Reemplaza al batch diario.
+from app.services import camila_realtime
+camila_realtime.start()
 
 from app.services import camila_cost_ai
 camila_cost_ai.start()

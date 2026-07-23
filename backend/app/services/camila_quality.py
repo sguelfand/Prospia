@@ -77,6 +77,22 @@ def _anthropic_key() -> str:
     return settings.ANTHROPIC_API_KEY or ""
 
 
+def _daily_batch_on() -> bool:
+    """¿Está prendido el viejo batch diario Sonnet? Default OFF (lo reemplaza la
+    auditoría Opus en sesión). Se puede reactivar por SQL/UI si hiciera falta."""
+    try:
+        from app.database import SessionLocal
+        from app.models.service_health import MonitorSettings
+        db = SessionLocal()
+        try:
+            s = db.query(MonitorSettings).filter(MonitorSettings.id == 1).first()
+            return bool(s and getattr(s, "qa_daily_batch_on", False))
+        finally:
+            db.close()
+    except Exception:
+        return False
+
+
 def _post(system: str, user: str, max_tokens: int = 1200, timeout: int = 40,
           funcion: str = "Especialista Negocio (calidad)", source: str | None = None) -> str | None:
     key = _anthropic_key()
@@ -435,6 +451,91 @@ def revisar_dia(source: str = "etiguel", fecha: str | None = None, notify: bool 
     return {"source": source, "fecha": fecha, "conversaciones": revisadas, "nuevas": nuevas}
 
 
+def _transcript_de_mirror(db, mirror_id: int) -> dict | None:
+    """Arma el transcript (últimos N mensajes) de UNA conversación espejada.
+    Devuelve {mirror_id, telefono, nombre, transcript} o None si no hay texto."""
+    from app.models.etiguel_mirror import EtiguelMirror, EtiguelMirrorMensaje
+    mirror = db.get(EtiguelMirror, mirror_id)
+    if not mirror:
+        return None
+    msgs = (db.query(EtiguelMirrorMensaje)
+            .filter(EtiguelMirrorMensaje.mirror_id == mirror_id)
+            .order_by(EtiguelMirrorMensaje.fecha.asc(), EtiguelMirrorMensaje.id.asc())
+            .all())
+    msgs = msgs[-MAX_MSGS_POR_CONV:]
+    lineas = []
+    for m in msgs:
+        quien = "Cliente" if m.direccion == "in" else "Camila"
+        txt = (m.texto or "").strip().replace("\n", " ")
+        if txt:
+            lineas.append(f"[{quien}] {txt}")
+    transcript = "\n".join(lineas)[-MAX_CHARS_TRANSCRIPT:]
+    if not transcript:
+        return None
+    return {"mirror_id": mirror_id, "telefono": mirror.telefono,
+            "nombre": mirror.nombre, "transcript": transcript}
+
+
+def revisar_mirror_ahora(source: str, mirror_id: int, notify: bool = True) -> dict:
+    """Juez completo (Sonnet) sobre UNA conversación, EN EL MOMENTO. Lo llama el
+    monitor en tiempo real cuando el triage la marcó amarillo/rojo. Aplica la MISMA
+    calibración y dedup que el batch diario: si crea un hallazgo, es una CamilaRevision
+    'nuevo' + push, igual que el especialista. Devuelve {creada: bool, ...}."""
+    from app.database import SessionLocal
+    from app.models.camila_revision import CamilaRevision
+    fecha = _hoy_ba()
+    db = SessionLocal()
+    try:
+        conv = _transcript_de_mirror(db, mirror_id)
+        if not conv:
+            return {"source": source, "mirror_id": mirror_id, "creada": False, "motivo": "sin_transcript"}
+        calibracion = _ejemplos_calibracion(db, source)
+        fixes = _fixes_aplicados(db, source)
+        abiertas = _revisiones_abiertas(db, source)
+        system = _system_prompt(source, calibracion, fixes, abiertas)
+        user = (f"Conversación EN CURSO de Camila con {conv.get('nombre') or 'un cliente'} "
+                f"(tel {conv.get('telefono') or '?'}), de hoy {fecha}:\n\n{conv['transcript']}")
+        data = _parse_json(_post(system, user, source=source,
+                                 funcion="Especialista Negocio (tiempo real)"))
+        if not data or not data.get("revisar"):
+            return {"source": source, "mirror_id": mirror_id, "creada": False, "motivo": "juez_ok"}
+        categoria = (data.get("categoria") or "otro").strip()
+        if categoria not in CATEGORIAS:
+            categoria = "otro"
+        if _ya_revisada(db, source, conv.get("telefono"), fecha, categoria):
+            return {"source": source, "mirror_id": mirror_id, "creada": False, "motivo": "ya_existe"}
+        sev = (data.get("severidad") or "media").strip()
+        if sev not in ("alta", "media", "baja"):
+            sev = "media"
+        db.add(CamilaRevision(
+            source=source, mirror_id=mirror_id, telefono=conv.get("telefono"),
+            nombre=conv.get("nombre"), fecha=fecha, categoria=categoria, severidad=sev,
+            titulo=(data.get("titulo") or "Revisar conversación")[:200],
+            detalle=(data.get("detalle") or "")[:4000],
+            fragmento=(data.get("fragmento") or "")[:4000],
+            sugerencia=(data.get("sugerencia") or "")[:4000],
+            estado="nuevo",
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    if notify:
+        try:
+            from app.services import push
+            push.notificar_global(
+                "calidad_revision",
+                "🔎 Camila: revisá esta conversación (en vivo)",
+                f"Detecté algo para revisar en la charla con {conv.get('nombre') or 'un cliente'}.",
+                {"tipo": "calidad", "source": source, "nav": "calidad", "mirror_id": mirror_id},
+            )
+        except Exception as e:
+            print(f"[CAMILA-QUALITY] push tiempo real: {type(e).__name__}: {e}")
+    return {"source": source, "mirror_id": mirror_id, "creada": True,
+            "categoria": categoria, "severidad": sev,
+            "titulo": (data.get("titulo") or "")[:200]}
+
+
 # ── lectura / confirmación (UI) ───────────────────────────────────────────────
 
 def get_revisiones(source: str = "etiguel", estado: str | None = None) -> list[dict]:
@@ -619,11 +720,15 @@ def start():
         last_day = None
         while True:
             hoy = _hoy_ba()
-            if last_day != hoy:  # 1×/día: revisa el día anterior (ya cerrado)
-                try:
-                    revisar_dia("etiguel", _ayer_ba(), notify=True)
-                except Exception as e:
-                    print(f"[CAMILA-QUALITY] revisar ayer: {type(e).__name__}: {e}")
+            if last_day != hoy:  # 1×/día
+                # El batch diario Sonnet arranca APAGADO (qa_daily_batch_on): lo
+                # reemplaza la auditoría Opus que corre en sesión (a $0, mejor motor,
+                # e independiente). Queda como fallback si Sebi lo reactiva por SQL/UI.
+                if _daily_batch_on():
+                    try:
+                        revisar_dia("etiguel", _ayer_ba(), notify=True)
+                    except Exception as e:
+                        print(f"[CAMILA-QUALITY] revisar ayer: {type(e).__name__}: {e}")
                 # Recordatorio semanal de auditoría del prompt completo (nivel 2).
                 try:
                     from app.services import camila_prompt_audit
