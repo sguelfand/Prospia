@@ -60,6 +60,22 @@ def _usage_cost(model_id: str, u: dict) -> float:
             + u.get("cacheRead", 0) * pcr + u.get("cacheWrite", 0) * pcw)
 
 
+_CANON_VER_RE = re.compile(r'(sonnet|opus|haiku)-(\d)-(\d)')
+
+
+def _canon_model(model_id: str) -> str:
+    """Nombre de modelo para AGRUPAR en el gráfico por-modelo. Unifica solo las
+    variantes de slug del MISMO modelo y rate (guion vs punto en la versión, p.ej.
+    'claude-sonnet-4-6' → 'claude-sonnet-4.6') para que no aparezca partido en dos
+    filas. GLM queda INTACTO a propósito: 'GLM 5.2' (MyClaw) y 'z-ai/glm-5.2'
+    (OpenRouter) son proveedores distintos con precio distinto y deben verse aparte.
+    El pricing NO usa esto (sigue con el modelId original en `_usage_cost`)."""
+    m = model_id or "?"
+    if "glm" in m.lower():
+        return m
+    return _CANON_VER_RE.sub(r'\1-\2.\3', m)
+
+
 def _etiguel_token() -> str:
     try:
         from app.models.service_health import MonitorSettings
@@ -90,6 +106,12 @@ _PHONE_RE = re.compile(r'"(?:chat_id|sender_id)"\s*:\s*"([^"]+)"')
 # Outbound de primer contacto: el número va en ENVIAR_LEAD|num|... / ENVIAR_PROSPECCION|num|...
 # (en un lead recién contactado todavía no hay mensaje entrante con chat_id).
 _ENVIAR_RE = re.compile(r'ENVIAR_(?:LEAD|PROSPECCION)\|(\+?\d{8,15})\|')
+# Fallback tolerante a comillas ESCAPADAS: cuando el chat_id viene dentro de un
+# bloque de content estructurado (la "Conversation info (untrusted metadata)" que
+# inyecta OpenClaw), al serializar con json.dumps las comillas quedan como \" y el
+# _PHONE_RE de arriba no matchea → la conversación caía en "(sin teléfono)". Este
+# regex acepta 0/1 backslash antes de cada comilla y captura el número.
+_PHONE_RE_ESC = re.compile(r'(?:chat_id|sender_id)\\?"\s*:\s*\\?"(\+?\d{8,15})')
 
 
 def _norm_phone(p: str | None) -> str | None:
@@ -121,6 +143,11 @@ def _extract_phone(mc: dict) -> str | None:
         hit = _ENVIAR_RE.search(txt)
         if hit:
             return _norm_phone(hit.group(1))
+    # 3) fallback: chat_id con comillas escapadas dentro de un content estructurado
+    #    (metadata inyectada por OpenClaw). Barremos el evento entero serializado.
+    hit = _PHONE_RE_ESC.search(json.dumps(mc, ensure_ascii=False))
+    if hit:
+        return _norm_phone(hit.group(1))
     return None
 
 
@@ -215,7 +242,8 @@ def _new_acc():
 def _fold(acc: dict, ev: dict):
     d = ev["data"]; u = d.get("usage") or {}
     model = ev["modelId"] or "?"
-    costo = _usage_cost(model, u)
+    costo = _usage_cost(model, u)          # precio con el slug ORIGINAL
+    model_disp = _canon_model(model)       # nombre unificado solo para agrupar/mostrar
     timed_out = bool(d.get("timedOut") or d.get("idleTimedOut") or d.get("timedOutDuringCompaction"))
     error = d.get("promptErrorSource") is not None
     bad = timed_out or error
@@ -231,7 +259,7 @@ def _fold(acc: dict, ev: dict):
     t["compactaciones"] += comp
     t["costo_errores" if bad else "costo_mensajes"] += costo
 
-    m = acc["por_modelo"].setdefault(model, {"tokens": 0, "costo_usd": 0.0, "llamadas": 0})
+    m = acc["por_modelo"].setdefault(model_disp, {"tokens": 0, "costo_usd": 0.0, "llamadas": 0})
     m["tokens"] += u.get("total", 0); m["costo_usd"] += costo; m["llamadas"] += 1
 
     cv = acc["por_conversacion"].setdefault(tel, {
@@ -244,7 +272,7 @@ def _fold(acc: dict, ev: dict):
     cv["tokens"] += u.get("total", 0); cv["costo_usd"] += costo; cv["llamadas"] += 1
     cv["timeouts"] += 1 if timed_out else 0; cv["errores"] += 1 if error else 0
     cv["compactaciones"] += comp
-    cm = cv["por_modelo"].setdefault(model, {"llamadas": 0, "costo_usd": 0.0})
+    cm = cv["por_modelo"].setdefault(model_disp, {"llamadas": 0, "costo_usd": 0.0})
     cm["llamadas"] += 1; cm["costo_usd"] += costo
     tsiso = ev["ts"].isoformat()
     if cv["primer_ts"] is None or tsiso < cv["primer_ts"]:
