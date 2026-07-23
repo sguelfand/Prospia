@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Dimensions, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Aviso, eliminarAvisos, getAvisos, setNotifPref } from "../api";
+import { Aviso, eliminarAvisos, getAvisos, getEtiguelMirror, setNotifPref } from "../api";
 import { useAuth } from "../auth";
 import { ErrorBox, Loader } from "../components/ui";
 import { AvisosProps } from "../navigation";
@@ -202,6 +202,24 @@ export default function AvisosScreen({ navigation, route }: AvisosProps) {
         icon: "eye",
         label: "Ver sesión",
         go: () => { setDetalle(null); navigation.navigate("Sesiones", { sesionId: a.sesion_id! }); },
+      };
+    }
+    // Aviso de una conversación de Etiguel (p.ej. el barrido que recuperó un colgado):
+    // prospect_id = mirror_id y tenant_id null (los de plataforma SIEMPRE traen tenant_id).
+    // → "Ver conversación" abre esa charla espejada.
+    if (a.prospect_id != null && a.tenant_id == null) {
+      return {
+        icon: "eye",
+        label: "Ver conversación",
+        go: async () => {
+          setDetalle(null);
+          if (!token) return;
+          try {
+            const items = await getEtiguelMirror(token);
+            const item = items.find((i) => i.id === a.prospect_id);
+            if (item) navigation.navigate("EtiguelMirrorDetail", { item });
+          } catch { /* best-effort: si no se encuentra, no navega */ }
+        },
       };
     }
     const dest = PANTALLA_POR_TIPO[a.tipo];

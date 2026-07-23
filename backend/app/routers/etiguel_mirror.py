@@ -183,14 +183,31 @@ def ingest_etiguel_mirror(
 def ingest_aviso(
     body: AvisoIn,
     x_mirror_token: str | None = Header(None),
+    db: Session = Depends(get_db),
 ):
     """Aviso genérico → push a todos los devices. Reemplaza los mails de
     notificación (primer contacto, consulta de Camila, alertas técnicas).
-    Best-effort: el que llama no debe romperse si esto falla."""
+    Best-effort: el que llama no debe romperse si esto falla.
+
+    Si viene `telefono` (p.ej. el barrido de conversaciones sin respuesta que
+    recupera un colgado), resolvemos la conversación de Etiguel de ese número
+    (match por últimos 10 dígitos) y metemos el deep-link `nav:etiguel_lead` +
+    `mirror_id` en el push → tocar la notif abre DIRECTO esa conversación."""
     _check_token(x_mirror_token)
     data = {"tipo": "aviso"}
     if body.categoria:
         data["categoria"] = body.categoria
+    if body.telefono:
+        digits = "".join(c for c in body.telefono if c.isdigit())[-10:]
+        if len(digits) >= 10:
+            m = next(
+                (mm for mm in db.query(EtiguelMirror).all()
+                 if mm.telefono and "".join(c for c in mm.telefono if c.isdigit()).endswith(digits)),
+                None,
+            )
+            if m:
+                data["nav"] = "etiguel_lead"
+                data["mirror_id"] = m.id
     try:
         push.notificar_aviso_async(body.title[:120], body.body[:300], data,
                                    detalle=body.detalle)
