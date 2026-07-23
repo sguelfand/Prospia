@@ -11,6 +11,7 @@ import { StatusBar } from "expo-status-bar";
 import React, { useCallback, useEffect, useRef } from "react";
 import { View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 
 import { getEtiguelMirror, getProspect, setNotifPref } from "./src/api";
 import { AuthProvider, useAuth } from "./src/auth";
@@ -270,12 +271,17 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <AuthProvider>
-        <NavigationContainer theme={navTheme} ref={navigationRef}>
-          <StatusBar style="light" />
-          <Routes />
-        </NavigationContainer>
-      </AuthProvider>
+      {/* SafeAreaProvider en la raíz: sin él, componentes que usan
+          useSafeAreaInsets FUERA de un navegador (ej. UpdateBanner, hermano del
+          Drawer) crashean al montar en el arranque autenticado. */}
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+        <AuthProvider>
+          <NavigationContainer theme={navTheme} ref={navigationRef}>
+            <StatusBar style="light" />
+            <Routes />
+          </NavigationContainer>
+        </AuthProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
