@@ -102,21 +102,70 @@ def _mes_actual() -> str:
     return datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=-3))).strftime("%Y-%m")
 
 
-def costo_conv_medido(source: str) -> dict | None:
-    """$/conversación REAL del monitor (rollup mensual). Usa el mes actual si tiene
-    muestra suficiente; si no, el anterior. None si no hay datos creíbles."""
-    from app.models.camila_audit import CamilaAuditMensual
+def _familia_modelo(model_id: str) -> str:
+    """Familia de un modelo (glm/sonnet/opus/haiku/gpt) para agrupar el motor
+    vigente. Un cambio de motor a mitad de mes (p.ej. Sonnet→GLM el 20/7) mezcla
+    dos costos muy distintos → medir sobre el mes calendario da un promedio falso."""
+    m = (model_id or "").lower()
+    for fam in ("glm", "opus", "haiku", "gpt", "sonnet"):
+        if fam in m:
+            return fam
+    return "otro"
+
+
+def _familia_dominante(por_modelo: dict) -> str | None:
+    """Familia con más costo entre las conversaciones del día (ignora ruido de
+    fallback puntual). None si el día no tuvo gasto atribuible."""
+    tot: dict[str, float] = {}
+    for mod, v in (por_modelo or {}).items():
+        c = v.get("costo_usd", 0.0) if isinstance(v, dict) else 0.0
+        tot[_familia_modelo(mod)] = tot.get(_familia_modelo(mod), 0.0) + c
+    tot.pop("otro", None)
+    return max(tot, key=tot.get) if tot else None
+
+
+def costo_conv_medido(source: str, dias: int = 45) -> dict | None:
+    """$/conversación REAL del monitor, medido SOLO sobre el MOTOR VIGENTE.
+
+    En vez del mes calendario (que al cruzar un cambio de motor blende Sonnet caro
+    con GLM barato → promedio falso, disparaba una falsa alerta de desvío), toma los
+    audits diarios recientes, detecta el motor actual (familia dominante del último
+    día con actividad) y acumula hacia atrás solo mientras el motor no cambia. None
+    si no hay muestra suficiente (>= MIN_CONV_ALERTA conversaciones en ese tramo)."""
+    import json as _json
+    from app.models.camila_audit import CamilaAudit
     db = _db()
     try:
-        rows = (db.query(CamilaAuditMensual)
-                .filter(CamilaAuditMensual.source == source)
-                .order_by(CamilaAuditMensual.mes.desc()).limit(3).all())
+        rows = (db.query(CamilaAudit)
+                .filter(CamilaAudit.source == source)
+                .order_by(CamilaAudit.fecha.desc()).limit(dias).all())
+        activos = []  # (fecha, costo, n_conv, familia_dominante)
         for r in rows:
-            if r.conversaciones and r.conversaciones >= MIN_CONV_ALERTA and r.costo_usd:
-                return {"valor": round(r.costo_usd / r.conversaciones, 4),
-                        "mes": r.mes, "conversaciones": r.conversaciones,
-                        "costo_mes": round(r.costo_usd, 2)}
-        return None
+            if not (r.llamadas and r.costo_usd and r.data):
+                continue
+            try:
+                d = _json.loads(r.data)
+            except Exception:
+                continue
+            fam = _familia_dominante(d.get("por_modelo"))
+            n_conv = int(d.get("n_conversaciones") or 0)
+            if not fam or n_conv <= 0:
+                continue
+            activos.append((r.fecha, r.costo_usd, n_conv, fam))
+        if not activos:
+            return None
+        motor = activos[0][3]
+        costo = convs = ndias = 0.0
+        primera = None
+        for fecha, c, n, fam in activos:
+            if fam != motor:
+                break  # hacia atrás, al cruzar el cambio de motor cortamos
+            costo += c; convs += n; ndias += 1; primera = fecha
+        if convs < MIN_CONV_ALERTA:
+            return None
+        return {"valor": round(costo / convs, 4), "motor": motor,
+                "conversaciones": int(convs), "costo_mes": round(costo, 2),
+                "dias": int(ndias), "desde": primera, "mes": (activos[0][0] or "")[:7]}
     finally:
         db.close()
 
@@ -405,10 +454,14 @@ def check_desvio(source: str) -> dict | None:
     if abs(desvio) < DESVIO_ALERTA:
         return None
     direccion = "MÁS caro" if desvio > 0 else "más barato"
+    motor = m.get("motor") or "motor vigente"
+    ndias = m.get("dias")
+    ventana = f"últimos {ndias} día(s) con actividad" if ndias else f"mes {m.get('mes','')}"
     return {"tipo": "desvio_cotizacion", "clave": "",
             "severidad": "alta" if desvio > 1.0 else "media",
             "titulo": f"Costo/conversación real ${medido:.3f} vs cotizado ${cotizado:.3f} "
                       f"({desvio*100:+.0f}%)",
-            "detalle": f"El promedio del mes {m['mes']} ({m['conversaciones']} conversaciones) está "
-                       f"{abs(desvio)*100:.0f}% {direccion} que lo cargado en Precios. Revisar el motor/"
-                       f"conversaciones y actualizar la cotización o el abono del cliente."}
+            "detalle": f"Medido sobre el motor {motor.upper()} vigente ({ventana}, "
+                       f"{m['conversaciones']} conversaciones): ${medido:.3f}/conv, "
+                       f"{abs(desvio)*100:.0f}% {direccion} que lo cotizado en Precios. "
+                       f"Actualizar la cotización/abono del cliente o revisar el motor."}

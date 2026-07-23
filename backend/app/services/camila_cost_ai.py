@@ -59,6 +59,27 @@ _TEMA_GPT_FALLBACK_KW = (
 )
 
 
+# ── Anti-repetición del tema "el mismo modelo aparece con dos slugs" ─────────
+# El gráfico por-modelo lista el modelId TAL CUAL lo reporta OpenClaw, y hay dos
+# situaciones donde un mismo modelo lógico figura en DOS filas. La IA lo relee
+# cada corrida como "doble alias / misconfiguration / pricing fragmentado" (id36/id37)
+# aunque el costo esté bien. Los dos casos son ESPERADOS, no un bug de pricing:
+#   1) GLM 5.2 corre por DOS proveedores distintos → 'GLM 5.2' (MyClaw, cache $0) y
+#      'z-ai/glm-5.2' (OpenRouter, cacheRead $0.1518). Son entradas separadas A
+#      PROPÓSITO porque el precio real difiere por proveedor; `_price_for` valúa
+#      cada una con su rate correcto.
+#   2) claude-sonnet-4-6 vs claude-sonnet-4.6 (guion vs punto): dos slugs que
+#      reporta OpenClaw para el MISMO modelo/rate; `_price_for` los resuelve iguales.
+# En ninguno hay facturación incorrecta → se descarta como oportunidad nueva.
+_TEMA_ALIAS_MODELO_KW = (
+    "doble alias", "alias duplicad", "dos slug", "dos identificad", "identificadores distintos",
+    "dos entradas", "dos configuracion", "doble configuracion", "misconfig",
+    "pricing fragmentad", "fragmenta", "mismo modelo", "modelos distintos",
+    "dos modelos", "mismo recurso", "tarifa incorrecta", "z-ai", "glm-5.2",
+    "sonnet-4-6", "sonnet-4.6", "sonnet-4-6-vs", "doble entrada",
+)
+
+
 def _es_tema_cache_conocido(op: dict) -> bool:
     """True si el hallazgo IA es una variante del tema cache-write/contexto-base,
     que ya está trackeado (bug de metadata OpenClaw → upgrade). Se filtra para que
@@ -73,7 +94,8 @@ def _es_tema_conocido_benigno(op: dict) -> bool:
     antes de guardarlo para que el tablero muestre solo lo genuinamente sin resolver."""
     txt = f"{op.get('clave','')} {op.get('titulo','')} {op.get('detalle','')}".lower()
     return (any(kw in txt for kw in _TEMA_CACHE_KW)
-            or any(kw in txt for kw in _TEMA_GPT_FALLBACK_KW))
+            or any(kw in txt for kw in _TEMA_GPT_FALLBACK_KW)
+            or any(kw in txt for kw in _TEMA_ALIAS_MODELO_KW))
 
 # Contexto fijo del análisis de costo de Camila (ver memoria de costos).
 _CONTEXTO_COSTO = (
@@ -110,6 +132,15 @@ _CONTEXTO_COSTO = (
     "NO es un bug de pricing, ni integración experimental, ni pricing sin configurar: el "
     "costo $0 es correcto (0 tokens). El problema de fondo (timeouts de sonnet) ya lo "
     "cubren las reglas de fiabilidad. NO generes ningún hallazgo sobre gpt-5.4 / modelo con $0.\n\n"
+    "MODELOS CON DOS SLUGS (NO es hallazgo, NO lo reportes como misconfiguration/pricing):\n"
+    "- GLM 5.2 corre por DOS proveedores → 'GLM 5.2' (MyClaw, cache automático a $0) y "
+    "'z-ai/glm-5.2' (OpenRouter, cacheRead $0.1518). Son DOS entradas a propósito porque el "
+    "precio real difiere por proveedor; cada una se valúa con su rate correcto. NO es doble "
+    "configuración ni facturación incorrecta.\n"
+    "- claude-sonnet-4-6 y claude-sonnet-4.6 (guion vs punto) son el MISMO modelo/rate; el "
+    "pricing los resuelve idéntico. Verlos como dos filas es solo cómo OpenClaw reporta el "
+    "slug, no fragmentación de billing. NO generes ningún hallazgo de 'doble alias', 'dos "
+    "identificadores', 'pricing fragmentado' ni 'modelo duplicado'.\n\n"
     "Por lo anterior: NO generes oportunidades cuyo único remedio sea el TTL/cache 1h "
     "o cambiar de modelo. Un ratio cacheWrite≈cacheRead o 'contexto re-escrito entre "
     "turnos' NO es accionable (es estructural) → no lo reportes salvo que traigas un "
