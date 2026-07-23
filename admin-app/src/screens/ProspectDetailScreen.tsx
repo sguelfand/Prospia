@@ -262,7 +262,10 @@ export default function ProspectDetailScreen({ route, navigation }: ProspectDeta
         <Dato label="URL" value={prospect.url} />
         <Dato label="Contactos" value={String(prospect.cant_contactos)} />
         <Dato label="Último contacto" value={fmt(prospect.ult_contacto)} />
-        <Dato label="Próximo contacto" value={fmt(prospect.prox_contacto)} />
+        <Dato label="Próximo contacto" value={
+          prospect.prox_contacto ? fmt(prospect.prox_contacto)
+          : prospect.prox_contacto_estimado ? `${prospect.prox_contacto_estimado} (reactivación auto)`
+          : null} />
         {/* Costo de esta conversación (en vivo, hasta el momento) */}
         <View style={styles.datoRow}>
           <Text style={styles.datoLabel}>Costo conversación</Text>

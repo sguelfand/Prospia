@@ -309,6 +309,30 @@ def _react_enabled() -> bool:
     return os.environ.get("REACTIVACION_ENABLED", "true").strip().lower() in ("1", "true", "yes", "on")
 
 
+def prox_contacto_estimado_reactivacion(p) -> str | None:
+    """Bug C: fecha ESTIMADA del próximo recontacto automático (reactivación) de un
+    prospect, para mostrar en 'Próximo contacto' en vez de 'sin agendar'. Devuelve
+    '~AAAA-MM-DD' (el '~' marca estimado, no un callback firme) o None. Barato: solo
+    lee atributos del prospect (reactivacion_base/_intentos), sin queries. Muestra
+    desde que arrancó la reactivación (base seteada); antes del 1er intento no hay
+    base todavía → None. DISPLAY-only, no toca la lógica."""
+    if getattr(p, "estado", None) != "en_conversacion":
+        return None
+    if p.prox_contacto is not None or getattr(p, "seguimiento_proxima", None) is not None:
+        return None
+    base = getattr(p, "reactivacion_base", None)
+    if base is None:
+        return None
+    intentos = getattr(p, "reactivacion_intentos", 0) or 0
+    if intentos >= REACT_MAX_INTENTOS:
+        return None
+    try:
+        est = base.date() + timedelta(days=REACT_DIAS[intentos])
+        return f"~{est.isoformat()}"
+    except Exception:
+        return None
+
+
 def reactivacion_decidir(estado, dias_silencio, intentos, tiene_prox_contacto, cliente_escribio_ultimo):
     """Decisión PURA de reactivación (sin DB ni red). Retorna (accion, motivo) con
     accion in {'reactivar', 'cerrar', 'nada'}. `dias_silencio` = días desde el
