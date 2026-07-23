@@ -118,16 +118,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const unlock = async (): Promise<boolean> => {
-    const res = await LocalAuthentication.authenticateAsync({
-      promptMessage: "Desbloquear Prospia Admin",
-      cancelLabel: "Cancelar",
-      disableDeviceFallback: false,
-    });
-    if (res.success) {
-      setLocked(false);
-      return true;
+    // disableDeviceFallback:true → huella/rostro SOLO, sin el "device credential"
+    // (PIN del sistema) como respaldo dentro del prompt. Ese camino de device
+    // credential crasheaba la app en el APK v3.0 (SDK 54 + New Architecture).
+    // El respaldo real sigue siendo "Usar contraseña" en la LockScreen.
+    try {
+      const res = await LocalAuthentication.authenticateAsync({
+        promptMessage: "Desbloquear Prospia Admin",
+        cancelLabel: "Cancelar",
+        disableDeviceFallback: true,
+      });
+      if (res.success) {
+        setLocked(false);
+        return true;
+      }
+      return false;
+    } catch {
+      // Ante cualquier error del módulo nativo, no dejar propagar (evita cerrar
+      // la app): la LockScreen muestra el error y ofrece "Usar contraseña".
+      return false;
     }
-    return false;
   };
 
   const signOut = async () => {
