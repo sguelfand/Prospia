@@ -54,9 +54,21 @@ test.describe("Precios (N1)", () => {
     await expect(page.getByText("Cargá el abono mensual para ver el margen")).toHaveCount(0);
   });
 
-  test("cliente sin medición propia muestra la leyenda de estimación Etiguel", async ({ page }) => {
-    // qa-test arranca con costo_conv_origen = estimado_etiguel (cliente nuevo).
+  test("cliente sin medición propia muestra la leyenda de estimación Etiguel", async ({ page, baseURL }) => {
+    // Auto-siembra: dejamos a qa-test como cliente nuevo (origen = estimado_etiguel)
+    // ANTES de asertar. Así el test no depende de que el pricing del tenant de prueba
+    // no haya driftado: una simulación o un costo cargado a mano en otra sesión lo dejan
+    // en 'manual'/'simulado' y romperían la aserción. 0.052 = COSTO_CONV_ETIGUEL_USD.
     await page.goto("/precios?source=qa-test");
+    const token = await page.evaluate(() => localStorage.getItem("token"));
+    expect(token, "sesión de qa-admin válida").toBeTruthy();
+    const seed = await page.request.put(`${baseURL}/api/admin/precios/cliente/qa-test`, {
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      data: { costo_conv_usd: 0.052, costo_conv_origen: "estimado_etiguel" },
+    });
+    expect(seed.ok(), "reset qa-test a estimado_etiguel").toBeTruthy();
+
+    await page.reload();
     await expect(page.getByTestId("chip-origen")).toBeVisible();
     await expect(page.getByTestId("chip-origen")).toHaveText(/estimación Etiguel/i);
     await expect(
