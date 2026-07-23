@@ -231,6 +231,7 @@ class AvisoIn(BaseModel):
     body: str
     categoria: str | None = None
     detalle: str | None = None  # conclusión completa (texto largo), opcional
+    telefono: str | None = None  # si viene, deep-link a esa conversación de Etiguel (botón "Ver")
 
 
 class AgentErrorOut(BaseModel):

@@ -355,7 +355,10 @@ def _notificar_aviso(title: str, body: str, data: dict, detalle: str | None = No
         # Aviso al dueño (primer contacto, consulta de Camila, alertas técnicas):
         # va a TODOS los devices, sin filtro de silencio por cliente.
         tokens = [d.expo_token for d in db.query(Device).all()]
+        # `mirror_id` (deep-link a una conversación de Etiguel) se guarda como
+        # prospect_id del aviso → el botón "Ver" de la lista de Avisos lo reusa.
         aviso_id = _log_aviso(db, (data or {}).get("tipo", "aviso"), title, body,
+                              prospect_id=(data or {}).get("mirror_id"),
                               detalle=detalle) if tokens else None
         _enviar(tokens, title, body, {**(data or {}), "aviso_id": aviso_id})
     except Exception as e:
