@@ -14,6 +14,7 @@ export interface Prospect {
   cant_mensajes: number
   ult_contacto: string | null
   prox_contacto: string | null
+  prox_contacto_estimado?: string | null  // '~AAAA-MM-DD' estimado de reactivación (Bug C)
   clasificacion: 'ALTO' | 'MEDIO' | 'BAJO' | 'CANCELADO' | null
   clasificacion_detalle: string | null
   clasificacion_verificada: boolean

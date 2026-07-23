@@ -24,6 +24,8 @@ def _enrich(p: Prospect) -> ProspectOut:
     out.termino_texto = p.termino.texto if p.termino else None
     out.rubro_nombre = p.rubro.nombre if p.rubro else None
     out.cant_mensajes = len(p.mensajes)
+    from app.services.contact import prox_contacto_estimado_reactivacion
+    out.prox_contacto_estimado = prox_contacto_estimado_reactivacion(p)
     return out
 
 

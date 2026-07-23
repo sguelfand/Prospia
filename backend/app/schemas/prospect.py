@@ -20,6 +20,7 @@ class ProspectOut(BaseModel):
     cant_mensajes: int = 0                   # mensajes del chat (espejo WhatsApp)
     ult_contacto: datetime | None
     prox_contacto: datetime | None = None   # callback agendado
+    prox_contacto_estimado: str | None = None  # '~AAAA-MM-DD' estimado de reactivación (Bug C)
     clasificacion: str | None           # ALTO | MEDIO | BAJO
     clasificacion_detalle: str | None
     clasificacion_verificada: bool

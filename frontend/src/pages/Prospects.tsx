@@ -474,9 +474,11 @@ function ProspectCard({
           {p.ult_contacto && (
             <span>🕐 {new Date(p.ult_contacto).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })}</span>
           )}
-          {p.prox_contacto && (
+          {p.prox_contacto ? (
             <span>📅 Próx. {new Date(p.prox_contacto).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })}</span>
-          )}
+          ) : p.prox_contacto_estimado ? (
+            <span title="Estimado del próximo recontacto automático (reactivación)">📅 Próx. ~{new Date(p.prox_contacto_estimado.slice(1)).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })}</span>
+          ) : null}
         </div>
       </div>
 
@@ -1041,7 +1043,7 @@ export default function Prospects() {
                   </td>
                 )}
                 {isVisible('ult_contacto') && <td className="px-4 py-3 text-muted text-xs whitespace-nowrap">{formatDate(p.ult_contacto)}</td>}
-                {isVisible('prox_contacto') && <td className="px-4 py-3 text-muted text-xs whitespace-nowrap">{p.prox_contacto ? formatDate(p.prox_contacto) : '—'}</td>}
+                {isVisible('prox_contacto') && <td className="px-4 py-3 text-muted text-xs whitespace-nowrap">{p.prox_contacto ? formatDate(p.prox_contacto) : p.prox_contacto_estimado ? <span title="Estimado de reactivación automática">~{formatDate(p.prox_contacto_estimado.slice(1))}</span> : '—'}</td>}
                 {isVisible('clasificacion') && (
                   <td className="px-4 py-3">
                     <ClasificacionCell prospect={p} onVerificar={toggleVerificacion} onCambiar={cambiarClasificacion} />
