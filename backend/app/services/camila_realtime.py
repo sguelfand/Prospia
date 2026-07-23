@@ -84,7 +84,8 @@ def _triage_system(source: str) -> str:
         "Semáforo:\n"
         "- \"rojo\": hay un problema claro (info equivocada o inventada, un lead con "
         "intención que se está perdiendo/enfriando, tenía que derivar a una persona y "
-        "no lo hizo, tono que aleja al cliente).\n"
+        "no lo hizo, tono que aleja al cliente, Camila mandó el MISMO mensaje repetido "
+        "2 o más veces, o expuso su razonamiento interno al cliente).\n"
         "- \"amarillo\": duda razonable, algo para chequear.\n"
         "- \"verde\": atención normal y correcta.\n"
         "Ante la duda entre verde y amarillo, elegí amarillo (mejor que lo confirme un "
@@ -120,7 +121,12 @@ def _triage(source: str, transcript: str) -> dict | None:
             {"role": "system", "content": _triage_system(source)},
             {"role": "user", "content": transcript},
         ],
-        "max_tokens": 400,
+        # El triage es un semáforo simple: NO necesita razonamiento. Además, con
+        # reasoning ON los modelos gastan el cupo "pensando" y devuelven content
+        # vacío (bug conocido del Test LLM) → apagarlo lo hace más rápido, barato y
+        # confiable. Cupo holgado por si el proveedor igual mete algo de reasoning.
+        "max_tokens": 800,
+        "reasoning": {"exclude": True},
     }
     try:
         resp = requests.post(OPENROUTER_URL, headers={
@@ -142,8 +148,14 @@ def _triage(source: str, transcript: str) -> dict | None:
         print(f"[QA-REALTIME] triage parse resp: {type(e).__name__}: {e}")
         return None
     data = _parse_json(txt)
+    # FAIL-SAFE: el modelo respondió 200 pero sin un JSON usable (a veces devuelve
+    # content vacío o cortado). En vez de dropear la conversación, escalamos al juez
+    # por las dudas — mejor que Sonnet la mire a que se pierda un problema. (None se
+    # reserva para fallas de red/HTTP, que sí conviene reintentar el próximo tick.)
     if not data:
-        return None
+        return {"nivel": "amarillo",
+                "motivo": "filtro sin veredicto claro — escalado por las dudas",
+                "modelo": model}
     nivel = (data.get("nivel") or "").strip().lower()
     if nivel not in ("verde", "amarillo", "rojo"):
         nivel = "amarillo"  # ante ambigüedad del filtro, mejor escalar
