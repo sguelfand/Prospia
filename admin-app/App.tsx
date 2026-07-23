@@ -8,7 +8,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { Sora_600SemiBold, Sora_700Bold, Sora_800ExtraBold, useFonts } from "@expo-google-fonts/sora";
 import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
-import React, { useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import { View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
@@ -113,20 +113,44 @@ function Routes() {
     if (token && !locked) registerForPush(token);
   }, [token, locked]);
 
-  // Al tocar una notificación, ir al feed de Avisos.
+  // Al tocar una notificación, hacer el deep-link a lo notificado.
   const tapsProcesados = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    // (fix 20/7) Con la app CERRADA, la nav no está lista cuando llega el tap:
-    // en vez de descartarlo, reintentamos hasta ~10s.
-    const esperarNavYSeguir = (fn: () => void) => {
-      if (navigationRef.isReady()) { fn(); return; }
-      let intentos = 0;
-      const t = setInterval(() => {
-        intentos += 1;
-        if (navigationRef.isReady()) { clearInterval(t); fn(); }
-        else if (intentos > 40) clearInterval(t);
-      }, 250);
+  // Navegación pendiente: con biometría, el tap puede llegar mientras la app
+  // está BLOQUEADA (LockScreen, sin el Drawer montado). Antes se reintentaba
+  // ~10s y, si la huella tardaba más (o fallaba una vez), el tap se perdía y
+  // quedaba en el Dashboard. Ahora la guardamos y la ejecutamos recién cuando
+  // está desbloqueada Y la nav montada.
+  const pendingNavRef = useRef<(() => void) | null>(null);
+  const flushingRef = useRef(false);
+  const lockedRef = useRef(locked);
+  useEffect(() => { lockedRef.current = locked; }, [locked]);
+
+  // Ejecuta la navegación pendiente SOLO si la app está desbloqueada. Si la nav
+  // aún no montó (recién desbloqueada), reintenta un ratito — sin correr contra
+  // el tiempo de la huella (mientras siga bloqueada, no reintenta).
+  const flushPending = useCallback(() => {
+    if (!pendingNavRef.current || lockedRef.current || flushingRef.current) return;
+    flushingRef.current = true;
+    let intentos = 0;
+    const intentar = () => {
+      if (!pendingNavRef.current || lockedRef.current) { flushingRef.current = false; return; }
+      if (navigationRef.isReady()) {
+        const fn = pendingNavRef.current;
+        pendingNavRef.current = null;
+        flushingRef.current = false;
+        fn();
+        return;
+      }
+      if (intentos++ < 40) setTimeout(intentar, 100);
+      else flushingRef.current = false;
     };
+    intentar();
+  }, []);
+
+  // Al desbloquear (o al haber sesión), intentar la navegación pendiente.
+  useEffect(() => { flushPending(); }, [token, locked, flushPending]);
+
+  useEffect(() => {
     const procesarTap = (response: Notifications.NotificationResponse) => {
       // Dedup: el mismo tap puede llegar por el listener Y por el cold start.
       const idTap = `${response.notification.request.identifier}:${response.actionIdentifier}`;
@@ -152,12 +176,12 @@ function Routes() {
         return;
       }
 
-      esperarNavYSeguir(() => {
       const { nav, evento } = data ?? {};
       const avisosFallback = () =>
         data?.aviso_id != null ? navigationRef.navigate("Avisos", { avisoId: data.aviso_id }) : navigationRef.navigate("Avisos");
 
       // Deep-link: cada push abre la pantalla/registro donde vive lo notificado.
+      const runNav = () => {
       (async () => {
         try {
           if (evento === "claude_termino") {
@@ -197,7 +221,12 @@ function Routes() {
           avisosFallback();
         }
       })();
-      });
+      };
+
+      // Encolar la navegación y tratar de ejecutarla ya (si está desbloqueada y
+      // lista). Si sigue bloqueada, queda pendiente hasta el desbloqueo.
+      pendingNavRef.current = runNav;
+      flushPending();
     };
     const sub = Notifications.addNotificationResponseReceivedListener(procesarTap);
     // Cold start: si la app se ABRIÓ tocando una notificación, el listener no
@@ -206,7 +235,7 @@ function Routes() {
       .then((r) => { if (r) procesarTap(r); })
       .catch(() => {});
     return () => sub.remove();
-  }, [token]);
+  }, [token, flushPending]);
 
   if (loading) return <Loader />;
   if (token && locked) return <LockScreen />;
