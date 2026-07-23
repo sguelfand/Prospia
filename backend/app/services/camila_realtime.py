@@ -128,6 +128,11 @@ def _triage(source: str, transcript: str) -> dict | None:
         "max_tokens": 800,
         "reasoning": {"exclude": True},
     }
+    # Pin del proveedor real: OpenRouter a veces rutea minimax-m3 a un proveedor que
+    # IGNORA reasoning:exclude → devuelve vacío (~50-67% en pruebas). Pinneando a
+    # 'minimax' los vacíos bajan a 0 y el recall queda ~10/10. (Verificado 23/7.)
+    if model.startswith("minimax"):
+        body["provider"] = {"order": ["minimax"], "allow_fallbacks": False}
     try:
         resp = requests.post(OPENROUTER_URL, headers={
             "Authorization": f"Bearer {key}",
