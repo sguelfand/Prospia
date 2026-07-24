@@ -55,6 +55,10 @@ VENTANA_ACTIVA_H = 72  # 24 quedaba corto: con la Mac durmiendo de noche, la lis
 MAX_SESIONES = 25
 TAIL_SNAPSHOT = 60          # mensajes por sesión en el snapshot inicial
 MIN_SEG_AVISO_TERMINO = 60  # solo avisar "terminó" si el turno duró al menos esto
+# Pregunta NATIVA (AskUserQuestion, switch "Preguntas al cel" apagado) sin
+# contestar en la Mac por este tiempo → se reenvía al cel (pedido de Sebi 24/7).
+# Las del MCP `preguntar_a_sebi` no entran acá: ésas ya avisan al instante.
+SEG_PREGUNTA_AL_CEL = int(os.environ.get("BRIDGE_SEG_PREGUNTA_AL_CEL", "600"))
 
 SKIP_PREFIJOS = ("<local-command", "<command-name", "Caveat:", "[Request interrupted",
                  "<system-reminder", "<task-notification", "<teammate-message")
@@ -90,6 +94,16 @@ def cargar_token() -> str:
 
 def ahora_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def epoch_de(iso: str) -> float:
+    """ISO del transcript → epoch. Se usa para el reloj de la pregunta pendiente:
+    tomando la hora REAL del mensaje (y no la de lectura), un restart del daemon
+    no reinicia los 10 minutos ni se pierde una pregunta vieja."""
+    try:
+        return datetime.fromisoformat((iso or "").replace("Z", "+00:00")).timestamp()
+    except Exception:
+        return time.time()
 
 
 # ----------------------------------------------------------------- tmux
@@ -444,6 +458,9 @@ class Sesion:
         self.pregunta_mcp_abierta = False
         self.pregunta_texto = ""
         self.pregunta_items = []   # [{pregunta, header, multiselect, opciones:[{label,description}]}]
+        self.pregunta_desde = None  # epoch en que Claude hizo la pregunta abierta
+        self.pregunta_origen = ""   # "nativa" (AskUserQuestion) | "mcp" (preguntar_a_sebi)
+        self.pregunta_avisada = ""  # texto de la pregunta ya reenviada al cel (no repetir)
         self.oculta = False
         self.entrypoint = ""
 
@@ -591,6 +608,9 @@ class Tracker:
                 s.pregunta_mcp_abierta = False
                 s.pregunta_texto = ""
                 s.pregunta_items = []
+                s.pregunta_desde = None
+                s.pregunta_origen = ""
+                s.pregunta_avisada = ""
                 s.estado = "procesando"
                 s.turno_inicio = s.turno_inicio or time.time()
             msg = obj.get("message") or {}
@@ -625,6 +645,12 @@ class Tracker:
                     if "preguntar_a_sebi" in nombre or nombre == "AskUserQuestion":
                         s.pregunta_mcp_abierta = True
                         s.estado = "pregunta"
+                        # Origen + reloj: si es NATIVA y Sebi no contesta en la
+                        # Mac, a los SEG_PREGUNTA_AL_CEL el scan la reenvía al
+                        # cel (las del MCP ya avisaron ellas mismas al crearse).
+                        s.pregunta_origen = "mcp" if "preguntar_a_sebi" in nombre else "nativa"
+                        s.pregunta_desde = epoch_de(hora)
+                        s.pregunta_avisada = ""
                         # Texto de la 1ra pregunta: la app lo usa para matchear
                         # la pendiente del backend y mostrarla como popup.
                         inp = b.get("input") or {}
@@ -770,6 +796,7 @@ class Tracker:
                 s.estado = "idle"
                 s.turno_inicio = None
                 cambio = True
+            self._chequear_pregunta_al_cel(s)
             if cambio or revivida:
                 self._emitir_delta(s, forzar=revivida)
         # sesiones que salieron de la ventana → ocultarlas en el backend
@@ -783,6 +810,50 @@ class Tracker:
             for sid in muertos:
                 self.abiertas.pop(sid, None)
         self._guardar_abiertas()
+
+    # ---- pregunta nativa sin responder → al cel ----
+
+    def _chequear_pregunta_al_cel(self, s: Sesion) -> None:
+        """Pregunta NATIVA (AskUserQuestion) sin contestar en la Mac hace
+        SEG_PREGUNTA_AL_CEL → push al cel, UNA sola vez por pregunta.
+
+        Con el switch "Preguntas al cel" apagado, la cajita nativa vive solo en
+        la pantalla de la Mac: si Sebi no está sentado, la sesión queda trabada
+        sin que nadie se entere. Las del MCP `preguntar_a_sebi` no pasan por acá
+        (ya avisan al instante al crearse) — de ahí el filtro por origen."""
+        if (s.estado != "pregunta" or s.pregunta_origen != "nativa"
+                or not s.pregunta_desde or s.oculta):
+            return
+        espera = time.time() - s.pregunta_desde
+        if espera < SEG_PREGUNTA_AL_CEL:
+            return
+        clave = (s.pregunta_texto or "").strip()
+        if not clave or s.pregunta_avisada == clave:
+            return
+        s.pregunta_avisada = clave
+        items = s.pregunta_items or []
+        primera = items[0] if items else {}
+        marca = (primera.get("header") or "").strip()
+        resumen = str(primera.get("pregunta") or clave).strip().replace("\n", " ")
+        cuerpo = (f"{marca} · " if marca else "") + resumen
+        if len(items) > 1:
+            cuerpo += f" · +{len(items) - 1} más"
+        interactiva = bool(self.tmux.interactiva(s.id))
+        detalle = [f"Sesión: {s.meta(interactiva)['titulo'][:80]}", ""]
+        for i, it in enumerate(items, 1):
+            detalle.append(f"{i}. {it.get('pregunta') or ''}")
+            for o in it.get("opciones") or []:
+                detalle.append(f"   • {o.get('label')}")
+        detalle.append("")
+        detalle.append("Tocá el aviso para responder desde el cel." if interactiva else
+                       "Esta sesión no es interactiva desde el cel: hay que contestar en la Mac.")
+        mins = int(espera // 60)
+        self.salida.put({"t": "notificar", "evento": "pregunta_claude",
+                         "sesion_id": s.id,
+                         "titulo": f"🤔 Claude te pregunta algo hace {mins} min",
+                         "cuerpo": cuerpo[:250],
+                         "detalle": "\n".join(detalle)[:4000]})
+        log(f"pregunta nativa de {s.id[:8]} sin responder hace {mins} min → push al cel")
 
     # ---- hooks ----
 

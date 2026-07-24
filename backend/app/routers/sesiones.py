@@ -26,7 +26,12 @@ admin_router = APIRouter(prefix="/admin", tags=["sesiones"], dependencies=[Depen
 
 # Eventos que el puente puede pedir pushear (whitelist).
 # `sesion_espera` se eliminó (Sebi, 23/7): duplicaba el canal `pregunta_claude`.
-_EVENTOS_PUENTE = {"sesion_termino"}
+# `pregunta_claude` (Sebi, 24/7): el puente lo usa para el FALLBACK de la pregunta
+# nativa — con el switch "Preguntas al cel" apagado, una AskUserQuestion sin
+# contestar en la Mac por 10 min se reenvía al cel. Reusa el toggle de push de las
+# preguntas del MCP (mismo canal para Sebi), pero con deep-link a la sesión: el
+# popup respondible ya vive en la pantalla Sesiones.
+_EVENTOS_PUENTE = {"sesion_termino", "pregunta_claude"}
 
 _ws_actual: WebSocket | None = None
 

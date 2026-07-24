@@ -194,10 +194,18 @@ function Routes() {
           } else if (nav === "preguntas" || data?.tipo === "consulta") {
             // Tap en el push de consulta → abrir DIRECTO la ventana de contestar.
             navigationRef.navigate("Preguntas", data?.consulta_id != null ? { consultaId: data.consulta_id } : undefined);
+          } else if (nav === "sesiones" || data?.tipo === "sesion" || data?.sesion_id) {
+            // Tap en un push de sesión → abrir DIRECTO el chat de esa sesión.
+            // Va ANTES de pregunta_claude a propósito: el reenvío de una pregunta
+            // NATIVA sin responder (mac-bridge, 10 min) usa el evento
+            // "pregunta_claude" para reusar ese toggle, pero no existe como
+            // registro en la pantalla Preguntas — vive en la sesión, y ahí está
+            // el popup respondible. Sin `sesion_id` manda la regla vieja.
+            navigationRef.navigate("Sesiones", data?.sesion_id ? { sesionId: String(data.sesion_id) } : undefined);
           } else if (nav === "pregunta_claude" || data?.tipo === "pregunta_claude" || evento === "pregunta_claude") {
             // Tap en el push de Claude → abrir DIRECTO la pantalla de opciones.
             navigationRef.navigate("PreguntasClaude", data?.pregunta_id != null ? { preguntaId: data.pregunta_id } : undefined);
-          } else if (nav === "sesiones" || data?.tipo === "sesion" || evento === "sesion_termino" || evento === "sesion_espera") {
+          } else if (evento === "sesion_termino" || evento === "sesion_espera") {
             // Tap en un push de sesión → abrir DIRECTO el chat de esa sesión.
             navigationRef.navigate("Sesiones", data?.sesion_id ? { sesionId: String(data.sesion_id) } : undefined);
           } else if (nav === "tokens" || data?.tipo === "tokens" || evento === "tokens_oportunidad") {

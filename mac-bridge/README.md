@@ -34,7 +34,11 @@ y `SessionEnd`. Conviven con otros hooks del mismo evento (peon-ping, etc.).
 - Estados: `procesando` / `esperando` (permiso o input) / `pregunta`
   (AskUserQuestion o MCP preguntar-sebi pendiente) / `idle`.
 - Push (toggles en la app, con su ⓘ): `sesion_termino` (solo turnos ≥60s) y
-  `sesion_espera` (rate-limit 5 min por sesión).
+  `pregunta_claude` cuando una pregunta **nativa** (`AskUserQuestion`, o sea con
+  el switch "Preguntas al cel" apagado) lleva 10 min sin contestar en la Mac
+  (`SEG_PREGUNTA_AL_CEL`, una sola vez por pregunta; las del MCP no entran
+  porque ya avisan solas). El tap abre la sesión → el popup con las opciones.
+  `sesion_espera` se eliminó el 23/7 por ruidoso.
 
 ## Operación
 
