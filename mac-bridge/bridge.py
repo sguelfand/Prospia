@@ -55,7 +55,6 @@ VENTANA_ACTIVA_H = 72  # 24 quedaba corto: con la Mac durmiendo de noche, la lis
 MAX_SESIONES = 25
 TAIL_SNAPSHOT = 60          # mensajes por sesión en el snapshot inicial
 MIN_SEG_AVISO_TERMINO = 60  # solo avisar "terminó" si el turno duró al menos esto
-RATE_AVISO_ESPERA_SEG = 300  # no repetir "te espera" por sesión antes de esto
 
 SKIP_PREFIJOS = ("<local-command", "<command-name", "Caveat:", "[Request interrupted",
                  "<system-reminder", "<task-notification", "<teammate-message")
@@ -442,7 +441,6 @@ class Sesion:
         self.estado = "idle"       # procesando | esperando | pregunta | idle
         self.ultima_actividad = ""
         self.turno_inicio = None   # epoch del arranque del turno actual
-        self.ultimo_aviso_espera = 0.0
         self.pregunta_mcp_abierta = False
         self.pregunta_texto = ""
         self.pregunta_items = []   # [{pregunta, header, multiselect, opciones:[{label,description}]}]
@@ -815,15 +813,13 @@ class Tracker:
                                  "cuerpo": texto[:250] or "Terminó la tarea.",
                                  "detalle": texto[:4000] or None})
         elif nombre in ("Notification", "PermissionRequest"):
+            # Solo actualizamos el estado para la pantalla Sesiones; NO mandamos
+            # push. El aviso "sesión te espera" se eliminó (Sebi, 23/7): duplicaba
+            # el canal bueno `pregunta_claude` (MCP preguntar-sebi), que avisa al
+            # cel solo cuando Claude pregunta a propósito. Éste era una alarma
+            # bruta de "cualquier sesión esperando" y generaba ruido.
             if s.estado != "pregunta":
                 s.estado = "esperando"
-            if time.time() - s.ultimo_aviso_espera > RATE_AVISO_ESPERA_SEG:
-                s.ultimo_aviso_espera = time.time()
-                detalle = ev.get("message") or "Una sesión quedó esperándote."
-                self.salida.put({"t": "notificar", "evento": "sesion_espera",
-                                 "sesion_id": sid,
-                                 "titulo": f"⏸ {s.meta(False)['titulo'][:60]}",
-                                 "cuerpo": str(detalle)[:250]})
         self._emitir_delta(s, forzar=True)
 
     # ---- emisión ----

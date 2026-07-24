@@ -25,7 +25,8 @@ router = APIRouter(prefix="/sesiones", tags=["sesiones"])
 admin_router = APIRouter(prefix="/admin", tags=["sesiones"], dependencies=[Depends(get_superadmin)])
 
 # Eventos que el puente puede pedir pushear (whitelist).
-_EVENTOS_PUENTE = {"sesion_espera", "sesion_termino"}
+# `sesion_espera` se eliminó (Sebi, 23/7): duplicaba el canal `pregunta_claude`.
+_EVENTOS_PUENTE = {"sesion_termino"}
 
 _ws_actual: WebSocket | None = None
 

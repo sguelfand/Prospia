@@ -30,7 +30,6 @@ EVENTOS_PUSH: list[tuple[str, str, str]] = [
     ("calidad_revision", "Calidad de Camila (revisar conversación)", "El especialista del negocio marcó respuestas de Camila para que confirmes si estuvieron bien o mal."),
     ("pregunta_claude", "Claude te pregunta algo (responder desde el cel)", "Claude te hace una pregunta con opciones para que respondas desde el cel."),
     ("saldo_bajo", "Saldo bajo de un proveedor de IA", "Un proveedor de IA se está quedando sin saldo (OpenRouter ≤ US$1, o MyClaw sin saldo). Recargá para que Camila no quede muda."),
-    ("sesion_espera", "Sesión de la Mac TE ESPERA (pantalla Sesiones)", "Una sesión de Claude de la Mac quedó esperándote: te hizo una pregunta o necesita un OK para seguir. Es de la pantalla Sesiones — no confundir con \"Claude terminó una tarea (Prospia)\"."),
     ("sesion_termino", "Sesión de la Mac TERMINÓ su tarea (pantalla Sesiones)", "Una sesión de Claude de la Mac terminó lo que le pediste (solo turnos de más de un minuto). Arranca APAGADO: prendelo si querés estos avisos. Es de la pantalla Sesiones — distinto de \"Claude terminó una tarea (Prospia)\"."),
 ]
 EVENTOS_PUSH_KEYS = [k for k, _, _ in EVENTOS_PUSH]
